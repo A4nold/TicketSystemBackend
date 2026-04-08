@@ -22,7 +22,7 @@
   "license": "ISC",
   "type": "commonjs",
   "engines": {
-    "node": "22.x"
+    "node": "24.x"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",
