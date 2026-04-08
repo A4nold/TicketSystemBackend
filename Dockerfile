@@ -2,19 +2,19 @@ FROM node:24-bookworm-slim
 
 WORKDIR /app
 
-ENV NODE_ENV=production
-
 COPY package.json package-lock.json ./
 COPY prisma ./prisma
 COPY prisma.config.ts ./
 COPY tsconfig.json ./
 
-RUN npm ci
+RUN npm ci --include=dev
 
 COPY src ./src
 COPY _bmad-output ./_bmad-output
 
 RUN npm run build
+
+ENV NODE_ENV=production
 
 EXPOSE 3000
 
