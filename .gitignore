@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.env
+.env.local
+.env.*.local
+coverage/
+.DS_Store
+*.log
+tsconfig.tsbuildinfo
+prisma.config.js
+prisma.config.js.map

@@ -1,0 +1,30 @@
+import { Global, Module } from "@nestjs/common";
+import { JwtModule } from "@nestjs/jwt";
+
+import { AuthController } from "./auth.controller";
+import { AuthService } from "./auth.service";
+import { JwtAuthGuard } from "./guards/jwt-auth.guard";
+import { ScannerMembershipGuard } from "./guards/scanner-membership.guard";
+
+const jwtSecret = process.env.JWT_SECRET;
+
+if (!jwtSecret) {
+  throw new Error("JWT_SECRET must be defined before starting the API.");
+}
+
+@Global()
+@Module({
+  imports: [
+    JwtModule.register({
+      global: true,
+      secret: jwtSecret,
+      signOptions: {
+        expiresIn: (process.env.JWT_EXPIRES_IN ?? "1d") as never,
+      },
+    }),
+  ],
+  controllers: [AuthController],
+  providers: [AuthService, JwtAuthGuard, ScannerMembershipGuard],
+  exports: [AuthService, JwtAuthGuard, ScannerMembershipGuard],
+})
+export class AuthModule {}
