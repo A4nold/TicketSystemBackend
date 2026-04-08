@@ -13,8 +13,20 @@ async function bootstrap() {
     rawBody: true,
   });
   const port = Number(process.env.PORT ?? 3000);
+  const allowedOrigins = (
+    process.env.CORS_ORIGINS ??
+    "http://localhost:3001,http://localhost:3002,http://127.0.0.1:3001,http://127.0.0.1:3002"
+  )
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
 
   app.setGlobalPrefix("api");
+  app.enableCors({
+    origin: allowedOrigins,
+    methods: ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "Accept"],
+  });
   app.useGlobalPipes(
     new ValidationPipe({
       transform: true,

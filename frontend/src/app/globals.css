@@ -1,0 +1,70 @@
+@import "tailwindcss";
+
+:root {
+  --background: #08111f;
+  --foreground: #eef4fb;
+  --surface: #0f1b2d;
+  --surface-elevated: #14253b;
+  --surface-soft: #edf3f8;
+  --muted: #9db0c2;
+  --border: rgba(157, 176, 194, 0.24);
+  --accent: #36d8ca;
+  --accent-strong: #20b4ab;
+  --accent-warm: #ff7d5d;
+  --success: #31c67f;
+  --warning: #f7b94c;
+  --danger: #ff6c6c;
+  --font-sans-stack:
+    "Avenir Next", Avenir, "Segoe UI", "Helvetica Neue", sans-serif;
+  --font-display-stack:
+    "Avenir Next Condensed", "Arial Narrow", "Franklin Gothic Medium",
+    sans-serif;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-surface-elevated: var(--surface-elevated);
+  --color-surface-soft: var(--surface-soft);
+  --color-muted: var(--muted);
+  --color-border: var(--border);
+  --color-accent: var(--accent);
+  --color-accent-strong: var(--accent-strong);
+  --color-accent-warm: var(--accent-warm);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+  --font-sans: var(--font-sans-stack);
+  --font-display: var(--font-display-stack);
+}
+
+* {
+  border-color: var(--border);
+}
+
+html {
+  background:
+    radial-gradient(circle at top, rgba(54, 216, 202, 0.16), transparent 30%),
+    linear-gradient(180deg, #091321 0%, #08111f 48%, #0b1625 100%);
+}
+
+body {
+  min-height: 100vh;
+  color: var(--foreground);
+  font-family: var(--font-sans-stack);
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+::selection {
+  background: rgba(54, 216, 202, 0.32);
+  color: var(--foreground);
+}
+
+.text-balance {
+  text-wrap: balance;
+}
