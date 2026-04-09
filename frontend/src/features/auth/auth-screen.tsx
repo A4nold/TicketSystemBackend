@@ -11,6 +11,7 @@ import { ApiError } from "@/lib/api/client";
 import {
   type LoginPayload,
   type RegisterPayload,
+  getCurrentAttendee,
   loginAttendee,
   registerAttendee,
 } from "@/lib/auth/auth-client";
@@ -158,8 +159,13 @@ export function AuthScreen({
     startTransition(async () => {
       try {
         const response = await registerAttendee(parsed.data as RegisterPayload);
-        setSession(response);
-        router.push(getNextPathForSession(response, nextPath));
+        const user = await getCurrentAttendee(response.accessToken);
+        const hydratedSession = {
+          ...response,
+          user,
+        };
+        setSession(hydratedSession);
+        router.push(getNextPathForSession(hydratedSession, nextPath));
       } catch (error) {
         setErrorMessage(getErrorText(error));
       }
@@ -179,8 +185,13 @@ export function AuthScreen({
     startTransition(async () => {
       try {
         const response = await loginAttendee(parsed.data as LoginPayload);
-        setSession(response);
-        router.push(getNextPathForSession(response, nextPath));
+        const user = await getCurrentAttendee(response.accessToken);
+        const hydratedSession = {
+          ...response,
+          user,
+        };
+        setSession(hydratedSession);
+        router.push(getNextPathForSession(hydratedSession, nextPath));
       } catch (error) {
         setErrorMessage(getErrorText(error));
       }

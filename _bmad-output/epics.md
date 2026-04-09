@@ -819,7 +819,52 @@ So that the ticket moves to my account through a clear and trustworthy ownership
 **Then** the product shows a clear failure or retry state
 **And** it avoids implying that ownership changed if the outcome cannot be confirmed
 
-### Story 4.3: Resale Listing and Resale State Visibility
+### Story 4.3: Transfer Cancellation and Pending Transfer Management
+
+As an attendee who started a transfer,
+I want to cancel a pending transfer before it is accepted,
+So that I can keep control of my ticket when plans change or a transfer link should no longer be usable.
+
+**Implements:** FR24, FR29, FR30; NFR12; UX-DR4, UX-DR12
+
+**Acceptance Criteria:**
+
+**Given** an authenticated attendee is viewing a ticket they currently own in a transfer-pending state
+**When** that pending transfer is still eligible for cancellation
+**Then** the product presents transfer cancellation as an available action
+**And** the attendee can cancel the pending transfer from the owned-ticket experience
+
+**Given** an attendee cancels a pending transfer successfully
+**When** the cancellation completes
+**Then** the product reflects that the ticket is no longer transfer pending
+**And** the ticket returns to its current owner in a normal owned state subject to event rules
+
+**Given** a pending transfer has already been accepted, expired, or otherwise become unavailable for cancellation
+**When** the attendee attempts to cancel it
+**Then** the product blocks the cancellation action
+**And** it provides a clear explanation of why the transfer can no longer be cancelled
+
+**Given** the sender cancels a pending transfer
+**When** the recipient later opens the old acceptance link
+**Then** the product shows a clear unavailable or cancelled-transfer state
+**And** it does not imply that the transfer can still be accepted
+
+**Given** the attendee views the ticket after cancellation
+**When** the owned-ticket list or ticket detail is refreshed
+**Then** the product reflects the latest server-backed ticket state
+**And** the attendee can distinguish that the transfer is no longer active
+
+**Given** the transfer cancellation flow is used on a mobile device
+**When** the attendee reviews or confirms the cancellation
+**Then** the action, resulting state, and any blocking reason remain readable and usable on a small screen
+**And** the attendee is not left uncertain about whether the transfer was cancelled successfully
+
+**Given** the product cannot complete cancellation because of a temporary system or network issue
+**When** the attendee submits the cancellation request
+**Then** the product shows a clear failure or retry state
+**And** it does not imply that transfer availability changed if the outcome cannot be confirmed
+
+### Story 4.4: Resale Listing and Resale State Visibility
 
 As an attendee who owns a ticket,
 I want to list an eligible ticket for resale and understand its resale state,

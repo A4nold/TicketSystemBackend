@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { Panel } from "@/components/ui/panel";
+import { CheckoutStartCta } from "@/features/checkout/checkout-start-cta";
 import {
   formatEventWindow,
   getAvailabilityClasses,
@@ -207,10 +208,25 @@ function TicketCard({
         <div className="rounded-[1.2rem] border border-border bg-surface px-4 py-3">
           <p className="text-sm leading-6 text-muted">
             {ticketType.isPurchasable
-              ? "Ready for the checkout step when purchase flow is enabled."
+              ? "Choose your quantity and continue into the attendee checkout step."
               : ticketType.restrictionCopy}
           </p>
         </div>
+
+        <CheckoutStartCta
+          eventSlug={event.slug}
+          ticketType={{
+            availabilityLabel: ticketType.availabilityLabel,
+            id: ticketType.id,
+            isPurchasable: ticketType.isPurchasable,
+            maxPerOrder: ticketType.maxPerOrder,
+            name: ticketType.name,
+            priceLabel: ticketType.priceLabel,
+            priceValue: ticketType.priceValue,
+            quantity: ticketType.quantity,
+            restrictionCopy: ticketType.restrictionCopy,
+          }}
+        />
       </div>
     </article>
   );

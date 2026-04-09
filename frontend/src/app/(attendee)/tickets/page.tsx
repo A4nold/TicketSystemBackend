@@ -3,6 +3,7 @@ import { AttendeeGateway } from "@/features/auth/attendee-gateway";
 type TicketsSurfacePageProps = {
   searchParams?: Promise<{
     eventSlug?: string;
+    recentOrderId?: string;
   }>;
 };
 
@@ -11,5 +12,10 @@ export default async function TicketsSurfacePage({
 }: TicketsSurfacePageProps) {
   const resolved = searchParams ? await searchParams : undefined;
 
-  return <AttendeeGateway eventSlug={resolved?.eventSlug} />;
+  return (
+    <AttendeeGateway
+      eventSlug={resolved?.eventSlug}
+      recentOrderId={resolved?.recentOrderId}
+    />
+  );
 }

@@ -42,12 +42,15 @@ type AvailabilityTone = "available" | "warning" | "unavailable";
 export type PublicEventTicketType = {
   availabilityLabel: string;
   availabilityTone: AvailabilityTone;
+  currency: string;
   description: string | null;
   id: string;
   isPurchasable: boolean;
   maxPerOrder: number | null;
   name: string;
   priceLabel: string;
+  priceValue: number;
+  quantity: number;
   quantityLabel: string;
   restrictionCopy: string;
   saleEndsAt: string | null;
@@ -189,10 +192,13 @@ function mapPublicEventDetail(event: ApiEventDetail): PublicEventDetail {
       return {
         ...availability,
         description: ticketType.description,
+        currency: ticketType.currency,
         id: ticketType.id,
         maxPerOrder: ticketType.maxPerOrder,
         name: ticketType.name,
         priceLabel: formatCurrency(ticketType.price, ticketType.currency),
+        priceValue: Number(ticketType.price),
+        quantity: ticketType.quantity,
         quantityLabel: `${ticketType.quantity} tickets released`,
         saleEndsAt: ticketType.saleEndsAt ?? null,
         saleStartsAt: ticketType.saleStartsAt ?? null,

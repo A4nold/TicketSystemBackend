@@ -6,17 +6,15 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/providers/auth-provider";
 import { Panel } from "@/components/ui/panel";
 import { ProtectedSurfaceGate } from "@/features/auth/protected-surface-gate";
+import { RecentOrderPanel } from "@/features/checkout/recent-order-panel";
+import { OwnedTicketList } from "@/features/tickets/owned-ticket-list";
 
 type AttendeeGatewayProps = Readonly<{
   eventSlug?: string;
+  recentOrderId?: string;
 }>;
 
-const attendeeMilestones = [
-  "Story 2.x will drive ticket selection and checkout completion.",
-  "Story 3.x will add the wallet, ticket detail, and QR presentation flows.",
-];
-
-export function AttendeeGateway({ eventSlug }: AttendeeGatewayProps) {
+export function AttendeeGateway({ eventSlug, recentOrderId }: AttendeeGatewayProps) {
   const router = useRouter();
   const {
     clearNotice,
@@ -62,10 +60,12 @@ export function AttendeeGateway({ eventSlug }: AttendeeGatewayProps) {
           </Panel>
         ) : null}
 
+        {recentOrderId ? <RecentOrderPanel orderId={recentOrderId} /> : null}
+
         <Panel>
-          <div className="grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(18rem,1fr)]">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div className="space-y-4">
-              <h2 className="font-display text-2xl">Authenticated attendee context</h2>
+              <h2 className="font-display text-2xl">Attendee account</h2>
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="rounded-2xl border border-border bg-black/10 p-4">
                   <p className="text-xs font-semibold uppercase tracking-[0.24em] text-muted">
@@ -87,43 +87,32 @@ export function AttendeeGateway({ eventSlug }: AttendeeGatewayProps) {
                   <span className="font-medium text-foreground">{eventSlug}</span>
                 </p>
               ) : null}
-              <div className="flex flex-wrap gap-3">
-                <button
-                  type="button"
-                  onClick={() => {
-                    signOut({
-                      notice: "You signed out successfully. Sign in again to continue.",
-                    });
-                    router.push(authHref);
-                  }}
-                  className="inline-flex rounded-full border border-border bg-white/8 px-5 py-3 text-sm font-semibold text-foreground transition hover:border-accent/50 hover:bg-white/12"
-                >
-                  Sign out
-                </button>
-                <Link
-                  href={eventSlug ? `/events/${eventSlug}` : "/"}
-                  className="inline-flex rounded-full border border-border bg-black/10 px-5 py-3 text-sm font-semibold text-foreground transition hover:border-accent/50 hover:bg-black/20"
-                >
-                  Return to public view
-                </Link>
-              </div>
             </div>
 
-            <div className="space-y-3">
-              <h3 className="font-display text-xl">What lands next</h3>
-              <ul className="space-y-3 text-sm leading-6 text-muted">
-                {attendeeMilestones.map((item) => (
-                  <li
-                    key={item}
-                    className="rounded-2xl border border-border bg-black/10 px-4 py-3"
-                  >
-                    {item}
-                  </li>
-                ))}
-              </ul>
+            <div className="flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  signOut({
+                    notice: "You signed out successfully. Sign in again to continue.",
+                  });
+                  router.push(authHref);
+                }}
+                className="inline-flex rounded-full border border-border bg-white/8 px-5 py-3 text-sm font-semibold text-foreground transition hover:border-accent/50 hover:bg-white/12"
+              >
+                Sign out
+              </button>
+              <Link
+                href={eventSlug ? `/events/${eventSlug}` : "/"}
+                className="inline-flex rounded-full border border-border bg-black/10 px-5 py-3 text-sm font-semibold text-foreground transition hover:border-accent/50 hover:bg-black/20"
+              >
+                Return to public view
+              </Link>
             </div>
           </div>
         </Panel>
+
+        <OwnedTicketList eventSlug={eventSlug} />
       </div>
     </ProtectedSurfaceGate>
   );

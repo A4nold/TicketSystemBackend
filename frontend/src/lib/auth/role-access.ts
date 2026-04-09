@@ -1,7 +1,18 @@
 import type { AppSurface, AuthSession, AuthUser } from "@/lib/auth/types";
 
+function getAppRoles(value: AuthSession | AuthUser | null | undefined): AppSurface[] {
+  const appRoles =
+    value && "user" in value ? value.user?.appRoles : value?.appRoles;
+
+  if (Array.isArray(appRoles) && appRoles.length > 0) {
+    return appRoles;
+  }
+
+  return ["attendee"];
+}
+
 export function deriveAppRoles(user: AuthUser): AppSurface[] {
-  return user.appRoles;
+  return getAppRoles(user);
 }
 
 export function canAccessSurface(
@@ -16,7 +27,7 @@ export function canAccessSurface(
     return false;
   }
 
-  return session.user.appRoles.includes(surface);
+  return getAppRoles(session).includes(surface);
 }
 
 export function getDefaultSurfacePath(session: AuthSession | null) {
@@ -24,11 +35,13 @@ export function getDefaultSurfacePath(session: AuthSession | null) {
     return "/";
   }
 
-  if (session.user.appRoles.includes("organizer")) {
+  const appRoles = getAppRoles(session);
+
+  if (appRoles.includes("organizer")) {
     return "/organizer";
   }
 
-  if (session.user.appRoles.includes("scanner")) {
+  if (appRoles.includes("scanner")) {
     return "/scanner";
   }
 
@@ -40,5 +53,5 @@ export function getVisibleSurfaces(session: AuthSession | null): AppSurface[] {
     return ["public"];
   }
 
-  return ["public", ...session.user.appRoles];
+  return ["public", ...getAppRoles(session)];
 }

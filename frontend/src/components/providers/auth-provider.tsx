@@ -11,6 +11,7 @@ import {
 
 import { getCurrentAttendee } from "@/lib/auth/auth-client";
 import type { AuthSession } from "@/lib/auth/types";
+import { deriveAppRoles } from "@/lib/auth/role-access";
 
 const SESSION_STORAGE_KEY = "ticketsystem.attendee.session";
 
@@ -29,6 +30,23 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 type AuthProviderProps = Readonly<{
   children: React.ReactNode;
 }>;
+
+function normalizeSession(nextSession: AuthSession | null): AuthSession | null {
+  if (!nextSession) {
+    return null;
+  }
+
+  return {
+    ...nextSession,
+    user: {
+      ...nextSession.user,
+      appRoles: deriveAppRoles(nextSession.user),
+      memberships: Array.isArray(nextSession.user.memberships)
+        ? nextSession.user.memberships
+        : [],
+    },
+  };
+}
 
 export function AuthProvider({ children }: AuthProviderProps) {
   const [session, setSession] = useState<AuthSession | null>(null);
@@ -62,10 +80,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
           return;
         }
 
-        setSession({
+        setSession(normalizeSession({
           ...parsed,
           user,
-        });
+        }));
       } catch {
         window.localStorage.removeItem(SESSION_STORAGE_KEY);
 
@@ -90,18 +108,19 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, []);
 
   const persistSession = useCallback((nextSession: AuthSession | null) => {
-    setSession(nextSession);
+    const normalizedSession = normalizeSession(nextSession);
+    setSession(normalizedSession);
 
     if (typeof window === "undefined") {
       return;
     }
 
-    if (!nextSession) {
+    if (!normalizedSession) {
       window.localStorage.removeItem(SESSION_STORAGE_KEY);
       return;
     }
 
-    window.localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(nextSession));
+    window.localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(normalizedSession));
   }, []);
 
   const signOut = useCallback((options?: { notice?: string }) => {
