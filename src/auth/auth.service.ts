@@ -34,6 +34,7 @@ export class AuthService {
 
     const user = await this.prisma.user.create({
       data: {
+        accountType: payload.accountType ?? "ATTENDEE",
         email: normalizedEmail,
         passwordHash,
         profile: {
@@ -44,7 +45,7 @@ export class AuthService {
           },
         },
       },
-      include: this.authUserInclude(),
+      select: this.authUserSelect(),
     });
 
     return this.issueToken(user);
@@ -55,11 +56,8 @@ export class AuthService {
     const user = await this.prisma.user.findUnique({
       where: { email: normalizedEmail },
       select: {
-        id: true,
-        email: true,
-        status: true,
+        ...this.authUserSelect(),
         passwordHash: true,
-        ...this.authUserInclude(),
       },
     });
 
@@ -93,7 +91,7 @@ export class AuthService {
   async getMe(userId: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      include: this.authUserInclude(),
+      select: this.authUserSelect(),
     });
 
     if (!user) {
@@ -110,7 +108,7 @@ export class AuthService {
   async validateJwtUser(userId: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      include: this.authUserInclude(),
+      select: this.authUserSelect(),
     });
 
     if (!user) {
@@ -126,11 +124,13 @@ export class AuthService {
     return {
       id: authUser.id,
       email: authUser.email,
+      accountType: authUser.accountType,
       status: authUser.status,
       profile: {
         firstName: authUser.firstName,
         lastName: authUser.lastName,
       },
+      platformRoles: authUser.platformRoles,
       appRoles: authUser.appRoles,
       memberships: authUser.memberships,
     };
@@ -139,6 +139,7 @@ export class AuthService {
   private issueToken(user: {
     id: string;
     email: string;
+    accountType: "ATTENDEE" | "ORGANIZER";
     status: string;
     staffMemberships?: Array<{
       id: string;
@@ -167,8 +168,12 @@ export class AuthService {
     return email.trim().toLowerCase();
   }
 
-  private authUserInclude() {
+  private authUserSelect() {
     return {
+      id: true as const,
+      email: true as const,
+      accountType: true as const,
+      status: true as const,
       profile: {
         select: {
           firstName: true,
@@ -192,6 +197,7 @@ export class AuthService {
   private toAuthUser(user: {
     id: string;
     email: string;
+    accountType: "ATTENDEE" | "ORGANIZER";
     status: string;
     profile?: {
       firstName: string | null;
@@ -210,25 +216,41 @@ export class AuthService {
       role: membership.role,
       acceptedAt: membership.acceptedAt?.toISOString() ?? null,
     }));
+    const platformRoles = this.derivePlatformRoles(user.accountType);
 
     return {
       id: user.id,
       email: user.email,
+      accountType: user.accountType,
       status: user.status,
       firstName: user.profile?.firstName ?? null,
       lastName: user.profile?.lastName ?? null,
-      appRoles: this.deriveAppRoles(memberships),
+      platformRoles,
+      appRoles: this.deriveAppRoles(platformRoles, memberships),
       memberships,
     };
   }
 
+  private derivePlatformRoles(accountType: "ATTENDEE" | "ORGANIZER") {
+    if (accountType === "ORGANIZER") {
+      return ["EVENT_OWNER"];
+    }
+
+    return [];
+  }
+
   private deriveAppRoles(
+    platformRoles: string[],
     memberships: Array<{
       acceptedAt: string | null;
       role: StaffRole;
     }>,
   ) {
     const appRoles = new Set(["attendee"]);
+
+    if (platformRoles.includes("EVENT_OWNER")) {
+      appRoles.add("organizer");
+    }
 
     for (const membership of memberships) {
       if (!membership.acceptedAt) {

@@ -12,6 +12,7 @@ import {
   ApiBadRequestResponse,
   ApiBearerAuth,
   ApiCreatedResponse,
+  ApiForbiddenResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
@@ -107,6 +108,9 @@ export class EventsController {
   })
   @ApiBadRequestResponse({
     description: "Event payload was invalid or the slug is already in use",
+  })
+  @ApiForbiddenResponse({
+    description: "Authenticated user is not organizer-capable",
   })
   @ApiUnauthorizedResponse({
     description: "Bearer token was missing, invalid, expired, or tied to an inactive user",

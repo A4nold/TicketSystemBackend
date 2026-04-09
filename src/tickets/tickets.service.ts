@@ -340,6 +340,7 @@ export class TicketsService {
     transferRequests: Array<{
       id: string;
       status: string;
+      senderUserId: string;
       recipientEmail: string | null;
       createdAt: Date;
       acceptedAt: Date | null;
@@ -359,6 +360,7 @@ export class TicketsService {
         ? {
             id: latestTransfer.id,
             status: latestTransfer.status,
+            senderUserId: latestTransfer.senderUserId,
             recipientEmail: latestTransfer.recipientEmail,
             expiresAt: latestTransfer.expiresAt,
             acceptedAt: latestTransfer.acceptedAt,
@@ -384,6 +386,7 @@ export class TicketsService {
       transferHistory: ticket.transferRequests.map((transfer) => ({
         id: transfer.id,
         status: transfer.status,
+        senderUserId: transfer.senderUserId,
         recipientEmail: transfer.recipientEmail,
         createdAt: transfer.createdAt,
         acceptedAt: transfer.acceptedAt,

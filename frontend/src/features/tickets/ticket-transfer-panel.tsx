@@ -17,6 +17,7 @@ type TicketTransferPanelProps = Readonly<{
     | {
         expiresAt: string;
         recipientEmail: string | null;
+        senderUserId: string;
         status: string;
       }
     | null;
@@ -77,9 +78,12 @@ function getTransferEligibility(status: string) {
 function getTransferCancellationState(
   status: string,
   latestTransfer: TicketTransferPanelProps["latestTransfer"],
+  currentUserId: string | null,
 ) {
   const isPendingTransfer =
-    status === "TRANSFER_PENDING" && latestTransfer?.status === "PENDING";
+    status === "TRANSFER_PENDING" &&
+    latestTransfer?.status === "PENDING" &&
+    latestTransfer.senderUserId === currentUserId;
 
   if (isPendingTransfer) {
     return {
@@ -93,7 +97,7 @@ function getTransferCancellationState(
     return {
       canCancel: false,
       summary:
-        "This transfer is no longer in a cancellable pending state, so the current owner cannot cancel it from here.",
+        "This pending transfer was not started by the current owner, so it cannot be cancelled from this ticket view.",
     };
   }
 
@@ -126,7 +130,11 @@ export function TicketTransferPanel({
   const [acceptPath, setAcceptPath] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const eligibility = getTransferEligibility(status);
-  const cancellation = getTransferCancellationState(status, latestTransfer);
+  const cancellation = getTransferCancellationState(
+    status,
+    latestTransfer,
+    session?.user.id ?? null,
+  );
 
   async function submitTransfer() {
     if (!session) {

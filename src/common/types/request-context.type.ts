@@ -1,28 +1,14 @@
 import { Request } from "express";
 
+import type {
+  AuthenticatedEventMembership,
+  AuthenticatedScannerMembership,
+  AuthenticatedUser,
+} from "../../auth/types/authenticated-user.type";
+
 export type RequestWithContext = Request & {
   requestId?: string;
-  authUser?: {
-    id: string;
-    email: string;
-    status: string;
-    profile?: {
-      firstName: string | null;
-      lastName: string | null;
-    } | null;
-  };
-  eventMembership?: {
-    id: string;
-    eventId: string;
-    userId: string;
-    role: string;
-    acceptedAt: Date | null;
-  };
-  scannerMembership?: {
-    id: string;
-    eventId: string;
-    userId: string;
-    role: string;
-    acceptedAt?: Date | null;
-  };
+  authUser?: AuthenticatedUser;
+  eventMembership?: AuthenticatedEventMembership;
+  scannerMembership?: AuthenticatedScannerMembership;
 };

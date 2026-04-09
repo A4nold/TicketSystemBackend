@@ -51,6 +51,24 @@ export class TransfersService {
       );
     }
 
+    if (
+      payload.recipientUserId &&
+      payload.recipientUserId === user.id
+    ) {
+      throw new BadRequestException(
+        `Ticket "${serialNumber}" cannot be transferred to the current owner.`,
+      );
+    }
+
+    if (
+      payload.recipientEmail &&
+      payload.recipientEmail.toLowerCase() === user.email.toLowerCase()
+    ) {
+      throw new BadRequestException(
+        `Ticket "${serialNumber}" cannot be transferred to the current owner's email.`,
+      );
+    }
+
     if (ticket.status === TicketStatus.USED) {
       throw new BadRequestException(
         `Ticket "${serialNumber}" has already been used and cannot be transferred.`,

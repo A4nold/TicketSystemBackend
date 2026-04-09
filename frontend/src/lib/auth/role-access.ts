@@ -3,9 +3,22 @@ import type { AppSurface, AuthSession, AuthUser } from "@/lib/auth/types";
 function getAppRoles(value: AuthSession | AuthUser | null | undefined): AppSurface[] {
   const appRoles =
     value && "user" in value ? value.user?.appRoles : value?.appRoles;
+  const platformRoles =
+    value && "user" in value ? value.user?.platformRoles : value?.platformRoles;
 
   if (Array.isArray(appRoles) && appRoles.length > 0) {
-    return appRoles;
+    return Array.from(
+      new Set([
+        ...appRoles,
+        ...(Array.isArray(platformRoles) && platformRoles.includes("EVENT_OWNER")
+          ? ["organizer" as const]
+          : []),
+      ]),
+    );
+  }
+
+  if (Array.isArray(platformRoles) && platformRoles.includes("EVENT_OWNER")) {
+    return ["attendee", "organizer"];
   }
 
   return ["attendee"];

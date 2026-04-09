@@ -1,7 +1,8 @@
 import { apiFetch } from "@/lib/api/client";
-import type { AuthResponse, AuthUser } from "@/lib/auth/types";
+import type { AccountType, AuthResponse, AuthUser } from "@/lib/auth/types";
 
 export type RegisterPayload = {
+  accountType?: AccountType;
   email: string;
   firstName?: string;
   lastName?: string;

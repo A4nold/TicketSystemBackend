@@ -52,6 +52,9 @@ export class TicketTransferSummaryDto {
   @ApiProperty()
   status!: string;
 
+  @ApiProperty()
+  senderUserId!: string;
+
   @ApiProperty({ nullable: true })
   recipientEmail!: string | null;
 
@@ -116,6 +119,9 @@ export class TicketIncidentTransferDto {
 
   @ApiProperty()
   status!: string;
+
+  @ApiProperty()
+  senderUserId!: string;
 
   @ApiProperty({ nullable: true })
   recipientEmail!: string | null;

@@ -33,6 +33,18 @@ export class AuthUserResponseDto {
   lastName!: string | null;
 
   @ApiProperty({
+    enum: ["ATTENDEE", "ORGANIZER"],
+  })
+  accountType!: string;
+
+  @ApiProperty({
+    type: String,
+    isArray: true,
+    enum: ["EVENT_OWNER"],
+  })
+  platformRoles!: string[];
+
+  @ApiProperty({
     type: String,
     isArray: true,
     enum: ["attendee", "organizer", "scanner"],

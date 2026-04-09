@@ -51,6 +51,7 @@ export type OwnedTicketDetail = OwnedTicketSummary & {
     expiresAt: string;
     id: string;
     recipientEmail: string | null;
+    senderUserId: string;
     status: string;
   } | null;
   ownershipHistory: Array<{

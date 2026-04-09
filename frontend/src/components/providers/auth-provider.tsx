@@ -36,14 +36,24 @@ function normalizeSession(nextSession: AuthSession | null): AuthSession | null {
     return null;
   }
 
+  const platformRoles = Array.isArray(nextSession.user.platformRoles)
+    ? nextSession.user.platformRoles.filter((role) => role === "EVENT_OWNER")
+    : [];
+
   return {
     ...nextSession,
     user: {
       ...nextSession.user,
+      accountType:
+        nextSession.user.accountType === "ORGANIZER" ||
+        platformRoles.includes("EVENT_OWNER")
+          ? "ORGANIZER"
+          : "ATTENDEE",
       appRoles: deriveAppRoles(nextSession.user),
       memberships: Array.isArray(nextSession.user.memberships)
         ? nextSession.user.memberships
         : [],
+      platformRoles,
     },
   };
 }

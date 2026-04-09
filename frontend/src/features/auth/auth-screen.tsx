@@ -19,7 +19,7 @@ import {
   canAccessSurface,
   getDefaultSurfacePath,
 } from "@/lib/auth/role-access";
-import type { AuthSession, AppSurface } from "@/lib/auth/types";
+import type { AccountType, AuthSession, AppSurface } from "@/lib/auth/types";
 
 type AuthMode = "login" | "register";
 
@@ -30,6 +30,7 @@ type AuthScreenProps = Readonly<{
 }>;
 
 const registerSchema = z.object({
+  accountType: z.enum(["ATTENDEE", "ORGANIZER"]),
   email: z.email("Enter a valid email address."),
   firstName: z.string().max(80, "First name must be 80 characters or fewer.").optional(),
   lastName: z.string().max(80, "Last name must be 80 characters or fewer.").optional(),
@@ -104,6 +105,7 @@ export function AuthScreen({
   const [isPending, startTransition] = useTransition();
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [registerValues, setRegisterValues] = useState({
+    accountType: "ATTENDEE" as AccountType,
     email: "",
     firstName: "",
     lastName: "",
@@ -120,7 +122,7 @@ export function AuthScreen({
       return `You are continuing from the public event page for ${eventSlug}.`;
     }
 
-    return "Create an account or sign in to continue into the attendee experience.";
+    return "Create an attendee or organizer account, or sign in to continue into the right product surface.";
   }, [eventSlug]);
 
   const successText = session
@@ -130,7 +132,7 @@ export function AuthScreen({
   function handleRegisterChange(field: keyof typeof registerValues, value: string) {
     setRegisterValues((current) => ({
       ...current,
-      [field]: value,
+      [field]: field === "accountType" ? (value as AccountType) : value,
     }));
   }
 
@@ -203,11 +205,11 @@ export function AuthScreen({
       <Panel>
         <div className="space-y-5">
           <p className="text-sm font-medium uppercase tracking-[0.28em] text-accent">
-            Attendee authentication
+            Product authentication
           </p>
           <div className="space-y-3">
             <h1 className="font-display text-4xl leading-tight sm:text-5xl">
-              Create your attendee account or sign back in.
+              Create your account or sign back in.
             </h1>
             <p className="max-w-2xl text-base leading-7 text-muted sm:text-lg">
               {summaryText}
@@ -220,7 +222,7 @@ export function AuthScreen({
                 Purpose
               </p>
               <p className="mt-2 text-sm leading-6 text-foreground">
-                Identity-bound ticket access starts here.
+                Identity-bound attendee access and organizer setup both start here.
               </p>
             </div>
             <div className="rounded-[1.35rem] border border-border bg-black/10 p-4">
@@ -236,7 +238,7 @@ export function AuthScreen({
                 After success
               </p>
               <p className="mt-2 text-sm leading-6 text-foreground">
-                You will be routed back into the attendee surface without losing event context.
+                You will be routed into the product surface your account can actually access.
               </p>
             </div>
           </div>
@@ -290,6 +292,42 @@ export function AuthScreen({
                 submitRegister();
               }}
             >
+              <div className="space-y-2">
+                <span className="text-xs font-semibold uppercase tracking-[0.22em] text-muted">
+                  Account type
+                </span>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <button
+                    type="button"
+                    onClick={() => handleRegisterChange("accountType", "ATTENDEE")}
+                    className={`rounded-[1.2rem] border px-4 py-3 text-left transition ${
+                      registerValues.accountType === "ATTENDEE"
+                        ? "border-transparent bg-white text-slate-950"
+                        : "border-border bg-black/10 text-foreground hover:border-accent/50"
+                    }`}
+                  >
+                    <p className="text-sm font-semibold">Attendee</p>
+                    <p className="mt-1 text-xs leading-5 opacity-80">
+                      Buy tickets, manage your wallet, and accept staff invites later if needed.
+                    </p>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleRegisterChange("accountType", "ORGANIZER")}
+                    className={`rounded-[1.2rem] border px-4 py-3 text-left transition ${
+                      registerValues.accountType === "ORGANIZER"
+                        ? "border-transparent bg-white text-slate-950"
+                        : "border-border bg-black/10 text-foreground hover:border-accent/50"
+                    }`}
+                  >
+                    <p className="text-sm font-semibold">Organizer</p>
+                    <p className="mt-1 text-xs leading-5 opacity-80">
+                      Create your first event immediately and manage setup from the organizer surface.
+                    </p>
+                  </button>
+                </div>
+              </div>
+
               <div className="grid gap-4 sm:grid-cols-2">
                 <label className="space-y-2 text-sm">
                   <span className="font-medium text-foreground">First name</span>
@@ -363,7 +401,11 @@ export function AuthScreen({
                 disabled={isPending}
                 className="inline-flex w-full items-center justify-center rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-surface-soft disabled:cursor-not-allowed disabled:opacity-70"
               >
-                {isPending ? "Creating account..." : "Create attendee account"}
+                {isPending
+                  ? "Creating account..."
+                  : registerValues.accountType === "ORGANIZER"
+                    ? "Create organizer account"
+                    : "Create attendee account"}
               </button>
             </form>
           ) : (

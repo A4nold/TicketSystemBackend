@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
@@ -94,6 +95,12 @@ export class EventsService {
   }
 
   async createEvent(payload: CreateEventDto, user: AuthenticatedUser) {
+    if (!this.canCreateEvents(user)) {
+      throw new ForbiddenException(
+        "Only organizer-capable users can create events.",
+      );
+    }
+
     this.assertEventDates(payload);
 
     const slug = await this.ensureUniqueSlug(
@@ -903,5 +910,17 @@ export class EventsService {
     }
 
     return slug;
+  }
+
+  private canCreateEvents(user: AuthenticatedUser) {
+    if (user.platformRoles.includes("EVENT_OWNER")) {
+      return true;
+    }
+
+    return user.memberships.some(
+      (membership) =>
+        membership.acceptedAt !== null &&
+        (membership.role === StaffRole.OWNER || membership.role === StaffRole.ADMIN),
+    );
   }
 }

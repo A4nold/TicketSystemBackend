@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import {
   IsEmail,
+  IsIn,
   IsOptional,
   IsString,
   Matches,
@@ -41,4 +42,13 @@ export class RegisterDto {
   @IsString()
   @MaxLength(32)
   phoneNumber?: string;
+
+  @ApiPropertyOptional({
+    enum: ["ATTENDEE", "ORGANIZER"],
+    default: "ATTENDEE",
+    description: "Account onboarding path. ORGANIZER unlocks organizer event creation capability.",
+  })
+  @IsOptional()
+  @IsIn(["ATTENDEE", "ORGANIZER"])
+  accountType?: "ATTENDEE" | "ORGANIZER";
 }

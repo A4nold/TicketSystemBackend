@@ -31,6 +31,7 @@ async function main() {
 
   const organizer = await prisma.user.create({
     data: {
+      accountType: "ORGANIZER",
       email: "organizer@campusnight.ie",
       passwordHash: bcrypt.hashSync(DEFAULT_PASSWORD, 10),
       profile: {
@@ -46,6 +47,7 @@ async function main() {
 
   const scanner = await prisma.user.create({
     data: {
+      accountType: "ATTENDEE",
       email: "scanner@campusnight.ie",
       passwordHash: bcrypt.hashSync(DEFAULT_PASSWORD, 10),
       profile: {
@@ -60,6 +62,7 @@ async function main() {
 
   const attendeeOne = await prisma.user.create({
     data: {
+      accountType: "ATTENDEE",
       email: "ada@student.ie",
       passwordHash: bcrypt.hashSync(DEFAULT_PASSWORD, 10),
       profile: {
@@ -74,6 +77,7 @@ async function main() {
 
   const attendeeTwo = await prisma.user.create({
     data: {
+      accountType: "ATTENDEE",
       email: "tobi@student.ie",
       passwordHash: bcrypt.hashSync(DEFAULT_PASSWORD, 10),
       profile: {
@@ -88,6 +92,7 @@ async function main() {
 
   const attendeeThree = await prisma.user.create({
     data: {
+      accountType: "ATTENDEE",
       email: "zara@student.ie",
       passwordHash: bcrypt.hashSync(DEFAULT_PASSWORD, 10),
       profile: {
@@ -232,7 +237,7 @@ async function main() {
 
   const orderThree = await prisma.order.create({
     data: {
-      userId: attendeeThree.id,
+      userId: attendeeTwo.id,
       eventId: event.id,
       status: "PAID",
       currency: "EUR",
@@ -277,7 +282,7 @@ async function main() {
       eventId: event.id,
       ticketTypeId: generalTicketType.id,
       orderId: orderOne.id,
-      currentOwnerId: attendeeThree.id,
+      currentOwnerId: attendeeOne.id,
       status: "TRANSFER_PENDING",
       serialNumber: "CNT-GA-0002",
       qrTokenId: "qr_seed_ga_0002_rev2",
@@ -306,7 +311,7 @@ async function main() {
       eventId: event.id,
       ticketTypeId: generalTicketType.id,
       orderId: orderThree.id,
-      currentOwnerId: attendeeThree.id,
+      currentOwnerId: attendeeTwo.id,
       status: "RESALE_LISTED",
       serialNumber: "CNT-GA-0003",
       qrTokenId: "qr_seed_ga_0003_rev1",
@@ -334,14 +339,6 @@ async function main() {
         metadata: { source: "checkout", orderId: orderOne.id },
       },
       {
-        ticketId: ticketTwo.id,
-        fromUserId: attendeeOne.id,
-        toUserId: attendeeThree.id,
-        changeType: "TRANSFER_IN",
-        revision: 2,
-        metadata: { source: "transfer", note: "pending acceptance flow sample" },
-      },
-      {
         ticketId: ticketThree.id,
         fromUserId: null,
         toUserId: attendeeTwo.id,
@@ -352,15 +349,15 @@ async function main() {
       {
         ticketId: ticketFour.id,
         fromUserId: null,
-        toUserId: attendeeThree.id,
+        toUserId: attendeeTwo.id,
         changeType: "PURCHASE",
         revision: 1,
         metadata: { source: "checkout", orderId: orderThree.id },
       },
       {
         ticketId: ticketFour.id,
-        fromUserId: attendeeThree.id,
-        toUserId: attendeeThree.id,
+        fromUserId: attendeeTwo.id,
+        toUserId: attendeeTwo.id,
         changeType: "RESALE_LISTED",
         revision: 1,
         metadata: { source: "resale_listing" },
@@ -372,8 +369,8 @@ async function main() {
     data: {
       ticketId: ticketTwo.id,
       senderUserId: attendeeOne.id,
-      recipientUserId: attendeeThree.id,
-      recipientEmail: attendeeThree.email,
+      recipientUserId: attendeeTwo.id,
+      recipientEmail: attendeeTwo.email,
       status: "PENDING",
       transferToken: "transfer_seed_001",
       message: "Sending you my spare ticket.",
@@ -384,7 +381,7 @@ async function main() {
   const resaleListing = await prisma.resaleListing.create({
     data: {
       ticketId: ticketFour.id,
-      sellerUserId: attendeeThree.id,
+      sellerUserId: attendeeTwo.id,
       eventId: event.id,
       askingPrice: new Prisma.Decimal("18.00"),
       currency: "EUR",
