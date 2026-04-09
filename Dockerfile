@@ -12,7 +12,6 @@ COPY tsconfig.json ./
 RUN npm ci --include=dev
 
 COPY src ./src
-COPY _bmad-output ./_bmad-output
 
 RUN npm run build
 
