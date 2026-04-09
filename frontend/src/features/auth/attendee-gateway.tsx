@@ -7,6 +7,7 @@ import { useAuth } from "@/components/providers/auth-provider";
 import { Panel } from "@/components/ui/panel";
 import { ProtectedSurfaceGate } from "@/features/auth/protected-surface-gate";
 import { RecentOrderPanel } from "@/features/checkout/recent-order-panel";
+import { PendingStaffInvitesPanel } from "@/features/staff/pending-staff-invites-panel";
 import { OwnedTicketList } from "@/features/tickets/owned-ticket-list";
 
 type AttendeeGatewayProps = Readonly<{
@@ -59,6 +60,8 @@ export function AttendeeGateway({ eventSlug, recentOrderId }: AttendeeGatewayPro
             </div>
           </Panel>
         ) : null}
+
+        <PendingStaffInvitesPanel />
 
         {recentOrderId ? <RecentOrderPanel orderId={recentOrderId} /> : null}
 

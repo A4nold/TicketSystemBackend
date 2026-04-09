@@ -176,11 +176,6 @@ export class AuthService {
         },
       },
       staffMemberships: {
-        where: {
-          acceptedAt: {
-            not: null,
-          },
-        },
         select: {
           id: true,
           eventId: true,
@@ -188,7 +183,7 @@ export class AuthService {
           acceptedAt: true,
         },
         orderBy: {
-          acceptedAt: "desc" as const,
+          invitedAt: "desc" as const,
         },
       },
     };
@@ -229,12 +224,17 @@ export class AuthService {
 
   private deriveAppRoles(
     memberships: Array<{
+      acceptedAt: string | null;
       role: StaffRole;
     }>,
   ) {
     const appRoles = new Set(["attendee"]);
 
     for (const membership of memberships) {
+      if (!membership.acceptedAt) {
+        continue;
+      }
+
       if (membership.role === StaffRole.OWNER || membership.role === StaffRole.ADMIN) {
         appRoles.add("organizer");
       }
