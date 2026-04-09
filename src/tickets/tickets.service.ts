@@ -96,6 +96,27 @@ export class TicketsService {
     return this.toTicketDetailResponse(ticket);
   }
 
+  async getOperationalTicketBySerialNumber(
+    eventId: string,
+    serialNumber: string,
+  ) {
+    const ticket = await this.prisma.ticket.findFirst({
+      where: {
+        eventId,
+        serialNumber,
+      },
+      include: this.ticketDetailInclude(),
+    });
+
+    if (!ticket) {
+      throw new NotFoundException(
+        `Ticket with serial number "${serialNumber}" was not found for event "${eventId}".`,
+      );
+    }
+
+    return this.toTicketDetailResponse(ticket);
+  }
+
   async getMyTicketBySerialNumber(
     serialNumber: string,
     user: AuthenticatedUser,
@@ -189,6 +210,15 @@ export class TicketsService {
           createdAt: "desc" as const,
         },
       },
+      scanAttempts: {
+        orderBy: {
+          scannedAt: "desc" as const,
+        },
+        include: {
+          scanSession: true,
+          scannedByUser: true,
+        },
+      },
       ownershipHistory: {
         orderBy: {
           createdAt: "asc" as const,
@@ -274,20 +304,27 @@ export class TicketsService {
     reservedUntil: Date | null;
     cancelledAt: Date | null;
     refundedAt: Date | null;
-    transferRequests: Array<{
-      id: string;
-      status: string;
-      recipientEmail: string | null;
-      expiresAt: Date;
-      acceptedAt: Date | null;
-    }>;
     resaleListings: Array<{
       id: string;
       status: string;
       askingPrice: Prisma.Decimal;
       currency: string;
+      createdAt: Date;
       listedAt: Date | null;
       soldAt: Date | null;
+      cancelledAt: Date | null;
+    }>;
+    scanAttempts: Array<{
+      outcome: string;
+      reasonCode: string | null;
+      scannedAt: Date;
+      scannedByUser: {
+        email: string;
+      } | null;
+      scanSession: {
+        deviceLabel: string | null;
+        mode: string;
+      } | null;
     }>;
     ownershipHistory: Array<{
       changeType: string;
@@ -299,6 +336,15 @@ export class TicketsService {
         email: string;
       } | null;
       createdAt: Date;
+    }>;
+    transferRequests: Array<{
+      id: string;
+      status: string;
+      recipientEmail: string | null;
+      createdAt: Date;
+      acceptedAt: Date | null;
+      cancelledAt: Date | null;
+      expiresAt: Date;
     }>;
   } & Parameters<TicketsService["toTicketSummaryResponse"]>[0]) {
     const latestTransfer = ticket.transferRequests[0] ?? null;
@@ -334,6 +380,32 @@ export class TicketsService {
         fromEmail: historyItem.fromUser?.email ?? null,
         toEmail: historyItem.toUser?.email ?? null,
         createdAt: historyItem.createdAt,
+      })),
+      transferHistory: ticket.transferRequests.map((transfer) => ({
+        id: transfer.id,
+        status: transfer.status,
+        recipientEmail: transfer.recipientEmail,
+        createdAt: transfer.createdAt,
+        acceptedAt: transfer.acceptedAt,
+        cancelledAt: transfer.cancelledAt,
+      })),
+      resaleHistory: ticket.resaleListings.map((listing) => ({
+        id: listing.id,
+        status: listing.status,
+        askingPrice: listing.askingPrice.toFixed(2),
+        currency: listing.currency,
+        createdAt: listing.createdAt,
+        listedAt: listing.listedAt,
+        soldAt: listing.soldAt,
+        cancelledAt: listing.cancelledAt,
+      })),
+      scanAttempts: ticket.scanAttempts.map((attempt) => ({
+        outcome: attempt.outcome,
+        reasonCode: attempt.reasonCode,
+        scannedAt: attempt.scannedAt,
+        deviceLabel: attempt.scanSession?.deviceLabel ?? null,
+        mode: attempt.scanSession?.mode ?? null,
+        scannedByEmail: attempt.scannedByUser?.email ?? null,
       })),
     };
   }

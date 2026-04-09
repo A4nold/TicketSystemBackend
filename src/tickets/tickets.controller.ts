@@ -1,5 +1,6 @@
 import { Controller, Get, Param, Query, UseGuards } from "@nestjs/common";
 import {
+  ApiBadRequestResponse,
   ApiBearerAuth,
   ApiNotFoundResponse,
   ApiOkResponse,
@@ -9,7 +10,10 @@ import {
   ApiTags,
   ApiUnauthorizedResponse,
 } from "@nestjs/swagger";
+import { StaffRole } from "@prisma/client";
 
+import { RequireEventRoles } from "../auth/decorators/require-event-roles.decorator";
+import { EventMembershipGuard } from "../auth/guards/event-membership.guard";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { AuthenticatedUser } from "../auth/types/authenticated-user.type";
@@ -126,6 +130,44 @@ export class TicketsController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.ticketsService.getMyTicketBySerialNumber(serialNumber, user);
+  }
+
+  @Get("events/:eventId/:serialNumber/issue")
+  @ApiBearerAuth("bearer")
+  @UseGuards(JwtAuthGuard, EventMembershipGuard)
+  @RequireEventRoles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.SCANNER)
+  @ApiOperation({
+    summary: "Get event-scoped ticket issue detail",
+    description:
+      "Returns detailed current-state ticket context for authorized organizer or scanner staff investigating an event ticket issue.",
+  })
+  @ApiParam({
+    name: "eventId",
+    description: "Event identifier",
+  })
+  @ApiParam({
+    name: "serialNumber",
+    description: "Ticket serial number",
+    example: "CNT-GA-0002",
+  })
+  @ApiOkResponse({
+    description: "Operational ticket issue detail",
+    type: TicketDetailResponseDto,
+  })
+  @ApiBadRequestResponse({
+    description: "Ticket detail request was invalid for the current event context",
+  })
+  @ApiNotFoundResponse({
+    description: "Ticket was not found for the provided event",
+  })
+  getOperationalTicketIssue(
+    @Param("eventId") eventId: string,
+    @Param("serialNumber") serialNumber: string,
+  ) {
+    return this.ticketsService.getOperationalTicketBySerialNumber(
+      eventId,
+      serialNumber,
+    );
   }
 
   @Get(":serialNumber")

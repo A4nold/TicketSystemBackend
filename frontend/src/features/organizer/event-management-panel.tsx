@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { useAuth } from "@/components/providers/auth-provider";
 import { Panel } from "@/components/ui/panel";
+import { TicketIssueVisibilityPanel } from "@/features/operations/ticket-issue-visibility-panel";
 import { ApiError } from "@/lib/api/client";
 import {
   createOrganizerTicketType,
@@ -896,6 +897,14 @@ export function EventManagementPanel({ refreshKey = 0 }: EventManagementPanelPro
               </div>
             </div>
           </Panel>
+
+          {session ? (
+            <TicketIssueVisibilityPanel
+              accessToken={session.accessToken}
+              eventId={eventDetailQuery.data.id}
+              mode="organizer"
+            />
+          ) : null}
 
           <Panel>
             <div className="space-y-5">

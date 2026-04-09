@@ -110,6 +110,72 @@ export class TicketOwnershipHistoryDto {
   createdAt!: Date;
 }
 
+export class TicketIncidentTransferDto {
+  @ApiProperty()
+  id!: string;
+
+  @ApiProperty()
+  status!: string;
+
+  @ApiProperty({ nullable: true })
+  recipientEmail!: string | null;
+
+  @ApiProperty()
+  createdAt!: Date;
+
+  @ApiProperty({ nullable: true })
+  acceptedAt!: Date | null;
+
+  @ApiProperty({ nullable: true })
+  cancelledAt!: Date | null;
+}
+
+export class TicketIncidentResaleDto {
+  @ApiProperty()
+  id!: string;
+
+  @ApiProperty()
+  status!: string;
+
+  @ApiProperty({ example: "18.00" })
+  askingPrice!: string;
+
+  @ApiProperty()
+  currency!: string;
+
+  @ApiProperty()
+  createdAt!: Date;
+
+  @ApiProperty({ nullable: true })
+  listedAt!: Date | null;
+
+  @ApiProperty({ nullable: true })
+  soldAt!: Date | null;
+
+  @ApiProperty({ nullable: true })
+  cancelledAt!: Date | null;
+}
+
+export class TicketIncidentScanAttemptDto {
+  @ApiProperty()
+  outcome!: string;
+
+  @ApiProperty({ nullable: true })
+  reasonCode!: string | null;
+
+  @ApiProperty()
+  scannedAt!: Date;
+
+  @ApiProperty({ nullable: true })
+  deviceLabel!: string | null;
+
+  @ApiProperty({ nullable: true })
+  mode!: string | null;
+
+  @ApiProperty({ nullable: true })
+  scannedByEmail!: string | null;
+}
+
 export class TicketSummaryResponseDto {
   @ApiProperty()
   id!: string;
@@ -163,4 +229,13 @@ export class TicketDetailResponseDto extends TicketSummaryResponseDto {
 
   @ApiProperty({ type: [TicketOwnershipHistoryDto] })
   ownershipHistory!: TicketOwnershipHistoryDto[];
+
+  @ApiProperty({ type: [TicketIncidentTransferDto] })
+  transferHistory!: TicketIncidentTransferDto[];
+
+  @ApiProperty({ type: [TicketIncidentResaleDto] })
+  resaleHistory!: TicketIncidentResaleDto[];
+
+  @ApiProperty({ type: [TicketIncidentScanAttemptDto] })
+  scanAttempts!: TicketIncidentScanAttemptDto[];
 }

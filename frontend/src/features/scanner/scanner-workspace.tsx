@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { useAuth } from "@/components/providers/auth-provider";
 import { Panel } from "@/components/ui/panel";
+import { TicketIssueVisibilityPanel } from "@/features/operations/ticket-issue-visibility-panel";
 import { ApiError } from "@/lib/api/client";
 import {
   getScannerAccessibleEventIds,
@@ -992,6 +993,12 @@ export function ScannerWorkspace() {
                       )}
                     </div>
                   </div>
+
+                  <TicketIssueVisibilityPanel
+                    accessToken={session!.accessToken}
+                    eventId={selectedEvent.id}
+                    mode="scanner"
+                  />
                 </div>
               ) : null}
             </div>
