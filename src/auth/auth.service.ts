@@ -4,6 +4,7 @@ import {
   UnauthorizedException,
 } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
+import { StaffRole } from "@prisma/client";
 import bcrypt from "bcryptjs";
 
 import { PrismaService } from "../prisma/prisma.service";
@@ -43,9 +44,7 @@ export class AuthService {
           },
         },
       },
-      include: {
-        profile: true,
-      },
+      include: this.authUserInclude(),
     });
 
     return this.issueToken(user);
@@ -60,12 +59,7 @@ export class AuthService {
         email: true,
         status: true,
         passwordHash: true,
-        profile: {
-          select: {
-            firstName: true,
-            lastName: true,
-          },
-        },
+        ...this.authUserInclude(),
       },
     });
 
@@ -99,9 +93,7 @@ export class AuthService {
   async getMe(userId: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      include: {
-        profile: true,
-      },
+      include: this.authUserInclude(),
     });
 
     if (!user) {
@@ -112,26 +104,13 @@ export class AuthService {
       throw new UnauthorizedException("This account is not active.");
     }
 
-    return {
-      id: user.id,
-      email: user.email,
-      status: user.status,
-      firstName: user.profile?.firstName ?? null,
-      lastName: user.profile?.lastName ?? null,
-    };
+    return this.toAuthUser(user);
   }
 
   async validateJwtUser(userId: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      include: {
-        profile: {
-          select: {
-            firstName: true,
-            lastName: true,
-          },
-        },
-      },
+      include: this.authUserInclude(),
     });
 
     if (!user) {
@@ -142,11 +121,18 @@ export class AuthService {
       throw new UnauthorizedException("This account is not active.");
     }
 
+    const authUser = this.toAuthUser(user);
+
     return {
-      id: user.id,
-      email: user.email,
-      status: user.status,
-      profile: user.profile,
+      id: authUser.id,
+      email: authUser.email,
+      status: authUser.status,
+      profile: {
+        firstName: authUser.firstName,
+        lastName: authUser.lastName,
+      },
+      appRoles: authUser.appRoles,
+      memberships: authUser.memberships,
     };
   }
 
@@ -154,6 +140,12 @@ export class AuthService {
     id: string;
     email: string;
     status: string;
+    staffMemberships?: Array<{
+      id: string;
+      eventId: string;
+      role: StaffRole;
+      acceptedAt: Date | null;
+    }>;
     profile?: {
       firstName: string | null;
       lastName: string | null;
@@ -167,17 +159,91 @@ export class AuthService {
     return {
       accessToken,
       tokenType: "Bearer",
-      user: {
-        id: user.id,
-        email: user.email,
-        status: user.status,
-        firstName: user.profile?.firstName ?? null,
-        lastName: user.profile?.lastName ?? null,
-      },
+      user: this.toAuthUser(user),
     };
   }
 
   private normalizeEmail(email: string) {
     return email.trim().toLowerCase();
+  }
+
+  private authUserInclude() {
+    return {
+      profile: {
+        select: {
+          firstName: true,
+          lastName: true,
+        },
+      },
+      staffMemberships: {
+        where: {
+          acceptedAt: {
+            not: null,
+          },
+        },
+        select: {
+          id: true,
+          eventId: true,
+          role: true,
+          acceptedAt: true,
+        },
+        orderBy: {
+          acceptedAt: "desc" as const,
+        },
+      },
+    };
+  }
+
+  private toAuthUser(user: {
+    id: string;
+    email: string;
+    status: string;
+    profile?: {
+      firstName: string | null;
+      lastName: string | null;
+    } | null;
+    staffMemberships?: Array<{
+      id: string;
+      eventId: string;
+      role: StaffRole;
+      acceptedAt: Date | null;
+    }>;
+  }) {
+    const memberships = (user.staffMemberships ?? []).map((membership) => ({
+      id: membership.id,
+      eventId: membership.eventId,
+      role: membership.role,
+      acceptedAt: membership.acceptedAt?.toISOString() ?? null,
+    }));
+
+    return {
+      id: user.id,
+      email: user.email,
+      status: user.status,
+      firstName: user.profile?.firstName ?? null,
+      lastName: user.profile?.lastName ?? null,
+      appRoles: this.deriveAppRoles(memberships),
+      memberships,
+    };
+  }
+
+  private deriveAppRoles(
+    memberships: Array<{
+      role: StaffRole;
+    }>,
+  ) {
+    const appRoles = new Set(["attendee"]);
+
+    for (const membership of memberships) {
+      if (membership.role === StaffRole.OWNER || membership.role === StaffRole.ADMIN) {
+        appRoles.add("organizer");
+      }
+
+      if (membership.role === StaffRole.SCANNER) {
+        appRoles.add("scanner");
+      }
+    }
+
+    return Array.from(appRoles);
   }
 }

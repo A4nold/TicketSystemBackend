@@ -1,5 +1,4 @@
 import { apiFetch } from "@/lib/api/client";
-import { deriveAppRoles } from "@/lib/auth/role-access";
 import type { AuthResponse, AuthUser } from "@/lib/auth/types";
 
 export type RegisterPayload = {
@@ -22,10 +21,7 @@ export function registerAttendee(payload: RegisterPayload) {
       "Content-Type": "application/json",
     },
     body: JSON.stringify(payload),
-  }).then((response) => ({
-    ...response,
-    appRoles: deriveAppRoles(response.user),
-  }));
+  });
 }
 
 export function loginAttendee(payload: LoginPayload) {
@@ -35,10 +31,7 @@ export function loginAttendee(payload: LoginPayload) {
       "Content-Type": "application/json",
     },
     body: JSON.stringify(payload),
-  }).then((response) => ({
-    ...response,
-    appRoles: deriveAppRoles(response.user),
-  }));
+  });
 }
 
 export function getCurrentAttendee(accessToken: string) {

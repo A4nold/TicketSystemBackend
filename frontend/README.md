@@ -5,16 +5,17 @@ Platform. It is intentionally separate from the NestJS backend at the repo root.
 
 ## Run locally
 
-1. Copy `.env.example` to `.env.local`.
-2. Set `NEXT_PUBLIC_API_BASE_URL` to the backend you want to target.
-3. Start the frontend:
+1. Use the local-only [`.env.local`](/Users/arnoldekechi/RiderProjects/ticketsystem/frontend/.env.local) file for development.
+2. Update `NEXT_PUBLIC_API_BASE_URL` there if you want to point at a different backend.
+3. Treat [`.env.example`](/Users/arnoldekechi/RiderProjects/ticketsystem/frontend/.env.example) as the production/reference sample.
+4. Start the frontend:
 
 ```bash
 npm install
 npm run dev
 ```
 
-The default local URL is [http://localhost:3001](http://localhost:3000).
+The default local URL is [http://localhost:3001](http://localhost:3001).
 
 ## Foundation included in Story 1.1
 

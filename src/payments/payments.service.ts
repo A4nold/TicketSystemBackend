@@ -28,6 +28,14 @@ type CheckoutOrder = {
   }>;
 };
 
+type StripeCheckoutState = {
+  checkoutSessionId: string;
+  checkoutUrl: string | null;
+  paymentStatus: string | null;
+  checkoutStatus: string | null;
+  isAwaitingPaymentConfirmation: boolean;
+};
+
 @Injectable()
 export class PaymentsService {
   constructor(private readonly prisma: PrismaService) {}
@@ -70,6 +78,9 @@ export class PaymentsService {
       checkoutSessionId: session.id,
       checkoutUrl: session.url,
       paymentStatus: session.payment_status,
+      checkoutStatus: session.status,
+      isAwaitingPaymentConfirmation:
+        session.payment_status !== "paid" && session.status !== "expired",
     };
   }
 
@@ -101,11 +112,14 @@ export class PaymentsService {
       return { received: true, duplicate: true };
     }
 
+    const relatedEventId = await this.resolveRelatedEventId(event);
+
     await this.prisma.webhookEvent.upsert({
       where: {
         providerEventId: event.id,
       },
       create: {
+        eventId: relatedEventId,
         provider: PaymentProvider.STRIPE,
         providerEventId: event.id,
         eventType: event.type,
@@ -113,6 +127,7 @@ export class PaymentsService {
         processedAt: null,
       },
       update: {
+        eventId: relatedEventId,
         payload: event as unknown as Prisma.InputJsonValue,
         processingError: null,
       },
@@ -150,7 +165,7 @@ export class PaymentsService {
         },
         data: {
           processingError:
-            error instanceof Error ? error.message : "Unknown webhook processing error.",
+            this.toWebhookProcessingError(event, error),
         },
       });
 
@@ -158,6 +173,51 @@ export class PaymentsService {
     }
 
     return { received: true };
+  }
+
+  async getStripeCheckoutState(checkoutSessionId: string): Promise<StripeCheckoutState> {
+    const stripe = this.getStripeClient();
+    const session = await stripe.checkout.sessions.retrieve(checkoutSessionId);
+
+    return {
+      checkoutSessionId: session.id,
+      checkoutUrl: session.url ?? null,
+      paymentStatus: session.payment_status ?? null,
+      checkoutStatus: session.status ?? null,
+      isAwaitingPaymentConfirmation:
+        session.payment_status !== "paid" && session.status !== "expired",
+    };
+  }
+
+  async reconcilePendingOrderWithStripe(order: {
+    id: string;
+    status: OrderStatus;
+    paymentProvider: PaymentProvider;
+    checkoutSessionId: string | null;
+  }): Promise<StripeCheckoutState | null> {
+    if (
+      order.paymentProvider !== PaymentProvider.STRIPE ||
+      !order.checkoutSessionId ||
+      !process.env.STRIPE_SECRET_KEY
+    ) {
+      return null;
+    }
+
+    const checkoutState = await this.getStripeCheckoutState(order.checkoutSessionId);
+
+    if (order.status === OrderStatus.PENDING) {
+      if (checkoutState.paymentStatus === "paid") {
+        const stripe = this.getStripeClient();
+        const session = await stripe.checkout.sessions.retrieve(order.checkoutSessionId);
+        await this.markOrderPaidFromStripeSession(session);
+      } else if (checkoutState.checkoutStatus === "expired") {
+        const stripe = this.getStripeClient();
+        const session = await stripe.checkout.sessions.retrieve(order.checkoutSessionId);
+        await this.markOrderCancelledFromStripeSession(session);
+      }
+    }
+
+    return checkoutState;
   }
 
   private async markOrderPaidFromStripeSession(session: any) {
@@ -288,6 +348,33 @@ export class PaymentsService {
         checkoutSessionId: session.id,
       },
     });
+  }
+
+  private async resolveRelatedEventId(event: any) {
+    const session = event?.data?.object;
+    const orderId =
+      session?.client_reference_id ?? session?.metadata?.orderId ?? null;
+
+    if (!orderId) {
+      return null;
+    }
+
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      select: { eventId: true },
+    });
+
+    return order?.eventId ?? null;
+  }
+
+  private toWebhookProcessingError(event: any, error: unknown) {
+    const message =
+      error instanceof Error ? error.message : "Unknown webhook processing error.";
+    const session = event?.data?.object;
+    const orderId =
+      session?.client_reference_id ?? session?.metadata?.orderId ?? "unknown";
+
+    return `[${event?.type ?? "unknown"}][order:${orderId}] ${message}`;
   }
 
   private getStripeClient() {

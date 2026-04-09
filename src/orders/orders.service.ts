@@ -55,7 +55,19 @@ export class OrdersService {
       throw new NotFoundException(`Order "${orderId}" was not found.`);
     }
 
-    return this.toOrderResponse(order);
+    const checkoutState = await this.reconcileOrderCheckoutState(order);
+
+    const refreshedOrder = checkoutState
+      ? await this.prisma.order.findFirst({
+          where: {
+            id: orderId,
+            userId: user.id,
+          },
+          include: this.orderInclude(),
+        })
+      : order;
+
+    return this.toOrderResponse(refreshedOrder ?? order, checkoutState);
   }
 
   async createCheckout(payload: CreateCheckoutDto, user: AuthenticatedUser) {
@@ -141,6 +153,8 @@ export class OrdersService {
     let checkoutSessionId = order.checkoutSessionId;
     let checkoutUrl: string | null = null;
     let paymentStatus: string | null = null;
+    let checkoutStatus: string | null = null;
+    let isAwaitingPaymentConfirmation = false;
 
     if (
       order.paymentProvider === PaymentProvider.STRIPE &&
@@ -169,6 +183,9 @@ export class OrdersService {
       checkoutSessionId = session.checkoutSessionId;
       checkoutUrl = session.checkoutUrl ?? null;
       paymentStatus = session.paymentStatus ?? null;
+      checkoutStatus = session.checkoutStatus ?? null;
+      isAwaitingPaymentConfirmation =
+        session.isAwaitingPaymentConfirmation ?? true;
 
       await this.prisma.order.update({
         where: { id: order.id },
@@ -183,6 +200,8 @@ export class OrdersService {
       checkoutSessionId,
       checkoutUrl,
       paymentStatus,
+      checkoutStatus,
+      isAwaitingPaymentConfirmation,
     });
   }
 
@@ -522,6 +541,19 @@ export class OrdersService {
     };
   }
 
+  private async reconcileOrderCheckoutState(order: {
+    id: string;
+    status: OrderStatus;
+    paymentProvider: PaymentProvider;
+    checkoutSessionId: string | null;
+  }) {
+    try {
+      return await this.paymentsService.reconcilePendingOrderWithStripe(order);
+    } catch {
+      return null;
+    }
+  }
+
   private toOrderResponse(order: {
     id: string;
     status: OrderStatus;
@@ -534,6 +566,8 @@ export class OrdersService {
     checkoutSessionId: string | null;
     checkoutUrl?: string | null;
     paymentStatus?: string | null;
+    checkoutStatus?: string | null;
+    isAwaitingPaymentConfirmation?: boolean;
     idempotencyKey: string | null;
     paidAt: Date | null;
     cancelledAt: Date | null;
@@ -561,7 +595,29 @@ export class OrdersService {
       ownershipRevision: number;
       issuedAt: Date | null;
     }>;
-  }) {
+  },
+  checkoutState?: {
+    checkoutSessionId: string;
+    checkoutUrl: string | null;
+    paymentStatus: string | null;
+    checkoutStatus: string | null;
+    isAwaitingPaymentConfirmation: boolean;
+  } | null) {
+    const paymentStatus = checkoutState?.paymentStatus ?? order.paymentStatus ?? null;
+    const checkoutStatus =
+      checkoutState?.checkoutStatus ?? order.checkoutStatus ?? null;
+    const checkoutUrl = checkoutState?.checkoutUrl ?? order.checkoutUrl ?? null;
+    const checkoutSessionId =
+      checkoutState?.checkoutSessionId ?? order.checkoutSessionId;
+    const isAwaitingPaymentConfirmation =
+      checkoutState?.isAwaitingPaymentConfirmation ??
+      order.isAwaitingPaymentConfirmation ??
+      (order.status === OrderStatus.PENDING &&
+        order.paymentProvider === PaymentProvider.STRIPE &&
+        Boolean(order.checkoutSessionId) &&
+        paymentStatus !== "paid" &&
+        checkoutStatus !== "expired");
+
     return {
       id: order.id,
       status: order.status,
@@ -571,9 +627,11 @@ export class OrdersService {
       totalAmount: order.totalAmount.toFixed(2),
       paymentProvider: order.paymentProvider,
       paymentReference: order.paymentReference,
-      checkoutSessionId: order.checkoutSessionId,
-      checkoutUrl: order.checkoutUrl ?? null,
-      paymentStatus: order.paymentStatus ?? null,
+      checkoutSessionId,
+      checkoutUrl,
+      paymentStatus,
+      checkoutStatus,
+      isAwaitingPaymentConfirmation,
       idempotencyKey: order.idempotencyKey,
       paidAt: order.paidAt,
       cancelledAt: order.cancelledAt,

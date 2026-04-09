@@ -155,7 +155,6 @@ export class EventsService {
   async updateEvent(
     eventId: string,
     payload: UpdateEventDto,
-    user: AuthenticatedUser,
   ) {
     const existingEvent = await this.prisma.event.findUnique({
       where: { id: eventId },
@@ -165,7 +164,6 @@ export class EventsService {
       throw new NotFoundException(`Event with id "${eventId}" was not found.`);
     }
 
-    this.assertOrganizerOwnership(existingEvent.organizerId, user.id, eventId);
     this.assertEventDates(payload, existingEvent);
 
     const slug = payload.slug
@@ -245,7 +243,6 @@ export class EventsService {
   async createTicketType(
     eventId: string,
     payload: CreateTicketTypeDto,
-    user: AuthenticatedUser,
   ) {
     const event = await this.prisma.event.findUnique({
       where: { id: eventId },
@@ -254,8 +251,6 @@ export class EventsService {
     if (!event) {
       throw new NotFoundException(`Event with id "${eventId}" was not found.`);
     }
-
-    this.assertOrganizerOwnership(event.organizerId, user.id, eventId);
     this.assertTicketTypeDates(payload, event);
 
     const ticketType = await this.prisma.ticketType.create({
@@ -281,7 +276,6 @@ export class EventsService {
     eventId: string,
     ticketTypeId: string,
     payload: UpdateTicketTypeDto,
-    user: AuthenticatedUser,
   ) {
     const event = await this.prisma.event.findUnique({
       where: { id: eventId },
@@ -290,8 +284,6 @@ export class EventsService {
     if (!event) {
       throw new NotFoundException(`Event with id "${eventId}" was not found.`);
     }
-
-    this.assertOrganizerOwnership(event.organizerId, user.id, eventId);
 
     const existingTicketType = await this.prisma.ticketType.findFirst({
       where: {
@@ -345,8 +337,8 @@ export class EventsService {
     return this.toTicketTypeResponse(ticketType);
   }
 
-  async listStaff(eventId: string, user: AuthenticatedUser) {
-    const event = await this.requireOrganizerEvent(eventId, user.id);
+  async listStaff(eventId: string) {
+    const event = await this.requireEventWithDetail(eventId);
 
     return event.staffMemberships.map((membership) =>
       this.toStaffMembershipResponse(membership),
@@ -356,13 +348,12 @@ export class EventsService {
   async inviteStaff(
     eventId: string,
     payload: InviteStaffMemberDto,
-    user: AuthenticatedUser,
   ) {
     if (payload.role !== StaffRole.ADMIN && payload.role !== StaffRole.SCANNER) {
       throw new BadRequestException("Only ADMIN or SCANNER roles can be invited.");
     }
 
-    await this.requireOrganizerEvent(eventId, user.id);
+    await this.requireEvent(eventId);
 
     const invitee = await this.prisma.user.findUnique({
       where: { email: payload.email.trim().toLowerCase() },
@@ -454,13 +445,12 @@ export class EventsService {
     eventId: string,
     membershipId: string,
     payload: UpdateStaffRoleDto,
-    user: AuthenticatedUser,
   ) {
     if (payload.role !== StaffRole.ADMIN && payload.role !== StaffRole.SCANNER) {
       throw new BadRequestException("Staff role must be ADMIN or SCANNER.");
     }
 
-    await this.requireOrganizerEvent(eventId, user.id);
+    await this.requireEvent(eventId);
 
     const membership = await this.prisma.staffMembership.findFirst({
       where: {
@@ -506,9 +496,8 @@ export class EventsService {
   async revokeStaff(
     eventId: string,
     membershipId: string,
-    user: AuthenticatedUser,
   ) {
-    await this.requireOrganizerEvent(eventId, user.id);
+    await this.requireEvent(eventId);
 
     const membership = await this.prisma.staffMembership.findFirst({
       where: {
@@ -579,7 +568,7 @@ export class EventsService {
     };
   }
 
-  private async requireOrganizerEvent(eventId: string, userId: string) {
+  private async requireEventWithDetail(eventId: string) {
     const event = await this.prisma.event.findUnique({
       where: { id: eventId },
       include: this.eventDetailInclude(),
@@ -589,7 +578,19 @@ export class EventsService {
       throw new NotFoundException(`Event with id "${eventId}" was not found.`);
     }
 
-    this.assertOrganizerOwnership(event.organizerId, userId, eventId);
+    return event;
+  }
+
+  private async requireEvent(eventId: string) {
+    const event = await this.prisma.event.findUnique({
+      where: { id: eventId },
+      select: { id: true },
+    });
+
+    if (!event) {
+      throw new NotFoundException(`Event with id "${eventId}" was not found.`);
+    }
+
     return event;
   }
 
@@ -762,18 +763,6 @@ export class EventsService {
         lastName: membership.user.profile?.lastName ?? null,
       },
     };
-  }
-
-  private assertOrganizerOwnership(
-    organizerId: string,
-    userId: string,
-    eventId: string,
-  ) {
-    if (organizerId !== userId) {
-      throw new BadRequestException(
-        `User "${userId}" is not the organizer for event "${eventId}".`,
-      );
-    }
   }
 
   private assertEventDates(

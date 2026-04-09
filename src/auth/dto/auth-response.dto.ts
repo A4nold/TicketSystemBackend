@@ -1,5 +1,21 @@
 import { ApiProperty } from "@nestjs/swagger";
 
+export class AuthMembershipResponseDto {
+  @ApiProperty()
+  id!: string;
+
+  @ApiProperty()
+  eventId!: string;
+
+  @ApiProperty({
+    enum: ["OWNER", "ADMIN", "SCANNER"],
+  })
+  role!: string;
+
+  @ApiProperty({ nullable: true })
+  acceptedAt!: string | null;
+}
+
 export class AuthUserResponseDto {
   @ApiProperty()
   id!: string;
@@ -15,6 +31,19 @@ export class AuthUserResponseDto {
 
   @ApiProperty({ nullable: true })
   lastName!: string | null;
+
+  @ApiProperty({
+    type: String,
+    isArray: true,
+    enum: ["attendee", "organizer", "scanner"],
+  })
+  appRoles!: string[];
+
+  @ApiProperty({
+    type: AuthMembershipResponseDto,
+    isArray: true,
+  })
+  memberships!: AuthMembershipResponseDto[];
 }
 
 export class AuthResponseDto {

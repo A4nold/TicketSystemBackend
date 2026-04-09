@@ -11,10 +11,18 @@ export type RequestWithContext = Request & {
       lastName: string | null;
     } | null;
   };
+  eventMembership?: {
+    id: string;
+    eventId: string;
+    userId: string;
+    role: string;
+    acceptedAt: Date | null;
+  };
   scannerMembership?: {
     id: string;
     eventId: string;
     userId: string;
     role: string;
+    acceptedAt?: Date | null;
   };
 };

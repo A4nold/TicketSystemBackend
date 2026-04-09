@@ -8,3 +8,5 @@ export type AuthenticatedScannerMembership = Pick<
   StaffMembership,
   "id" | "eventId" | "userId" | "role" | "acceptedAt"
 >;
+
+export type AuthenticatedEventMembership = AuthenticatedScannerMembership;

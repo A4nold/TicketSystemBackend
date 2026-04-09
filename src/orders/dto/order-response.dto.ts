@@ -90,6 +90,12 @@ export class OrderResponseDto {
   paymentStatus!: string | null;
 
   @ApiProperty({ nullable: true })
+  checkoutStatus!: string | null;
+
+  @ApiProperty()
+  isAwaitingPaymentConfirmation!: boolean;
+
+  @ApiProperty({ nullable: true })
   idempotencyKey!: string | null;
 
   @ApiProperty({ nullable: true })

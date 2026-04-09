@@ -10,7 +10,6 @@ import {
 } from "react";
 
 import { getCurrentAttendee } from "@/lib/auth/auth-client";
-import { deriveAppRoles } from "@/lib/auth/role-access";
 import type { AuthSession } from "@/lib/auth/types";
 
 const SESSION_STORAGE_KEY = "ticketsystem.attendee.session";
@@ -65,7 +64,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
         setSession({
           ...parsed,
-          appRoles: deriveAppRoles(user),
           user,
         });
       } catch {

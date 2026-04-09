@@ -13,8 +13,10 @@ import {
   CurrentScannerMembership,
   CurrentUser,
 } from "../auth/decorators/current-user.decorator";
+import { RequireEventRoles } from "../auth/decorators/require-event-roles.decorator";
+import { EventMembershipGuard } from "../auth/guards/event-membership.guard";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
-import { ScannerMembershipGuard } from "../auth/guards/scanner-membership.guard";
+import { StaffRole } from "@prisma/client";
 import {
   AuthenticatedScannerMembership,
   AuthenticatedUser,
@@ -30,7 +32,8 @@ import { ScannerService } from "./scanner.service";
 
 @ApiTags("scanner")
 @ApiBearerAuth("bearer")
-@UseGuards(JwtAuthGuard, ScannerMembershipGuard)
+@UseGuards(JwtAuthGuard, EventMembershipGuard)
+@RequireEventRoles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.SCANNER)
 @Controller("scanner/events/:eventId")
 export class ScannerController {
   constructor(private readonly scannerService: ScannerService) {}

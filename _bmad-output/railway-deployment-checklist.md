@@ -1,208 +1,126 @@
-# Railway Deployment Env Checklist
+# Railway Deployment Checklist
 
-This checklist is for deploying the current backend API to Railway.
+This checklist documents the current production deployment shape for the
+ticketing platform on Railway.
 
-The repository now includes a [railway.json](/Users/arnoldekechi/RiderProjects/ticketsystem/railway.json) file so Railway does not need to infer the backend build and start commands.
+The repository contains two deployable apps in one repo:
 
-## 1. Create the Railway Project
+- backend API at the repository root
+- Next.js frontend in [frontend](/Users/arnoldekechi/RiderProjects/ticketsystem/frontend)
 
-- Create a new Railway project for the backend API.
-- Connect the repository.
-- Set the root directory to the project root.
-- Railway config in code:
+The recommended Railway setup is:
+
+- one Railway project
+- one Postgres service
+- one backend service
+- one frontend service
+
+This file uses the current live Railway deployment as the working example.
+
+## 1. Deployment Architecture
+
+Use a single GitHub repository with separate Railway services:
+
+- `TicketSystemBackend`
+- `gleaming-light` for the frontend
+- `Postgres`
+
+Why this setup works well:
+
+- backend and frontend deploy independently
+- each service has its own environment variables
+- backend keeps its Docker-based deploy settings
+- frontend uses its own `frontend/railway.json`
+- rollbacks and redeploys are safer and easier to reason about
+
+## 2. Backend Service Setup
+
+The backend service is deployed from the repository root.
+
+Backend Railway settings:
+
+- Service: `TicketSystemBackend`
+- Root Directory: `.`
+- Config file: [railway.json](/Users/arnoldekechi/RiderProjects/ticketsystem/railway.json)
+- Builder: Dockerfile
+
+Current backend `railway.json` behavior:
 
 ```json
-railway.json
+{
+  "$schema": "https://railway.com/railway.schema.json",
+  "build": {
+    "builder": "DOCKERFILE"
+  },
+  "deploy": {
+    "healthcheckPath": "/api/health",
+    "restartPolicyType": "ON_FAILURE",
+    "restartPolicyMaxRetries": 10
+  }
+}
 ```
 
-- Start command:
+## 3. Frontend Service Setup
 
-```bash
-npm run start:prod
+The frontend service is deployed from the `frontend` folder, not from the
+repository root.
+
+Frontend Railway settings:
+
+- Service: `gleaming-light`
+- Root Directory: `frontend`
+- Config file: [frontend/railway.json](/Users/arnoldekechi/RiderProjects/ticketsystem/frontend/railway.json)
+- Build Command: `npm run build`
+- Start Command: `npm run start`
+
+Current frontend `railway.json`:
+
+```json
+{
+  "$schema": "https://railway.com/railway.schema.json",
+  "deploy": {
+    "restartPolicyType": "ON_FAILURE",
+    "restartPolicyMaxRetries": 10
+  }
+}
 ```
 
-- Build command:
+This separation is important because the root Railway config is backend-specific
+and should not be reused by the frontend service.
 
-```bash
-npm run build
-```
+## 4. Postgres Setup
 
-## 2. Provision Postgres
+Create or keep a Railway Postgres service in the same project.
 
-- Add a Railway PostgreSQL service.
-- Copy the Railway Postgres connection string into `DATABASE_URL`.
-- Confirm the database name is the one you want for the deployed environment.
-
-Expected env var:
+Expected backend database variable:
 
 ```env
 DATABASE_URL=postgresql://...
 ```
 
-## 3. Required Backend Env Vars
+After Postgres is attached:
 
-These should be set before first deploy:
+1. confirm the backend service sees the correct `DATABASE_URL`
+2. run migrations against the production database
+3. seed only if you intentionally want seeded data in that environment
 
-```env
-DATABASE_URL=postgresql://...
-JWT_SECRET=...
-JWT_EXPIRES_IN=1d
-QR_TOKEN_SECRET=...
-QR_TOKEN_EXPIRES_IN=15m
-PORT=3000
-```
-
-Notes:
-
-- `JWT_SECRET` should be a long random secret.
-- `QR_TOKEN_SECRET` should be different from `JWT_SECRET`.
-- `PORT` is usually supplied by Railway automatically, but keeping it documented is helpful.
-
-## 4. Payment Env Vars
-
-These are required if Stripe checkout and webhook processing should be active:
-
-```env
-STRIPE_SECRET_KEY=sk_live_or_test_...
-STRIPE_WEBHOOK_SECRET=whsec_...
-FRONTEND_APP_URL=https://your-frontend-domain
-```
-
-What each one does:
-
-- `STRIPE_SECRET_KEY`: creates live Stripe Checkout Sessions.
-- `STRIPE_WEBHOOK_SECRET`: verifies webhook signatures on `/api/payments/webhooks/stripe`.
-- `FRONTEND_APP_URL`: used to build Stripe success and cancel redirect URLs.
-
-If `STRIPE_SECRET_KEY` is not set:
-
-- checkout still creates pending orders
-- `checkoutUrl` will be `null`
-- Stripe session creation is skipped
-
-## 5. Current API Endpoints That Depend On Env
-
-Auth and QR:
-
-- `/api/auth/login`
-- `/api/auth/register`
-- `/api/me/tickets/:serialNumber/qr`
-
-Payments:
-
-- `/api/orders/checkout`
-- `/api/payments/webhooks/stripe`
-
-Scanner:
-
-- `/api/scanner/events/:eventId/validate`
-
-## 6. Database Setup Steps
-
-Run these once the Railway database is connected:
+Recommended commands:
 
 ```bash
 npx prisma validate
-```
-
-Generate Prisma client if needed:
-
-```bash
 npm run prisma:generate
-```
-
-Apply migrations to the Railway database:
-
-```bash
 npm run migrate:deploy
 ```
 
-Optional seed step for a test environment:
+Optional seed:
 
 ```bash
 npm run db:seed
 ```
 
-Do not seed production unless you intentionally want demo data there.
+## 5. Required Backend Environment Variables
 
-## 7. Railway Runtime Checks
-
-After deploy, verify:
-
-- the API starts successfully
-- `/api/health` responds
-- `/docs` loads
-- `/api/auth/login` works with a seeded or created user
-- `/api/me/tickets/:serialNumber/qr` returns a signed token
-- `/api/orders/checkout` returns a `checkoutUrl` when Stripe is configured
-
-## 8. Webhook Setup
-
-In Stripe:
-
-- create a webhook endpoint pointing to:
-
-```text
-https://your-railway-domain/api/payments/webhooks/stripe
-```
-
-- subscribe at minimum to:
-  - `checkout.session.completed`
-  - `checkout.session.expired`
-
-- copy the resulting signing secret into:
-
-```env
-STRIPE_WEBHOOK_SECRET=whsec_...
-```
-
-## 9. Domain / Endpoint Expectations
-
-Railway will give you a public deployment URL for the service.
-
-Typical pattern:
-
-```text
-https://your-service-name.up.railway.app
-```
-
-Your API endpoints will then look like:
-
-```text
-https://your-service-name.up.railway.app/api/health
-https://your-service-name.up.railway.app/api/orders/checkout
-https://your-service-name.up.railway.app/api/payments/webhooks/stripe
-```
-
-## 10. Recommended Secrets Strategy
-
-- Use different secrets for local, preview, and production.
-- Rotate `JWT_SECRET` and `QR_TOKEN_SECRET` if they are ever exposed.
-- Never commit real Stripe keys or secrets into the repo.
-
-## 11. Current Gaps Before Full Production Readiness
-
-These are not blockers for backend deployment, but they still matter:
-
-- frontend app is not built yet
-- Stripe webhook path is implemented, but not yet tested with a real Stripe account
-- no `.gitignore` check was done in this step
-- no CI deployment pipeline has been added yet
-
-## 12. Minimum Railway Env Set
-
-For a first backend deploy without live Stripe:
-
-```env
-DATABASE_URL=postgresql://...
-JWT_SECRET=...
-JWT_EXPIRES_IN=1d
-QR_TOKEN_SECRET=...
-QR_TOKEN_EXPIRES_IN=15m
-PORT=3000
-```
-
-For a backend deploy with Stripe enabled:
+Set these on the backend service before deploy:
 
 ```env
 DATABASE_URL=postgresql://...
@@ -212,6 +130,229 @@ QR_TOKEN_SECRET=...
 QR_TOKEN_EXPIRES_IN=15m
 PORT=3000
 FRONTEND_APP_URL=https://your-frontend-domain
-STRIPE_SECRET_KEY=sk_...
+CORS_ORIGINS=https://your-frontend-domain
+```
+
+Notes:
+
+- `JWT_SECRET` should be long and random
+- `QR_TOKEN_SECRET` should be different from `JWT_SECRET`
+- `FRONTEND_APP_URL` is used for redirect and frontend-aware flows
+- `CORS_ORIGINS` must include the frontend production domain
+- `PORT` is usually handled by Railway, but documenting it is still useful
+
+## 6. Optional Backend Payment Variables
+
+Set these only if Stripe checkout/webhooks should be active:
+
+```env
+STRIPE_SECRET_KEY=sk_live_or_test_...
 STRIPE_WEBHOOK_SECRET=whsec_...
+```
+
+If `STRIPE_SECRET_KEY` is missing:
+
+- checkout may still create pending orders
+- Stripe session creation is skipped
+- `checkoutUrl` may be `null`
+
+## 7. Required Frontend Environment Variables
+
+Set this on the frontend service:
+
+```env
+NEXT_PUBLIC_API_BASE_URL=https://your-backend-domain
+```
+
+This is required at build time and must be a full URL including `https://`.
+
+Example:
+
+```env
+NEXT_PUBLIC_API_BASE_URL=https://ticketsystembackend-production.up.railway.app
+```
+
+If you omit `https://`, the frontend build can fail because the app validates
+this variable as a URL.
+
+### Frontend Env File Split
+
+The frontend uses different env files for local development and for deployment
+reference:
+
+- local development: [frontend/.env.local](/Users/arnoldekechi/RiderProjects/ticketsystem/frontend/.env.local)
+- production/reference sample: [frontend/.env.example](/Users/arnoldekechi/RiderProjects/ticketsystem/frontend/.env.example)
+
+Current values:
+
+```env
+# frontend/.env.local
+NEXT_PUBLIC_API_BASE_URL=http://localhost:3000
+```
+
+```env
+# frontend/.env.example
+NEXT_PUBLIC_API_BASE_URL=https://ticketsystembackend-production.up.railway.app
+```
+
+Notes:
+
+- `frontend/.env.local` is for running the frontend against the local backend
+- `frontend/.env.local` is ignored by git and should remain local-only
+- `frontend/.env.example` is the safe shared reference for production-style configuration
+- Railway still needs the variable to be set in the Railway service settings; `.env.example` is documentation, not the live secret source
+
+## 8. Step-By-Step Deployment Flow
+
+### Backend deploy
+
+1. Connect the repo to Railway if it is not already connected.
+2. Keep the backend service pointed at the repository root.
+3. Ensure Railway is using the root [railway.json](/Users/arnoldekechi/RiderProjects/ticketsystem/railway.json).
+4. Set backend environment variables.
+5. Confirm Postgres is attached.
+6. Deploy the backend service.
+7. Verify:
+   - `/api/health`
+   - `/docs`
+   - auth endpoints
+
+### Frontend deploy
+
+1. Create a second Railway service from the same repo.
+2. Set its Root Directory to `frontend`.
+3. Ensure it uses [frontend/railway.json](/Users/arnoldekechi/RiderProjects/ticketsystem/frontend/railway.json).
+4. Set:
+   - `NEXT_PUBLIC_API_BASE_URL=https://your-backend-domain`
+5. Set Build Command:
+
+```bash
+npm run build
+```
+
+6. Set Start Command:
+
+```bash
+npm run start
+```
+
+7. Deploy the frontend service.
+8. Generate or confirm the Railway public domain for the frontend service.
+9. Copy that frontend URL back into the backend service:
+   - `FRONTEND_APP_URL`
+   - `CORS_ORIGINS`
+10. Redeploy the backend if those values changed after the frontend URL was created.
+
+## 9. Railway CLI Reference
+
+These commands match the deployment flow used for the current live setup.
+
+Link the frontend folder to the frontend Railway service:
+
+```bash
+cd frontend
+railway service link gleaming-light
+```
+
+Set the frontend API base URL:
+
+```bash
+railway variable set 'NEXT_PUBLIC_API_BASE_URL=https://ticketsystembackend-production.up.railway.app'
+```
+
+Deploy the frontend:
+
+```bash
+railway up -d -m "Deploy frontend service"
+```
+
+Generate a Railway public domain for the frontend:
+
+```bash
+railway domain -s gleaming-light --json
+```
+
+Update backend variables from the frontend domain:
+
+```bash
+railway variable set -s TicketSystemBackend \
+  'FRONTEND_APP_URL=https://your-frontend-domain' \
+  'CORS_ORIGINS=https://your-frontend-domain'
+```
+
+## 10. Runtime Verification Checklist
+
+After backend deploy, verify:
+
+- `/api/health` responds
+- `/docs` loads
+- `/api/auth/login` works
+- `/api/auth/register` works
+- `/api/auth/me` works with a valid token
+
+After frontend deploy, verify:
+
+- home page loads
+- public event page loads
+- auth page loads
+- attendee tickets page loads after sign-in
+- browser requests point to the Railway backend URL, not localhost
+
+## 11. Webhook Setup
+
+If Stripe is enabled, create a webhook endpoint pointing to:
+
+```text
+https://your-backend-domain/api/payments/webhooks/stripe
+```
+
+Subscribe at minimum to:
+
+- `checkout.session.completed`
+- `checkout.session.expired`
+
+Then add:
+
+```env
+STRIPE_WEBHOOK_SECRET=whsec_...
+```
+
+## 12. Production Notes
+
+Important lessons from the current deployment:
+
+- backend and frontend should be separate Railway services
+- frontend must deploy from `frontend/`
+- frontend `NEXT_PUBLIC_API_BASE_URL` must include `https://`
+- backend `CORS_ORIGINS` should point to the deployed frontend URL, not localhost
+- the frontend may deploy successfully before a public domain exists, so generate a Railway domain if needed
+
+## 13. Current Production Links
+
+These are the live production URLs from the current Railway setup.
+
+Frontend:
+
+```text
+https://gleaming-light-production.up.railway.app
+```
+
+Backend:
+
+```text
+https://ticketsystembackend-production.up.railway.app
+```
+
+Useful backend URLs:
+
+```text
+https://ticketsystembackend-production.up.railway.app/api/health
+https://ticketsystembackend-production.up.railway.app/docs
+```
+
+Recommended backend production values based on the live frontend deployment:
+
+```env
+FRONTEND_APP_URL=https://gleaming-light-production.up.railway.app
+CORS_ORIGINS=https://gleaming-light-production.up.railway.app
 ```

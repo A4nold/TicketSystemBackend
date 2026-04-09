@@ -3,8 +3,8 @@ import { JwtModule } from "@nestjs/jwt";
 
 import { AuthController } from "./auth.controller";
 import { AuthService } from "./auth.service";
+import { EventMembershipGuard } from "./guards/event-membership.guard";
 import { JwtAuthGuard } from "./guards/jwt-auth.guard";
-import { ScannerMembershipGuard } from "./guards/scanner-membership.guard";
 
 const jwtSecret = process.env.JWT_SECRET;
 
@@ -24,7 +24,7 @@ if (!jwtSecret) {
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtAuthGuard, ScannerMembershipGuard],
-  exports: [AuthService, JwtAuthGuard, ScannerMembershipGuard],
+  providers: [AuthService, JwtAuthGuard, EventMembershipGuard],
+  exports: [AuthService, JwtAuthGuard, EventMembershipGuard],
 })
 export class AuthModule {}

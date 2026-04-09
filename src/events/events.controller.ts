@@ -20,8 +20,11 @@ import {
   ApiTags,
   ApiUnauthorizedResponse,
 } from "@nestjs/swagger";
+import { StaffRole } from "@prisma/client";
 
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
+import { RequireEventRoles } from "../auth/decorators/require-event-roles.decorator";
+import { EventMembershipGuard } from "../auth/guards/event-membership.guard";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { AuthenticatedUser } from "../auth/types/authenticated-user.type";
 import { CreateEventDto } from "./dto/create-event.dto";
@@ -117,7 +120,8 @@ export class EventsController {
 
   @Patch(":eventId")
   @ApiBearerAuth("bearer")
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, EventMembershipGuard)
+  @RequireEventRoles(StaffRole.OWNER, StaffRole.ADMIN)
   @ApiOperation({
     summary: "Update an event",
     description: "Updates an existing event when it belongs to the authenticated organizer.",
@@ -139,14 +143,14 @@ export class EventsController {
   updateEvent(
     @Param("eventId") eventId: string,
     @Body() payload: UpdateEventDto,
-    @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.eventsService.updateEvent(eventId, payload, user);
+    return this.eventsService.updateEvent(eventId, payload);
   }
 
   @Post(":eventId/ticket-types")
   @ApiBearerAuth("bearer")
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, EventMembershipGuard)
+  @RequireEventRoles(StaffRole.OWNER, StaffRole.ADMIN)
   @ApiOperation({
     summary: "Create a ticket type",
     description: "Adds a new ticket type to an organizer-owned event.",
@@ -168,14 +172,14 @@ export class EventsController {
   createTicketType(
     @Param("eventId") eventId: string,
     @Body() payload: CreateTicketTypeDto,
-    @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.eventsService.createTicketType(eventId, payload, user);
+    return this.eventsService.createTicketType(eventId, payload);
   }
 
   @Patch(":eventId/ticket-types/:ticketTypeId")
   @ApiBearerAuth("bearer")
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, EventMembershipGuard)
+  @RequireEventRoles(StaffRole.OWNER, StaffRole.ADMIN)
   @ApiOperation({
     summary: "Update a ticket type",
     description: "Updates a ticket type when it belongs to an organizer-owned event.",
@@ -202,14 +206,14 @@ export class EventsController {
     @Param("eventId") eventId: string,
     @Param("ticketTypeId") ticketTypeId: string,
     @Body() payload: UpdateTicketTypeDto,
-    @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.eventsService.updateTicketType(eventId, ticketTypeId, payload, user);
+    return this.eventsService.updateTicketType(eventId, ticketTypeId, payload);
   }
 
   @Get(":eventId/staff")
   @ApiBearerAuth("bearer")
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, EventMembershipGuard)
+  @RequireEventRoles(StaffRole.OWNER, StaffRole.ADMIN)
   @ApiOperation({
     summary: "List event staff memberships",
     description: "Returns staff memberships for an organizer-owned event.",
@@ -225,14 +229,14 @@ export class EventsController {
   })
   listStaff(
     @Param("eventId") eventId: string,
-    @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.eventsService.listStaff(eventId, user);
+    return this.eventsService.listStaff(eventId);
   }
 
   @Post(":eventId/staff/invite")
   @ApiBearerAuth("bearer")
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, EventMembershipGuard)
+  @RequireEventRoles(StaffRole.OWNER, StaffRole.ADMIN)
   @ApiOperation({
     summary: "Invite a staff member",
     description: "Invites an existing user to join an organizer-owned event as an admin or scanner.",
@@ -248,9 +252,8 @@ export class EventsController {
   inviteStaff(
     @Param("eventId") eventId: string,
     @Body() payload: InviteStaffMemberDto,
-    @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.eventsService.inviteStaff(eventId, payload, user);
+    return this.eventsService.inviteStaff(eventId, payload);
   }
 
   @Post(":eventId/staff/accept")
@@ -277,7 +280,8 @@ export class EventsController {
 
   @Patch(":eventId/staff/:membershipId")
   @ApiBearerAuth("bearer")
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, EventMembershipGuard)
+  @RequireEventRoles(StaffRole.OWNER, StaffRole.ADMIN)
   @ApiOperation({
     summary: "Update a staff role",
     description: "Changes an invited or accepted staff member role on an organizer-owned event.",
@@ -298,14 +302,14 @@ export class EventsController {
     @Param("eventId") eventId: string,
     @Param("membershipId") membershipId: string,
     @Body() payload: UpdateStaffRoleDto,
-    @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.eventsService.updateStaffRole(eventId, membershipId, payload, user);
+    return this.eventsService.updateStaffRole(eventId, membershipId, payload);
   }
 
   @Post(":eventId/staff/:membershipId/revoke")
   @ApiBearerAuth("bearer")
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, EventMembershipGuard)
+  @RequireEventRoles(StaffRole.OWNER, StaffRole.ADMIN)
   @ApiOperation({
     summary: "Revoke a staff membership",
     description: "Removes an admin or scanner membership from an organizer-owned event.",
@@ -325,8 +329,7 @@ export class EventsController {
   revokeStaff(
     @Param("eventId") eventId: string,
     @Param("membershipId") membershipId: string,
-    @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.eventsService.revokeStaff(eventId, membershipId, user);
+    return this.eventsService.revokeStaff(eventId, membershipId);
   }
 }
