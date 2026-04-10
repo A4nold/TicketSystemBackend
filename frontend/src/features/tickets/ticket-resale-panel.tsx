@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState, useTransition } from "react";
 import { z } from "zod";
 
@@ -24,6 +25,7 @@ type TicketResalePanelProps = Readonly<{
       }
     | null;
   onResaleCreated: () => Promise<unknown> | unknown;
+  eventSlug?: string;
   serialNumber: string;
   status: string;
 }>;
@@ -106,6 +108,7 @@ function getErrorText(error: unknown) {
 }
 
 export function TicketResalePanel({
+  eventSlug,
   latestResaleListing,
   latestTransfer,
   onResaleCreated,
@@ -196,6 +199,16 @@ export function TicketResalePanel({
               Listed: {formatDateTime(latestResaleListing.listedAt)}. Sold:{" "}
               {formatDateTime(latestResaleListing.soldAt)}.
             </p>
+            {eventSlug && latestResaleListing.status === "LISTED" ? (
+              <div className="mt-3">
+                <Link
+                  href={`/marketplace/${eventSlug}`}
+                  className="inline-flex rounded-full border border-border bg-white/8 px-4 py-2 text-sm font-semibold text-foreground transition hover:border-accent/50 hover:bg-white/12"
+                >
+                  View in marketplace
+                </Link>
+              </div>
+            ) : null}
           </div>
         ) : null}
 

@@ -1,10 +1,11 @@
-import { Body, Controller, Param, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Param, Post, UseGuards } from "@nestjs/common";
 import {
   ApiBearerAuth,
   ApiBadRequestResponse,
   ApiCreatedResponse,
   ApiNotFoundResponse,
   ApiOperation,
+  ApiOkResponse,
   ApiParam,
   ApiTags,
 } from "@nestjs/swagger";
@@ -15,17 +16,37 @@ import { AuthenticatedUser } from "../auth/types/authenticated-user.type";
 import { BuyResaleListingDto } from "./dto/buy-resale-listing.dto";
 import { CancelResaleListingDto } from "./dto/cancel-resale-listing.dto";
 import { CreateResaleListingDto } from "./dto/create-resale-listing.dto";
+import { PublicResaleListingResponseDto } from "./dto/public-resale-listing-response.dto";
 import { ResaleResponseDto } from "./dto/resale-response.dto";
 import { ResaleService } from "./resale.service";
 
 @ApiTags("resale")
-@ApiBearerAuth("bearer")
-@UseGuards(JwtAuthGuard)
-@Controller("tickets/:serialNumber")
+@Controller()
 export class ResaleController {
   constructor(private readonly resaleService: ResaleService) {}
 
-  @Post("resale")
+  @Get("resale/events/:eventSlug/listings")
+  @ApiOperation({
+    summary: "List public resale listings for an event",
+    description:
+      "Returns active resale listings for a resale-enabled event so buyers can browse secondary-market inventory.",
+  })
+  @ApiParam({
+    name: "eventSlug",
+    example: "campus-neon-takeover",
+  })
+  @ApiOkResponse({
+    description: "Public resale listings for an event",
+    type: PublicResaleListingResponseDto,
+    isArray: true,
+  })
+  listPublicListings(@Param("eventSlug") eventSlug: string) {
+    return this.resaleService.listPublicListings(eventSlug);
+  }
+
+  @ApiBearerAuth("bearer")
+  @UseGuards(JwtAuthGuard)
+  @Post("tickets/:serialNumber/resale")
   @ApiOperation({
     summary: "Create a resale listing for a ticket",
     description:
@@ -53,7 +74,9 @@ export class ResaleController {
     return this.resaleService.createListing(serialNumber, payload, user);
   }
 
-  @Post("buy-resale")
+  @ApiBearerAuth("bearer")
+  @UseGuards(JwtAuthGuard)
+  @Post("tickets/:serialNumber/buy-resale")
   @ApiOperation({
     summary: "Buy an active resale listing",
     description:
@@ -81,7 +104,9 @@ export class ResaleController {
     return this.resaleService.buyListing(serialNumber, payload, user);
   }
 
-  @Post("cancel-resale")
+  @ApiBearerAuth("bearer")
+  @UseGuards(JwtAuthGuard)
+  @Post("tickets/:serialNumber/cancel-resale")
   @ApiOperation({
     summary: "Cancel an active resale listing",
     description:

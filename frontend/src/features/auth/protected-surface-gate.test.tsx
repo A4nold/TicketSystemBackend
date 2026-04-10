@@ -92,7 +92,7 @@ describe("ProtectedSurfaceGate", () => {
     expect(screen.getByText(/access denied/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /go to my surface/i })).toHaveAttribute(
       "href",
-      "/tickets",
+      "/wallet",
     );
   });
 

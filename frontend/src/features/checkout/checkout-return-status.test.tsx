@@ -110,8 +110,8 @@ describe("CheckoutReturnStatus", () => {
     expect(await screen.findByText(/your order is paid\./i)).toBeInTheDocument();
     expect(screen.getByText("CNT-GA-0001")).toBeInTheDocument();
     expect(
-      screen.getByRole("link", { name: /continue to attendee tickets/i }),
-    ).toHaveAttribute("href", "/tickets?recentOrderId=order_123");
+      screen.getByRole("link", { name: /continue to your wallet/i }),
+    ).toHaveAttribute("href", "/wallet?recentOrderId=order_123");
   });
 
   it("shows pending payment confirmation state when backend truth is not final yet", async () => {

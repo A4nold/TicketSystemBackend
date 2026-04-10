@@ -14,7 +14,7 @@ export default async function AuthPage({ searchParams }: AuthPageProps) {
   const nextPath =
     resolved?.next && resolved.next.startsWith("/")
       ? resolved.next
-      : "/tickets";
+      : "/wallet";
 
   return (
     <AuthScreen

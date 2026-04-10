@@ -138,6 +138,50 @@ export class TicketsService {
     return this.toTicketDetailResponse(ticket);
   }
 
+  async listIncomingTransfers(user: AuthenticatedUser) {
+    const transfers = await this.prisma.transferRequest.findMany({
+      where: {
+        status: "PENDING",
+        OR: [
+          { recipientUserId: user.id },
+          { recipientEmail: user.email },
+        ],
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+      include: {
+        senderUser: true,
+        ticket: {
+          include: {
+            event: true,
+            ticketType: true,
+          },
+        },
+      },
+    });
+
+    return transfers.map((transfer) => ({
+      event: {
+        id: transfer.ticket.event.id,
+        slug: transfer.ticket.event.slug,
+        startsAt: transfer.ticket.event.startsAt,
+        title: transfer.ticket.event.title,
+      },
+      expiresAt: transfer.expiresAt,
+      id: transfer.id,
+      message: transfer.message,
+      senderEmail: transfer.senderUser.email,
+      senderUserId: transfer.senderUserId,
+      serialNumber: transfer.ticket.serialNumber,
+      status: transfer.status,
+      ticketType: {
+        id: transfer.ticket.ticketType.id,
+        name: transfer.ticket.ticketType.name,
+      },
+    }));
+  }
+
   async getMyTicketQrPayload(
     serialNumber: string,
     user: AuthenticatedUser,

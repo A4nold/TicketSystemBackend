@@ -61,6 +61,25 @@ function getUnavailableTransferMessage(
   return "This transfer can no longer be accepted in its current state. It may have expired, been cancelled, or already completed.";
 }
 
+function getTransferStateHeading(
+  transfer: PublicTicketDetail["latestTransfer"] | undefined,
+  ticketStatus: string | undefined,
+) {
+  if (transfer?.status === "PENDING" && ticketStatus === "TRANSFER_PENDING") {
+    return "This ticket is waiting for your acceptance";
+  }
+
+  if (transfer?.status === "ACCEPTED") {
+    return "This transfer has already been completed";
+  }
+
+  if (transfer?.status === "CANCELLED") {
+    return "This transfer is no longer active";
+  }
+
+  return "This transfer is unavailable right now";
+}
+
 function getErrorText(error: unknown) {
   if (error instanceof ApiError) {
     return error.message;
@@ -112,7 +131,7 @@ export function TransferAcceptanceScreen({
           `Transfer accepted. Ticket ${accepted.serialNumber} is now moving into your account.`,
         );
         await ticketQuery.refetch();
-        router.push(`/tickets/${encodeURIComponent(accepted.serialNumber)}`);
+        router.push(`/wallet/${encodeURIComponent(accepted.serialNumber)}`);
       } catch (error) {
         setErrorMessage(getErrorText(error));
       }
@@ -150,11 +169,11 @@ export function TransferAcceptanceScreen({
             Transfer acceptance
           </p>
           <h1 className="font-display text-4xl">
-            Accept this ticket into your account
+            {getTransferStateHeading(transfer, ticket?.status)}
           </h1>
           <p className="max-w-2xl text-sm leading-6 text-muted sm:text-base">
-            Review the ticket context first. Acceptance transfers ownership into your
-            account and changes who can use this ticket at entry.
+            Review the ticket context first. Acceptance moves ownership into your
+            wallet and changes who can use this ticket at entry.
           </p>
         </div>
       </Panel>
@@ -238,7 +257,7 @@ export function TransferAcceptanceScreen({
             {transfer ? (
               <div className="rounded-[1.2rem] border border-border bg-black/10 px-4 py-3 text-sm leading-6 text-muted">
                 This transfer remains pending until you accept it. Once accepted, the ticket
-                moves into your account and the previous owner loses active ownership.
+                moves into your wallet and the previous owner loses active ownership.
                 {" "}Expiry: {formatDateTime(transfer.expiresAt)}.
               </div>
             ) : null}
@@ -254,7 +273,7 @@ export function TransferAcceptanceScreen({
                   {isPending ? "Accepting transfer..." : "Accept transfer"}
                 </button>
                 <Link
-                  href="/tickets"
+                  href="/wallet"
                   className="inline-flex rounded-full border border-border bg-white/8 px-5 py-3 text-sm font-semibold text-foreground transition hover:border-accent/50 hover:bg-white/12"
                 >
                   Back to wallet

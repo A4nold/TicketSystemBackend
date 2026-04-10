@@ -75,6 +75,20 @@ function getTransferEligibility(status: string) {
   }
 }
 
+function getPendingTransferRecipientSummary(
+  latestTransfer: TicketTransferPanelProps["latestTransfer"],
+) {
+  if (!latestTransfer || latestTransfer.status !== "PENDING") {
+    return null;
+  }
+
+  if (latestTransfer.recipientEmail) {
+    return `Waiting on ${latestTransfer.recipientEmail} to accept before ownership changes.`;
+  }
+
+  return "Waiting on the selected recipient to accept before ownership changes.";
+}
+
 function getTransferCancellationState(
   status: string,
   latestTransfer: TicketTransferPanelProps["latestTransfer"],
@@ -220,6 +234,12 @@ export function TicketTransferPanel({
             {eligibility.summary}
           </p>
         </div>
+
+        {status === "TRANSFER_PENDING" && latestTransfer?.status === "PENDING" ? (
+          <div className="rounded-[1.2rem] border border-warning/30 bg-warning/8 px-4 py-3 text-sm leading-6 text-foreground/85">
+            {getPendingTransferRecipientSummary(latestTransfer)}
+          </div>
+        ) : null}
 
         {eligibility.canTransfer ? (
           <div className="space-y-4">

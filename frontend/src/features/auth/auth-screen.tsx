@@ -81,6 +81,10 @@ function getSurfaceFromPath(path: string): AppSurface {
     return "attendee";
   }
 
+  if (path.startsWith("/wallet")) {
+    return "attendee";
+  }
+
   return "public";
 }
 

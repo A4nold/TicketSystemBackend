@@ -19,7 +19,7 @@ type SurfaceShellProps = Readonly<{
 
 const navItems = [
   { href: "/", label: "Public", surface: "public" as const },
-  { href: "/tickets", label: "Attendee", surface: "attendee" as const },
+  { href: "/wallet", label: "Wallet", surface: "attendee" as const },
   { href: "/organizer", label: "Organizer", surface: "organizer" as const },
   { href: "/scanner", label: "Scanner", surface: "scanner" as const },
 ];
@@ -72,7 +72,7 @@ export function SurfaceShell({
                   .map((item) => {
                   const isActive =
                     (surface === "public" && item.href === "/") ||
-                    (surface === "attendee" && item.href === "/tickets") ||
+                    (surface === "attendee" && item.href === "/wallet") ||
                     (surface === "organizer" && item.href === "/organizer") ||
                     (surface === "scanner" && item.href === "/scanner");
 

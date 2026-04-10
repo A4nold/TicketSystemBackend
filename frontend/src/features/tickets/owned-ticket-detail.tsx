@@ -86,7 +86,7 @@ function isQrEligible(status: string) {
 
 export function OwnedTicketDetail({ serialNumber }: OwnedTicketDetailProps) {
   const { session } = useAuth();
-  const nextPath = `/tickets/${encodeURIComponent(serialNumber)}`;
+  const nextPath = `/wallet/${encodeURIComponent(serialNumber)}`;
   const ticketQuery = useQuery({
     enabled: Boolean(session?.accessToken),
     queryFn: () => getOwnedTicketBySerialNumber(serialNumber, session!.accessToken),
@@ -138,7 +138,7 @@ export function OwnedTicketDetail({ serialNumber }: OwnedTicketDetailProps) {
                   Retry ticket detail
                 </button>
                 <Link
-                  href="/tickets"
+                  href="/wallet"
                   className="inline-flex rounded-full border border-border bg-white/8 px-5 py-3 text-sm font-semibold text-foreground transition hover:border-accent/50 hover:bg-white/12"
                 >
                   Back to wallet
@@ -154,7 +154,7 @@ export function OwnedTicketDetail({ serialNumber }: OwnedTicketDetailProps) {
               <div className="space-y-5">
                 <div className="space-y-3">
                   <p className="text-sm font-medium uppercase tracking-[0.28em] text-accent">
-                    Ticket detail
+                    Wallet ticket detail
                   </p>
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div className="space-y-3">
@@ -220,11 +220,63 @@ export function OwnedTicketDetail({ serialNumber }: OwnedTicketDetailProps) {
                     Refresh ticket state
                   </button>
                   <Link
-                    href="/tickets"
+                    href="/wallet"
                     className="inline-flex rounded-full border border-border bg-white/8 px-5 py-3 text-sm font-semibold text-foreground transition hover:border-accent/50 hover:bg-white/12"
                   >
                     Back to wallet
                   </Link>
+                </div>
+              </div>
+            </Panel>
+
+            <Panel>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <p className="text-sm font-medium uppercase tracking-[0.28em] text-accent">
+                    Wallet flow
+                  </p>
+                  <h2 className="font-display text-3xl">
+                    This ticket stays connected to the rest of your account
+                  </h2>
+                  <p className="max-w-3xl text-sm leading-6 text-muted sm:text-base">
+                    QR entry, transfer actions, resale status, and ownership history all sit inside the same wallet journey.
+                  </p>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <div className="rounded-[1.2rem] border border-border bg-black/10 px-4 py-3">
+                    <p className="text-xs font-semibold uppercase tracking-[0.24em] text-muted">
+                      Event page
+                    </p>
+                    <Link
+                      href={`/events/${ticket.event.slug}`}
+                      className="mt-2 inline-flex text-sm font-semibold text-accent transition hover:text-accent/80"
+                    >
+                      Return to public event context
+                    </Link>
+                  </div>
+                  <div className="rounded-[1.2rem] border border-border bg-black/10 px-4 py-3">
+                    <p className="text-xs font-semibold uppercase tracking-[0.24em] text-muted">
+                      Wallet home
+                    </p>
+                    <Link
+                      href="/wallet"
+                      className="mt-2 inline-flex text-sm font-semibold text-accent transition hover:text-accent/80"
+                    >
+                      Open all events in wallet
+                    </Link>
+                  </div>
+                  <div className="rounded-[1.2rem] border border-border bg-black/10 px-4 py-3">
+                    <p className="text-xs font-semibold uppercase tracking-[0.24em] text-muted">
+                      Related event tickets
+                    </p>
+                    <Link
+                      href={`/wallet?eventSlug=${encodeURIComponent(ticket.event.slug)}`}
+                      className="mt-2 inline-flex text-sm font-semibold text-accent transition hover:text-accent/80"
+                    >
+                      Filter this event in wallet
+                    </Link>
+                  </div>
                 </div>
               </div>
             </Panel>
@@ -327,6 +379,7 @@ export function OwnedTicketDetail({ serialNumber }: OwnedTicketDetailProps) {
             />
 
             <TicketResalePanel
+              eventSlug={ticket.event.slug}
               latestResaleListing={ticket.latestResaleListing}
               latestTransfer={ticket.latestTransfer}
               serialNumber={ticket.serialNumber}

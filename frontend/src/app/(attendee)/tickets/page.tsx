@@ -1,4 +1,4 @@
-import { AttendeeGateway } from "@/features/auth/attendee-gateway";
+import { redirect } from "next/navigation";
 
 type TicketsSurfacePageProps = {
   searchParams?: Promise<{
@@ -11,11 +11,15 @@ export default async function TicketsSurfacePage({
   searchParams,
 }: TicketsSurfacePageProps) {
   const resolved = searchParams ? await searchParams : undefined;
+  const next = new URLSearchParams();
 
-  return (
-    <AttendeeGateway
-      eventSlug={resolved?.eventSlug}
-      recentOrderId={resolved?.recentOrderId}
-    />
-  );
+  if (resolved?.eventSlug) {
+    next.set("eventSlug", resolved.eventSlug);
+  }
+
+  if (resolved?.recentOrderId) {
+    next.set("recentOrderId", resolved.recentOrderId);
+  }
+
+  redirect(`/wallet${next.size > 0 ? `?${next.toString()}` : ""}`);
 }

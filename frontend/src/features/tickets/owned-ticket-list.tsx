@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { useAuth } from "@/components/providers/auth-provider";
@@ -12,6 +13,7 @@ import {
 
 type OwnedTicketListProps = Readonly<{
   eventSlug?: string;
+  onTicketsLoaded?: (tickets: OwnedTicketSummary[]) => void;
 }>;
 
 function formatEventTime(date: string) {
@@ -70,6 +72,35 @@ function getSortedTickets(tickets: OwnedTicketSummary[]) {
   });
 }
 
+function groupTicketsByEvent(tickets: OwnedTicketSummary[]) {
+  const groups = new Map<
+    string,
+    {
+      event: OwnedTicketSummary["event"];
+      tickets: OwnedTicketSummary[];
+    }
+  >();
+
+  for (const ticket of getSortedTickets(tickets)) {
+    const current = groups.get(ticket.event.id);
+
+    if (current) {
+      current.tickets.push(ticket);
+      continue;
+    }
+
+    groups.set(ticket.event.id, {
+      event: ticket.event,
+      tickets: [ticket],
+    });
+  }
+
+  return [...groups.values()].sort(
+    (left, right) =>
+      new Date(left.event.startsAt).getTime() - new Date(right.event.startsAt).getTime(),
+  );
+}
+
 function TicketCard({
   ticket,
   isPrimary,
@@ -81,7 +112,7 @@ function TicketCard({
 
   return (
     <Link
-      href={`/tickets/${encodeURIComponent(ticket.serialNumber)}`}
+      href={`/wallet/${encodeURIComponent(ticket.serialNumber)}`}
       className="block rounded-[1.6rem] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
     >
       <Panel
@@ -152,7 +183,7 @@ function TicketCard({
   );
 }
 
-export function OwnedTicketList({ eventSlug }: OwnedTicketListProps) {
+export function OwnedTicketList({ eventSlug, onTicketsLoaded }: OwnedTicketListProps) {
   const { session } = useAuth();
   const ticketQuery = useQuery({
     enabled: Boolean(session?.accessToken),
@@ -160,9 +191,17 @@ export function OwnedTicketList({ eventSlug }: OwnedTicketListProps) {
       listOwnedTickets(session!.accessToken, {
         eventSlug,
         sort: "asc",
-      }),
+    }),
     queryKey: ["owned-tickets", session?.accessToken, eventSlug],
   });
+  const tickets = useMemo(
+    () => getSortedTickets(ticketQuery.data ?? []),
+    [ticketQuery.data],
+  );
+
+  useEffect(() => {
+    onTicketsLoaded?.(tickets);
+  }, [onTicketsLoaded, tickets]);
 
   if (ticketQuery.isLoading || ticketQuery.isFetching) {
     return (
@@ -208,8 +247,6 @@ export function OwnedTicketList({ eventSlug }: OwnedTicketListProps) {
       </Panel>
     );
   }
-
-  const tickets = getSortedTickets(ticketQuery.data ?? []);
 
   if (tickets.length === 0) {
     return (
@@ -273,14 +310,40 @@ export function OwnedTicketList({ eventSlug }: OwnedTicketListProps) {
         </div>
       </Panel>
 
-      {tickets.map((ticket, index) => (
-        <TicketCard
-          key={ticket.id}
-          ticket={ticket}
-          isPrimary={index === 0}
-        />
+      {groupTicketsByEvent(tickets).map((group, groupIndex) => (
+        <Panel key={group.event.id}>
+          <div className="space-y-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+              <div className="space-y-2">
+                <p className="text-sm font-medium uppercase tracking-[0.24em] text-accent">
+                  {group.tickets.length} ticket{group.tickets.length === 1 ? "" : "s"} in wallet
+                </p>
+                <h3 className="font-display text-2xl text-foreground">{group.event.title}</h3>
+                <p className="text-sm leading-6 text-muted">
+                  {formatEventTime(group.event.startsAt)} · {group.event.status.replaceAll("_", " ")}
+                </p>
+              </div>
+
+              <Link
+                href={`/events/${group.event.slug}`}
+                className="inline-flex rounded-full border border-border bg-white/8 px-4 py-2 text-sm font-semibold text-foreground transition hover:border-accent/50 hover:bg-white/12"
+              >
+                View event
+              </Link>
+            </div>
+
+            <div className="space-y-3">
+              {group.tickets.map((ticket, ticketIndex) => (
+                <TicketCard
+                  key={ticket.id}
+                  ticket={ticket}
+                  isPrimary={groupIndex === 0 && ticketIndex === 0}
+                />
+              ))}
+            </div>
+          </div>
+        </Panel>
       ))}
     </div>
   );
 }
-

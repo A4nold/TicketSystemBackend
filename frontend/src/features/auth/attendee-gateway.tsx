@@ -2,13 +2,17 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useState } from "react";
 
 import { useAuth } from "@/components/providers/auth-provider";
 import { Panel } from "@/components/ui/panel";
 import { ProtectedSurfaceGate } from "@/features/auth/protected-surface-gate";
 import { RecentOrderPanel } from "@/features/checkout/recent-order-panel";
 import { PendingStaffInvitesPanel } from "@/features/staff/pending-staff-invites-panel";
+import { PendingTransferInboxPanel } from "@/features/transfers/pending-transfer-inbox-panel";
 import { OwnedTicketList } from "@/features/tickets/owned-ticket-list";
+import { WalletActivityPanel } from "@/features/tickets/wallet-activity-panel";
+import type { OwnedTicketSummary } from "@/lib/tickets/tickets-client";
 
 type AttendeeGatewayProps = Readonly<{
   eventSlug?: string;
@@ -17,13 +21,14 @@ type AttendeeGatewayProps = Readonly<{
 
 export function AttendeeGateway({ eventSlug, recentOrderId }: AttendeeGatewayProps) {
   const router = useRouter();
+  const [walletTickets, setWalletTickets] = useState<OwnedTicketSummary[]>([]);
   const {
     clearNotice,
     notice,
     session,
     signOut,
   } = useAuth();
-  const nextPath = eventSlug ? `/tickets?eventSlug=${eventSlug}` : "/tickets";
+  const nextPath = eventSlug ? `/wallet?eventSlug=${eventSlug}` : "/wallet";
   const authHref = `/auth?mode=login&next=${encodeURIComponent(
     nextPath,
   )}${eventSlug ? `&eventSlug=${encodeURIComponent(eventSlug)}` : ""}`;
@@ -34,14 +39,14 @@ export function AttendeeGateway({ eventSlug, recentOrderId }: AttendeeGatewayPro
         <Panel>
           <div className="space-y-3">
             <p className="text-sm font-medium uppercase tracking-[0.28em] text-accent">
-              Attendee surface
+              Wallet
             </p>
             <h1 className="font-display text-3xl">
               Welcome back, {session?.user.firstName ?? "attendee"}.
             </h1>
             <p className="max-w-2xl text-sm leading-6 text-muted sm:text-base">
-              Your attendee session is active and can now survive a return to the
-              app. Wallet, checkout, and broader route protection land in the next stories.
+              Your account now centers on a live wallet view, so tickets, purchases,
+              invites, and follow-up actions stay in one place after sign-in.
             </p>
           </div>
         </Panel>
@@ -63,12 +68,19 @@ export function AttendeeGateway({ eventSlug, recentOrderId }: AttendeeGatewayPro
 
         <PendingStaffInvitesPanel />
 
+        <PendingTransferInboxPanel />
+
         {recentOrderId ? <RecentOrderPanel orderId={recentOrderId} /> : null}
+
+        <WalletActivityPanel
+          recentOrderId={recentOrderId}
+          tickets={walletTickets}
+        />
 
         <Panel>
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div className="space-y-4">
-              <h2 className="font-display text-2xl">Attendee account</h2>
+              <h2 className="font-display text-2xl">Wallet overview</h2>
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="rounded-2xl border border-border bg-black/10 p-4">
                   <p className="text-xs font-semibold uppercase tracking-[0.24em] text-muted">
@@ -115,7 +127,10 @@ export function AttendeeGateway({ eventSlug, recentOrderId }: AttendeeGatewayPro
           </div>
         </Panel>
 
-        <OwnedTicketList eventSlug={eventSlug} />
+        <OwnedTicketList
+          eventSlug={eventSlug}
+          onTicketsLoaded={setWalletTickets}
+        />
       </div>
     </ProtectedSurfaceGate>
   );

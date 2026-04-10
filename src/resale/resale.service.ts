@@ -20,6 +20,49 @@ import { CreateResaleListingDto } from "./dto/create-resale-listing.dto";
 export class ResaleService {
   constructor(private readonly prisma: PrismaService) {}
 
+  async listPublicListings(eventSlug: string) {
+    const listings = await this.prisma.resaleListing.findMany({
+      where: {
+        status: ResaleStatus.LISTED,
+        event: {
+          allowResale: true,
+          slug: eventSlug,
+        },
+      },
+      orderBy: {
+        listedAt: "desc",
+      },
+      include: {
+        event: true,
+        ticket: {
+          include: {
+            ticketType: true,
+          },
+        },
+      },
+    });
+
+    return listings.map((listing) => ({
+      askingPrice: listing.askingPrice.toString(),
+      currency: listing.currency,
+      event: {
+        id: listing.event.id,
+        slug: listing.event.slug,
+        startsAt: listing.event.startsAt,
+        title: listing.event.title,
+      },
+      expiresAt: listing.expiresAt,
+      id: listing.id,
+      listedAt: listing.listedAt,
+      serialNumber: listing.ticket.serialNumber,
+      status: listing.status,
+      ticketType: {
+        id: listing.ticket.ticketType.id,
+        name: listing.ticket.ticketType.name,
+      },
+    }));
+  }
+
   async createListing(
     serialNumber: string,
     payload: CreateResaleListingDto,

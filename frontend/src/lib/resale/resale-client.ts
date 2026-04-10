@@ -1,10 +1,28 @@
-"use client";
-
 import { apiFetch } from "@/lib/api/client";
 
 export type CreateResaleListingPayload = {
   askingPrice: string;
   expiresAt?: string;
+};
+
+export type PublicResaleListing = {
+  askingPrice: string;
+  currency: string;
+  event: {
+    id: string;
+    slug: string;
+    startsAt: string;
+    title: string;
+  };
+  expiresAt: string | null;
+  id: string;
+  listedAt: string | null;
+  serialNumber: string;
+  status: string;
+  ticketType: {
+    id: string;
+    name: string;
+  };
 };
 
 export type ResaleResponse = {
@@ -38,5 +56,25 @@ export async function createResaleListing(
       "Content-Type": "application/json",
     },
     body: JSON.stringify(payload),
+  });
+}
+
+export async function listPublicResaleListings(eventSlug: string) {
+  return apiFetch<PublicResaleListing[]>(
+    `/api/resale/events/${encodeURIComponent(eventSlug)}/listings`,
+  );
+}
+
+export async function buyResaleListing(
+  serialNumber: string,
+  accessToken: string,
+) {
+  return apiFetch<ResaleResponse>(`/api/tickets/${serialNumber}/buy-resale`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({}),
   });
 }

@@ -1,4 +1,4 @@
-import { OwnedTicketDetail } from "@/features/tickets/owned-ticket-detail";
+import { redirect } from "next/navigation";
 
 type OwnedTicketDetailPageProps = {
   params: Promise<{
@@ -11,5 +11,5 @@ export default async function OwnedTicketDetailPage({
 }: OwnedTicketDetailPageProps) {
   const resolved = await params;
 
-  return <OwnedTicketDetail serialNumber={resolved.serialNumber} />;
+  redirect(`/wallet/${encodeURIComponent(resolved.serialNumber)}`);
 }

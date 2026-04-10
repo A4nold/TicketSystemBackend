@@ -58,7 +58,7 @@ export function getDefaultSurfacePath(session: AuthSession | null) {
     return "/scanner";
   }
 
-  return "/tickets";
+  return "/wallet";
 }
 
 export function getVisibleSurfaces(session: AuthSession | null): AppSurface[] {

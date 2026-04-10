@@ -37,6 +37,24 @@ type ApiEventDetail = {
   ticketTypes: ApiEventTicketType[];
 };
 
+type ApiEventSummary = {
+  id: string;
+  slug: string;
+  title: string;
+  description: string | null;
+  venueName: string | null;
+  venueAddress: string | null;
+  timezone: string;
+  startsAt: string;
+  endsAt: string | null;
+  status: string;
+  coverImageUrl: string | null;
+  allowResale: boolean;
+  organizer: ApiEventOrganizer;
+  ticketTypes: ApiEventTicketType[];
+  issuedTicketsCount: number;
+};
+
 type AvailabilityTone = "available" | "warning" | "unavailable";
 
 export type PublicEventTicketType = {
@@ -62,6 +80,22 @@ export type PublicEventDetail = {
   description: string | null;
   endsAt: string | null;
   id: string;
+  organizerName: string;
+  slug: string;
+  startsAt: string;
+  status: string;
+  ticketTypes: PublicEventTicketType[];
+  timezone: string;
+  title: string;
+  venueLabel: string;
+};
+
+export type PublicEventSummary = {
+  allowResale: boolean;
+  description: string | null;
+  endsAt: string | null;
+  id: string;
+  issuedTicketsCount: number;
   organizerName: string;
   slug: string;
   startsAt: string;
@@ -205,6 +239,53 @@ function mapPublicEventDetail(event: ApiEventDetail): PublicEventDetail {
       };
     }),
   };
+}
+
+function mapPublicEventSummary(event: ApiEventSummary): PublicEventSummary {
+  return {
+    allowResale: event.allowResale,
+    description: event.description,
+    endsAt: event.endsAt,
+    id: event.id,
+    issuedTicketsCount: event.issuedTicketsCount,
+    organizerName: getOrganizerName(event.organizer),
+    slug: event.slug,
+    startsAt: event.startsAt,
+    status: event.status,
+    timezone: event.timezone,
+    title: event.title,
+    venueLabel: getVenueLabel(event),
+    ticketTypes: event.ticketTypes.map((ticketType) => {
+      const availability = mapTicketAvailability(ticketType, event.timezone);
+
+      return {
+        ...availability,
+        description: ticketType.description,
+        currency: ticketType.currency,
+        id: ticketType.id,
+        maxPerOrder: ticketType.maxPerOrder,
+        name: ticketType.name,
+        priceLabel: formatCurrency(ticketType.price, ticketType.currency),
+        priceValue: Number(ticketType.price),
+        quantity: ticketType.quantity,
+        quantityLabel: `${ticketType.quantity} tickets released`,
+        saleEndsAt: ticketType.saleEndsAt ?? null,
+        saleStartsAt: ticketType.saleStartsAt ?? null,
+      };
+    }),
+  };
+}
+
+export async function listPublicEvents() {
+  const events = await apiFetch<ApiEventSummary[]>("/api/events", {
+    next: {
+      revalidate: 60,
+    },
+  }, {
+    sort: "asc",
+  });
+
+  return events.map(mapPublicEventSummary);
 }
 
 export async function getPublicEventBySlug(slug: string) {

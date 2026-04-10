@@ -73,7 +73,7 @@ export function CheckoutReturnStatus({
   const isCancelled = order?.status === "CANCELLED";
   const hasLookupError = orderQuery.isError || (!orderId && !isLoading);
   const hasIssuedTickets = (order?.tickets.length ?? 0) > 0;
-  const attendeeHref = order ? `/tickets?recentOrderId=${encodeURIComponent(order.id)}` : "/tickets";
+  const attendeeHref = order ? `/wallet?recentOrderId=${encodeURIComponent(order.id)}` : "/wallet";
 
   return (
     <ProtectedSurfaceGate requiredSurface="attendee" nextPath={nextPath}>
@@ -182,7 +182,7 @@ export function CheckoutReturnStatus({
                   href={attendeeHref}
                   className="inline-flex rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-surface-soft"
                 >
-                  Continue to attendee tickets
+                  Continue to your wallet
                 </Link>
                 <button
                   type="button"

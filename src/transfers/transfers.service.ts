@@ -10,6 +10,7 @@ import {
 } from "@prisma/client";
 
 import { AuthenticatedUser } from "../auth/types/authenticated-user.type";
+import { NotificationsService } from "../notifications/notifications.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { AcceptTransferDto } from "./dto/accept-transfer.dto";
 import { CancelTransferDto } from "./dto/cancel-transfer.dto";
@@ -17,7 +18,10 @@ import { CreateTransferDto } from "./dto/create-transfer.dto";
 
 @Injectable()
 export class TransfersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notificationsService: NotificationsService,
+  ) {}
 
   async createTransfer(
     serialNumber: string,
@@ -28,6 +32,8 @@ export class TransfersService {
       where: { serialNumber },
       include: {
         currentOwner: true,
+        event: true,
+        ticketType: true,
         transferRequests: {
           where: {
             status: TransferStatus.PENDING,
@@ -112,6 +118,21 @@ export class TransfersService {
 
       return { createdTransfer, updatedTicket };
     });
+
+    if (payload.recipientEmail) {
+      const publicAppUrl = process.env.PUBLIC_APP_URL ?? "http://localhost:3001";
+      const acceptUrl = `${publicAppUrl}/transfer/accept/${encodeURIComponent(serialNumber)}`;
+
+      void this.notificationsService.sendTransferRecipientEmail({
+        acceptUrl,
+        eventStartsAt: ticket.event.startsAt,
+        eventTitle: ticket.event.title,
+        recipientEmail: payload.recipientEmail,
+        senderEmail: user.email,
+        serialNumber,
+        ticketTypeName: ticket.ticketType.name,
+      });
+    }
 
     return this.toTransferResponse(
       transfer.createdTransfer,

@@ -26,6 +26,26 @@ export type TransferResponse = {
   transferToken: string;
 };
 
+export type IncomingTransfer = {
+  event: {
+    id: string;
+    slug: string;
+    startsAt: string;
+    title: string;
+  };
+  expiresAt: string;
+  id: string;
+  message: string | null;
+  senderEmail: string;
+  senderUserId: string;
+  serialNumber: string;
+  status: string;
+  ticketType: {
+    id: string;
+    name: string;
+  };
+};
+
 export function getTransferAcceptPath(serialNumber: string) {
   return `/transfer/accept/${encodeURIComponent(serialNumber)}`;
 }
@@ -56,6 +76,14 @@ export async function acceptTransfer(
       "Content-Type": "application/json",
     },
     body: JSON.stringify({}),
+  });
+}
+
+export async function listIncomingTransfers(accessToken: string) {
+  return apiFetch<IncomingTransfer[]>("/api/me/tickets/transfer-inbox", {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
   });
 }
 

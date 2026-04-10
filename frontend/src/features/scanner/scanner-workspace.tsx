@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { useAuth } from "@/components/providers/auth-provider";
@@ -21,6 +21,22 @@ import {
 type ScannerAttemptRecord = ScannerValidationResponse & {
   source: "DEGRADED" | "ONLINE";
   syncState: "NONE" | "PENDING_SYNC" | "SYNCED";
+};
+
+type CameraBarcode = {
+  rawValue?: string;
+};
+
+type CameraBarcodeDetector = {
+  detect: (source: ImageBitmapSource) => Promise<CameraBarcode[]>;
+};
+
+type CameraBarcodeDetectorConstructor = new (options?: {
+  formats?: string[];
+}) => CameraBarcodeDetector;
+
+type CameraWindow = typeof globalThis & {
+  BarcodeDetector?: CameraBarcodeDetectorConstructor;
 };
 
 function getErrorText(error: unknown, fallback: string) {
@@ -241,8 +257,17 @@ export function ScannerWorkspace() {
   const [syncNotice, setSyncNotice] = useState<string | null>(null);
   const [forceDegradedMode, setForceDegradedMode] = useState(false);
   const [isOnline, setIsOnline] = useState(true);
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  const [cameraActive, setCameraActive] = useState(false);
+  const [isCameraPending, startCameraTransition] = useTransition();
   const [isPending, startTransition] = useTransition();
   const [isSyncPending, startSyncTransition] = useTransition();
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const scanLoopRef = useRef<number | null>(null);
+  const detectorRef = useRef<CameraBarcodeDetector | null>(null);
+  const lastDetectedValueRef = useRef<string | null>(null);
+  const lastDetectedAtRef = useRef<number>(0);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -315,6 +340,26 @@ export function ScannerWorkspace() {
   const outcomeTone = getOutcomeTone(latestOutcome);
   const outcomeHeading = getOutcomeHeading(latestOutcome);
   const outcomeExplanation = getOutcomeExplanation(latestOutcome);
+  const cameraSupported =
+    typeof window !== "undefined" &&
+    Boolean(window.navigator.mediaDevices?.getUserMedia) &&
+    Boolean((window as CameraWindow).BarcodeDetector);
+
+  function stopCamera() {
+    if (scanLoopRef.current !== null && typeof window !== "undefined") {
+      window.cancelAnimationFrame(scanLoopRef.current);
+      scanLoopRef.current = null;
+    }
+
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    streamRef.current = null;
+
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+
+    setCameraActive(false);
+  }
 
   function loadSampleTicket(qrTokenId: string, revision: number) {
     setScanInput(qrTokenId);
@@ -322,12 +367,12 @@ export function ScannerWorkspace() {
     setScanError(null);
   }
 
-  function submitValidation() {
+  function submitValidation(scannedValue?: string) {
     if (!session?.accessToken || !selectedEvent) {
       return;
     }
 
-    const trimmedInput = scanInput.trim();
+    const trimmedInput = (scannedValue ?? scanInput).trim();
 
     if (!trimmedInput) {
       setScanError("Enter a QR token id or signed QR payload before validating.");
@@ -386,12 +431,124 @@ export function ScannerWorkspace() {
         setLatestOutcome(attempt);
         setScanSessionId(result.scanSessionId ?? scanSessionId);
         setRecentAttempts((current) => [attempt, ...current].slice(0, 8));
+        setScanInput(trimmedInput);
       } catch (error) {
         setScanError(
           getErrorText(
             error,
             "Validation could not be completed right now. Please try again.",
           ),
+        );
+      }
+    });
+  }
+
+  function handleDetectedQrValue(rawValue: string) {
+    const trimmedValue = rawValue.trim();
+
+    if (!trimmedValue) {
+      return;
+    }
+
+    const now = Date.now();
+    if (
+      lastDetectedValueRef.current === trimmedValue &&
+      now - lastDetectedAtRef.current < 2000
+    ) {
+      return;
+    }
+
+    lastDetectedValueRef.current = trimmedValue;
+    lastDetectedAtRef.current = now;
+    setScanInput(trimmedValue);
+    setScanError(null);
+    submitValidation(trimmedValue);
+  }
+
+  function scheduleCameraScan() {
+    if (
+      typeof window === "undefined" ||
+      !cameraActive ||
+      !videoRef.current ||
+      !detectorRef.current
+    ) {
+      return;
+    }
+
+    scanLoopRef.current = window.requestAnimationFrame(async () => {
+      try {
+        const video = videoRef.current;
+
+        if (
+          video &&
+          video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA &&
+          detectorRef.current
+        ) {
+          const detections = await detectorRef.current.detect(video);
+          const rawValue = detections.find((detection) => detection.rawValue)?.rawValue;
+
+          if (rawValue) {
+            handleDetectedQrValue(rawValue);
+          }
+        }
+      } catch {
+        // Ignore transient frame-detection errors and continue polling.
+      } finally {
+        if (cameraActive) {
+          scheduleCameraScan();
+        }
+      }
+    });
+  }
+
+  function startCamera() {
+    if (!selectedEvent) {
+      setCameraError("Choose an event before starting the camera scanner.");
+      return;
+    }
+
+    if (!cameraSupported) {
+      setCameraError(
+        "This browser does not support in-browser QR scanning. Use manual token input instead.",
+      );
+      return;
+    }
+
+    setCameraError(null);
+
+    startCameraTransition(async () => {
+      try {
+        const stream = await window.navigator.mediaDevices.getUserMedia({
+          audio: false,
+          video: {
+            facingMode: {
+              ideal: "environment",
+            },
+          },
+        });
+
+        const BarcodeDetectorClass = (window as CameraWindow).BarcodeDetector;
+
+        if (!BarcodeDetectorClass) {
+          throw new Error("BarcodeDetector unavailable");
+        }
+
+        detectorRef.current = new BarcodeDetectorClass({
+          formats: ["qr_code"],
+        });
+        streamRef.current = stream;
+        setCameraActive(true);
+
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          await videoRef.current.play();
+        }
+
+        scheduleCameraScan();
+      } catch {
+        stopCamera();
+        setCameraError(
+          "Camera access could not be started. Check browser permission and use manual input if needed.",
         );
       }
     });
@@ -452,6 +609,19 @@ export function ScannerWorkspace() {
       }
     });
   }
+
+  useEffect(() => {
+    return () => {
+      stopCamera();
+    };
+  }, []);
+
+  useEffect(() => {
+    stopCamera();
+    setCameraError(null);
+    lastDetectedValueRef.current = null;
+    lastDetectedAtRef.current = 0;
+  }, [selectedEventId]);
 
   if (eventsQuery.isLoading) {
     return (
@@ -727,6 +897,79 @@ export function ScannerWorkspace() {
                     <div className="space-y-4">
                       <div className="space-y-2">
                         <p className="text-xs font-semibold uppercase tracking-[0.24em] text-success">
+                          Camera scanning
+                        </p>
+                        <h3 className="font-display text-2xl">
+                          Scan QR codes with the browser camera
+                        </h3>
+                        <p className="text-sm leading-6 text-muted">
+                          Use the device camera for faster entry scanning. Manual token input and degraded-mode queueing still remain available below.
+                        </p>
+                      </div>
+
+                      <div className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
+                        <div className="overflow-hidden rounded-[1.35rem] border border-border bg-black/20">
+                          {cameraActive ? (
+                            <video
+                              ref={videoRef}
+                              autoPlay
+                              muted
+                              playsInline
+                              className="aspect-video w-full object-cover"
+                            />
+                          ) : (
+                            <div className="flex aspect-video items-center justify-center px-6 text-center text-sm leading-6 text-muted">
+                              {cameraSupported
+                                ? "Start the camera and point it at a ticket QR code."
+                                : "Camera QR scanning is not supported in this browser. Manual input remains available."}
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="space-y-3">
+                          <div className="rounded-[1.2rem] border border-border bg-black/15 px-4 py-4 text-sm leading-6 text-muted">
+                            {cameraActive
+                              ? "Camera is active. A detected QR code will flow straight into the current validation path."
+                              : "Camera scanning is optional and layered on top of the same validated scanner workflow."}
+                          </div>
+
+                          <div className="flex flex-wrap gap-3">
+                            <button
+                              type="button"
+                              onClick={cameraActive ? stopCamera : startCamera}
+                              disabled={isCameraPending || !selectedEvent}
+                              className="inline-flex rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-surface-soft disabled:cursor-not-allowed disabled:opacity-65"
+                            >
+                              {isCameraPending
+                                ? "Starting camera..."
+                                : cameraActive
+                                  ? "Stop camera"
+                                  : "Start camera scanner"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={stopCamera}
+                              disabled={!cameraActive}
+                              className="inline-flex rounded-full border border-border px-5 py-3 text-sm font-semibold text-foreground transition hover:border-success/30 hover:bg-black/10 disabled:cursor-not-allowed disabled:opacity-55"
+                            >
+                              Reset camera
+                            </button>
+                          </div>
+
+                          {cameraError ? (
+                            <div className="rounded-[1.2rem] border border-danger/30 bg-danger/10 px-4 py-3 text-sm leading-6 text-danger">
+                              {cameraError}
+                            </div>
+                          ) : null}
+
+                          <div className="rounded-[1.2rem] border border-border bg-black/15 px-4 py-4 text-sm leading-6 text-muted">
+                            If the camera is unavailable, denied, or unreliable, continue with the manual scanner input below without losing degraded-mode recovery.
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-success">
                           Live validation
                         </p>
                         <h3 className="font-display text-2xl">
@@ -781,7 +1024,7 @@ export function ScannerWorkspace() {
                         <div className="flex flex-wrap gap-3">
                           <button
                             type="button"
-                            onClick={submitValidation}
+                            onClick={() => submitValidation()}
                             disabled={isPending}
                             className="inline-flex rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-surface-soft disabled:cursor-not-allowed disabled:opacity-65"
                           >
