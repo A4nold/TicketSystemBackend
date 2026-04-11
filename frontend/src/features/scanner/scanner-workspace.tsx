@@ -6,6 +6,11 @@ import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/components/providers/auth-provider";
 import { Panel } from "@/components/ui/panel";
 import { TicketIssueVisibilityPanel } from "@/features/operations/ticket-issue-visibility-panel";
+import { ScannerEventSelectorPanel } from "@/features/scanner/scanner-event-selector-panel";
+import { ScannerOutcomePanel } from "@/features/scanner/scanner-outcome-panel";
+import { ScannerRecentAttemptsPanel } from "@/features/scanner/scanner-recent-attempts-panel";
+import { ScannerRecoveryPanel } from "@/features/scanner/scanner-recovery-panel";
+import { ScannerValidationPanel } from "@/features/scanner/scanner-validation-panel";
 import { ApiError } from "@/lib/api/client";
 import {
   getScannerAccessibleEventIds,
@@ -15,13 +20,9 @@ import {
   validateScannerTicket,
   type ScannerSyncAttempt,
   type ScannerSyncResponse,
-  type ScannerValidationResponse,
 } from "@/lib/scanner/scanner-client";
 
-type ScannerAttemptRecord = ScannerValidationResponse & {
-  source: "DEGRADED" | "ONLINE";
-  syncState: "NONE" | "PENDING_SYNC" | "SYNCED";
-};
+import type { ScannerAttemptRecord } from "./scanner-workspace.types";
 
 type CameraBarcode = {
   rawValue?: string;
@@ -723,59 +724,14 @@ export function ScannerWorkspace() {
 
       <div className="grid gap-6 xl:grid-cols-[1.05fr_1.35fr]">
         <Panel>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <p className="text-sm font-medium uppercase tracking-[0.24em] text-muted">
-                Assigned events
-              </p>
-              <h2 className="font-display text-2xl">Pick the active door context</h2>
-            </div>
-
-            <div className="space-y-3">
-              {accessibleEvents.map((event) => {
-                const isSelected = event.id === selectedEvent?.id;
-                const membership = session?.user.memberships.find(
-                  (candidate) => candidate.eventId === event.id && candidate.acceptedAt,
-                );
-
-                return (
-                  <button
-                    key={event.id}
-                    type="button"
-                    onClick={() => setSelectedEventId(event.id)}
-                    className={`w-full rounded-[1.35rem] border px-4 py-4 text-left transition ${
-                      isSelected
-                        ? "border-success/40 bg-success/10"
-                        : "border-border bg-black/10 hover:border-success/30 hover:bg-black/15"
-                    }`}
-                  >
-                    <div className="space-y-2">
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-muted">
-                            {membership ? formatScannerRole(membership.role) : "Assigned event"}
-                          </p>
-                          <h3 className="mt-2 text-lg font-semibold text-foreground">
-                            {event.title}
-                          </h3>
-                        </div>
-                        <span className="rounded-full border border-border px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-foreground/80">
-                          {event.status}
-                        </span>
-                      </div>
-
-                      <p className="text-sm leading-6 text-muted">
-                        {event.venueName ?? "Venue pending"} · {formatDateTime(event.startsAt)}
-                      </p>
-                      <p className="text-sm text-muted">
-                        {event.ticketTypes.length} ticket types configured
-                      </p>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+          <ScannerEventSelectorPanel
+            accessibleEvents={accessibleEvents}
+            formatDateTime={formatDateTime}
+            formatScannerRole={formatScannerRole}
+            selectedEventId={selectedEvent?.id ?? null}
+            selectedMemberships={session?.user.memberships ?? []}
+            onSelectEvent={setSelectedEventId}
+          />
         </Panel>
 
         <Panel>
@@ -893,349 +849,57 @@ export function ScannerWorkspace() {
                     </div>
                   </div>
 
-                  <div className="rounded-[1.35rem] border border-border bg-black/10 px-5 py-5">
-                    <div className="space-y-4">
-                      <div className="space-y-2">
-                        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-success">
-                          Camera scanning
-                        </p>
-                        <h3 className="font-display text-2xl">
-                          Scan QR codes with the browser camera
-                        </h3>
-                        <p className="text-sm leading-6 text-muted">
-                          Use the device camera for faster entry scanning. Manual token input and degraded-mode queueing still remain available below.
-                        </p>
-                      </div>
-
-                      <div className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
-                        <div className="overflow-hidden rounded-[1.35rem] border border-border bg-black/20">
-                          {cameraActive ? (
-                            <video
-                              ref={videoRef}
-                              autoPlay
-                              muted
-                              playsInline
-                              className="aspect-video w-full object-cover"
-                            />
-                          ) : (
-                            <div className="flex aspect-video items-center justify-center px-6 text-center text-sm leading-6 text-muted">
-                              {cameraSupported
-                                ? "Start the camera and point it at a ticket QR code."
-                                : "Camera QR scanning is not supported in this browser. Manual input remains available."}
-                            </div>
-                          )}
-                        </div>
-
-                        <div className="space-y-3">
-                          <div className="rounded-[1.2rem] border border-border bg-black/15 px-4 py-4 text-sm leading-6 text-muted">
-                            {cameraActive
-                              ? "Camera is active. A detected QR code will flow straight into the current validation path."
-                              : "Camera scanning is optional and layered on top of the same validated scanner workflow."}
-                          </div>
-
-                          <div className="flex flex-wrap gap-3">
-                            <button
-                              type="button"
-                              onClick={cameraActive ? stopCamera : startCamera}
-                              disabled={isCameraPending || !selectedEvent}
-                              className="inline-flex rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-surface-soft disabled:cursor-not-allowed disabled:opacity-65"
-                            >
-                              {isCameraPending
-                                ? "Starting camera..."
-                                : cameraActive
-                                  ? "Stop camera"
-                                  : "Start camera scanner"}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={stopCamera}
-                              disabled={!cameraActive}
-                              className="inline-flex rounded-full border border-border px-5 py-3 text-sm font-semibold text-foreground transition hover:border-success/30 hover:bg-black/10 disabled:cursor-not-allowed disabled:opacity-55"
-                            >
-                              Reset camera
-                            </button>
-                          </div>
-
-                          {cameraError ? (
-                            <div className="rounded-[1.2rem] border border-danger/30 bg-danger/10 px-4 py-3 text-sm leading-6 text-danger">
-                              {cameraError}
-                            </div>
-                          ) : null}
-
-                          <div className="rounded-[1.2rem] border border-border bg-black/15 px-4 py-4 text-sm leading-6 text-muted">
-                            If the camera is unavailable, denied, or unreliable, continue with the manual scanner input below without losing degraded-mode recovery.
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="space-y-2">
-                        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-success">
-                          Live validation
-                        </p>
-                        <h3 className="font-display text-2xl">
-                          Validate the presented ticket now
-                        </h3>
-                        <p className="text-sm leading-6 text-muted">
-                          Submit a QR token id or full signed QR payload. When connectivity is degraded,
-                          the scanner falls back to manifest-based guidance and queues attempts for later sync.
-                        </p>
-                      </div>
-
-                      <div className="grid gap-3">
-                        <label className="space-y-2">
-                          <span className="text-xs font-semibold uppercase tracking-[0.24em] text-muted">
-                            QR token id or signed payload
-                          </span>
-                          <textarea
-                            value={scanInput}
-                            onChange={(event) => setScanInput(event.target.value)}
-                            rows={4}
-                            placeholder="qr_seed_ga_0001 or eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-                            className="w-full rounded-[1.2rem] border border-border bg-black/15 px-4 py-3 text-sm text-foreground outline-hidden transition focus:border-success/40"
-                          />
-                        </label>
-
-                        <div className="grid gap-3 sm:grid-cols-[0.8fr_1fr]">
-                          <label className="space-y-2">
-                            <span className="text-xs font-semibold uppercase tracking-[0.24em] text-muted">
-                              Ownership revision
-                            </span>
-                            <input
-                              type="number"
-                              min="1"
-                              inputMode="numeric"
-                              value={scanRevision}
-                              onChange={(event) => setScanRevision(event.target.value)}
-                              placeholder="1"
-                              className="w-full rounded-[1.2rem] border border-border bg-black/15 px-4 py-3 text-sm text-foreground outline-hidden transition focus:border-success/40"
-                            />
-                          </label>
-
-                          <div className="space-y-2">
-                            <span className="text-xs font-semibold uppercase tracking-[0.24em] text-muted">
-                              Scan session
-                            </span>
-                            <div className="rounded-[1.2rem] border border-border bg-black/15 px-4 py-3 text-sm text-foreground/90">
-                              {scanSessionId ?? "A live scan session will be created on first validation or sync."}
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="flex flex-wrap gap-3">
-                          <button
-                            type="button"
-                            onClick={() => submitValidation()}
-                            disabled={isPending}
-                            className="inline-flex rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-surface-soft disabled:cursor-not-allowed disabled:opacity-65"
-                          >
-                            {isPending
-                              ? degradedMode
-                                ? "Queueing..."
-                                : "Validating..."
-                              : degradedMode
-                                ? "Queue degraded attempt"
-                                : "Validate ticket"}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setScanInput("");
-                              setScanRevision("");
-                              setScanError(null);
-                            }}
-                            className="inline-flex rounded-full border border-border px-5 py-3 text-sm font-semibold text-foreground transition hover:border-success/30 hover:bg-black/10"
-                          >
-                            Clear input
-                          </button>
-                        </div>
-
-                        {scanError ? (
-                          <div className="rounded-[1.2rem] border border-danger/30 bg-danger/10 px-4 py-3 text-sm leading-6 text-danger">
-                            {scanError}
-                          </div>
-                        ) : null}
-
-                        {syncNotice ? (
-                          <div className="rounded-[1.2rem] border border-success/30 bg-success/10 px-4 py-3 text-sm leading-6 text-success">
-                            {syncNotice}
-                          </div>
-                        ) : null}
-                      </div>
-                    </div>
-                  </div>
+                  <ScannerValidationPanel
+                    cameraActive={cameraActive}
+                    cameraError={cameraError}
+                    cameraSupported={cameraSupported}
+                    degradedMode={degradedMode}
+                    isCameraPending={isCameraPending}
+                    isPending={isPending}
+                    scanError={scanError}
+                    scanInput={scanInput}
+                    scanRevision={scanRevision}
+                    scanSessionId={scanSessionId}
+                    selectedEvent={selectedEvent}
+                    syncNotice={syncNotice}
+                    sampleTickets={sampleTickets}
+                    videoRef={videoRef}
+                    onStartCamera={startCamera}
+                    onStopCamera={stopCamera}
+                    onSubmitValidation={() => submitValidation()}
+                    onClearInput={() => {
+                      setScanInput("");
+                      setScanRevision("");
+                      setScanError(null);
+                    }}
+                    onLoadSampleTicket={loadSampleTicket}
+                    onScanInputChange={setScanInput}
+                    onScanRevisionChange={setScanRevision}
+                  />
 
                   <div className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
-                    <div className="rounded-[1.35rem] border border-border bg-black/10 px-5 py-5">
-                      <div className="space-y-4">
-                        <div className="space-y-2">
-                          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-muted">
-                            Recent outcome
-                          </p>
-                          <h3 className="font-display text-2xl">{outcomeHeading}</h3>
-                        </div>
+                    <ScannerOutcomePanel
+                      degradedMode={degradedMode}
+                      formatDateTime={formatDateTime}
+                      latestOutcome={latestOutcome}
+                      outcomeExplanation={outcomeExplanation}
+                      outcomeHeading={outcomeHeading}
+                      outcomeTone={outcomeTone}
+                    />
 
-                        {latestOutcome ? (
-                          <div
-                            className={`rounded-[1.2rem] border px-4 py-4 ${
-                              outcomeTone === "success"
-                                ? "border-success/30 bg-success/10"
-                                : outcomeTone === "accent"
-                                  ? "border-accent-warm/30 bg-accent-warm/10"
-                                  : "border-danger/30 bg-danger/10"
-                            }`}
-                          >
-                            <div className="space-y-2">
-                              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-foreground/75">
-                                {latestOutcome.outcome.replaceAll("_", " ")} · {latestOutcome.source === "DEGRADED" ? "Degraded mode" : "Live"}
-                              </p>
-                              <p className="text-base font-semibold text-foreground">
-                                {outcomeExplanation}
-                              </p>
-                              <p className="text-sm text-foreground/80">
-                                Serial: {latestOutcome.serialNumber ?? "Unavailable"} · Status:{" "}
-                                {latestOutcome.currentStatus ?? "Unknown"} · {formatDateTime(latestOutcome.scannedAt)}
-                              </p>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="rounded-[1.2rem] border border-border bg-black/15 px-4 py-4 text-sm leading-6 text-muted">
-                            Run a scan to see the live or degraded scanner result here.
-                          </div>
-                        )}
-
-                        <div className="rounded-[1.2rem] border border-border bg-black/15 px-4 py-4 text-sm leading-6 text-muted">
-                          {degradedMode
-                            ? "Degraded mode avoids overstating confidence: the result is guidance from the last manifest, not authoritative live truth."
-                            : "Each live result is phrased explicitly so door staff do not have to rely on color alone to decide whether entry should proceed."}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="rounded-[1.35rem] border border-border bg-black/10 px-5 py-5">
-                      <div className="space-y-4">
-                        <div className="space-y-2">
-                          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-muted">
-                            Quick picks
-                          </p>
-                          <h3 className="font-display text-2xl">Manifest-backed sample tickets</h3>
-                          <p className="text-sm leading-6 text-muted">
-                            Helpful for smoke testing the validation flow before camera scanning is added.
-                          </p>
-                        </div>
-
-                        <div className="space-y-3">
-                          {sampleTickets.map((ticket) => (
-                            <button
-                              key={`${ticket.serialNumber}-${ticket.ownershipRevision}`}
-                              type="button"
-                              onClick={() =>
-                                loadSampleTicket(ticket.qrTokenId, ticket.ownershipRevision)
-                              }
-                              className="w-full rounded-[1.2rem] border border-border bg-black/15 px-4 py-3 text-left transition hover:border-success/30 hover:bg-black/20"
-                            >
-                              <p className="text-sm font-semibold text-foreground">
-                                {ticket.serialNumber}
-                              </p>
-                              <p className="mt-1 text-sm text-muted">
-                                {ticket.status} · rev {ticket.ownershipRevision}
-                              </p>
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
+                    <ScannerRecoveryPanel
+                      degradedMode={degradedMode}
+                      isOnline={isOnline}
+                      isSyncPending={isSyncPending}
+                      pendingSyncAttempts={pendingSyncAttempts}
+                      onSync={syncDegradedAttempts}
+                    />
                   </div>
 
-                  <div className="rounded-[1.35rem] border border-border bg-black/10 px-5 py-5">
-                    <div className="space-y-4">
-                      <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-                        <div className="space-y-2">
-                          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-muted">
-                            Degraded recovery
-                          </p>
-                          <h3 className="font-display text-2xl">Queue and resync safely</h3>
-                          <p className="text-sm leading-6 text-muted">
-                            Attempts made without live connectivity are queued until you return to normal validation mode.
-                          </p>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={syncDegradedAttempts}
-                          disabled={isSyncPending || degradedMode || pendingSyncAttempts.length === 0}
-                          className="inline-flex rounded-full border border-border px-5 py-3 text-sm font-semibold text-foreground transition hover:border-success/30 hover:bg-black/10 disabled:cursor-not-allowed disabled:opacity-55"
-                        >
-                          {isSyncPending ? "Syncing queued attempts..." : "Sync queued attempts"}
-                        </button>
-                      </div>
-
-                      <div className="grid gap-3 sm:grid-cols-3">
-                        <div className="rounded-[1.2rem] border border-border bg-black/15 px-4 py-4">
-                          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-muted">
-                            Connectivity
-                          </p>
-                          <p className="mt-2 text-sm font-semibold text-foreground">
-                            {isOnline ? "Online" : "Offline"}
-                          </p>
-                        </div>
-                        <div className="rounded-[1.2rem] border border-border bg-black/15 px-4 py-4">
-                          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-muted">
-                            Mode
-                          </p>
-                          <p className="mt-2 text-sm font-semibold text-foreground">
-                            {degradedMode ? "Degraded" : "Live"}
-                          </p>
-                        </div>
-                        <div className="rounded-[1.2rem] border border-border bg-black/15 px-4 py-4">
-                          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-muted">
-                            Pending sync
-                          </p>
-                          <p className="mt-2 text-sm font-semibold text-foreground">
-                            {pendingSyncAttempts.length}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="rounded-[1.35rem] border border-border bg-black/10 px-5 py-5">
-                    <div className="space-y-4">
-                      <div className="space-y-2">
-                        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-muted">
-                          Recent attempts
-                        </p>
-                        <h3 className="font-display text-2xl">Scanner line continuity</h3>
-                      </div>
-
-                      {recentAttempts.length > 0 ? (
-                        <div className="space-y-3">
-                          {recentAttempts.map((attempt, index) => (
-                            <div
-                              key={`${attempt.scanSessionId ?? "session"}-${attempt.scannedAt}-${attempt.serialNumber ?? "unknown"}-${index}`}
-                              className="rounded-[1.2rem] border border-border bg-black/15 px-4 py-3"
-                            >
-                              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                                <div>
-                                  <p className="text-sm font-semibold text-foreground">
-                                    {attempt.outcome.replaceAll("_", " ")} · {attempt.serialNumber ?? "Unknown ticket"}
-                                  </p>
-                                  <p className="text-sm text-muted">
-                                    {attempt.reasonCode} · {attempt.currentStatus ?? "Unknown status"} · {attempt.source === "DEGRADED" ? (attempt.syncState === "SYNCED" ? "Synced" : "Pending sync") : "Live"}
-                                  </p>
-                                </div>
-                                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted">
-                                  {formatDateTime(attempt.scannedAt)}
-                                </p>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="rounded-[1.2rem] border border-border bg-black/15 px-4 py-4 text-sm leading-6 text-muted">
-                          Recent attempts will appear here after each validation so staff can move cleanly from one scan to the next.
-                        </div>
-                      )}
-                    </div>
-                  </div>
+                  <ScannerRecentAttemptsPanel
+                    formatDateTime={formatDateTime}
+                    recentAttempts={recentAttempts}
+                  />
 
                   <TicketIssueVisibilityPanel
                     accessToken={session!.accessToken}

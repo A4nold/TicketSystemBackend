@@ -13,12 +13,12 @@ import {
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { AuthenticatedUser } from "../auth/types/authenticated-user.type";
-import { IncomingTransferResponseDto } from "./dto/incoming-transfer-response.dto";
 import { ListMyTicketsQueryDto } from "./dto/list-my-tickets-query.dto";
 import {
   TicketDetailResponseDto,
   TicketSummaryResponseDto,
 } from "./dto/ticket-response.dto";
+import { TicketQueryService } from "./ticket-query.service";
 import { TicketsService } from "./tickets.service";
 
 @ApiTags("tickets")
@@ -26,7 +26,7 @@ import { TicketsService } from "./tickets.service";
 @UseGuards(JwtAuthGuard)
 @Controller("me/tickets")
 export class MyTicketsController {
-  constructor(private readonly ticketsService: TicketsService) {}
+  constructor(private readonly ticketQueryService: TicketQueryService) {}
 
   @Get()
   @ApiOperation({
@@ -62,22 +62,7 @@ export class MyTicketsController {
     @Query() query: ListMyTicketsQueryDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.ticketsService.listMyTickets(query, user);
-  }
-
-  @Get("transfer-inbox")
-  @ApiOperation({
-    summary: "List pending incoming transfers for the authenticated attendee",
-    description:
-      "Returns transfer requests addressed to the authenticated attendee by user id or recipient email.",
-  })
-  @ApiOkResponse({
-    description: "Authenticated user's pending incoming transfers",
-    type: IncomingTransferResponseDto,
-    isArray: true,
-  })
-  getIncomingTransfers(@CurrentUser() user: AuthenticatedUser) {
-    return this.ticketsService.listIncomingTransfers(user);
+    return this.ticketQueryService.listMyTickets(query, user);
   }
 
   @Get(":serialNumber")
@@ -102,6 +87,6 @@ export class MyTicketsController {
     @Param("serialNumber") serialNumber: string,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.ticketsService.getMyTicketBySerialNumber(serialNumber, user);
+    return this.ticketQueryService.getMyTicketBySerialNumber(serialNumber, user);
   }
 }

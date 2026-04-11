@@ -80,7 +80,7 @@ export async function acceptTransfer(
 }
 
 export async function listIncomingTransfers(accessToken: string) {
-  return apiFetch<IncomingTransfer[]>("/api/me/tickets/transfer-inbox", {
+  return apiFetch<IncomingTransfer[]>("/api/me/transfer-inbox", {
     headers: {
       Authorization: `Bearer ${accessToken}`,
     },

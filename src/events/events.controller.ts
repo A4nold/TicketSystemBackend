@@ -42,12 +42,16 @@ import { ListEventsQueryDto } from "./dto/list-events-query.dto";
 import { UpdateStaffRoleDto } from "./dto/update-staff-role.dto";
 import { UpdateEventDto } from "./dto/update-event.dto";
 import { UpdateTicketTypeDto } from "./dto/update-ticket-type.dto";
+import { EventQueryService } from "./event-query.service";
 import { EventsService } from "./events.service";
 
 @ApiTags("events")
 @Controller("events")
 export class EventsController {
-  constructor(private readonly eventsService: EventsService) {}
+  constructor(
+    private readonly eventQueryService: EventQueryService,
+    private readonly eventsService: EventsService,
+  ) {}
 
   @Get()
   @ApiOperation({
@@ -71,7 +75,7 @@ export class EventsController {
     isArray: true,
   })
   getEvents(@Query() query: ListEventsQueryDto) {
-    return this.eventsService.listEvents(query);
+    return this.eventQueryService.listEvents(query);
   }
 
   @Get(":slug")
@@ -92,7 +96,7 @@ export class EventsController {
     description: "Event was not found",
   })
   getEvent(@Param("slug") slug: string) {
-    return this.eventsService.getEventBySlug(slug);
+    return this.eventQueryService.getEventBySlug(slug);
   }
 
   @Post()

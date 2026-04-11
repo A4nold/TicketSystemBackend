@@ -18,6 +18,7 @@ import { CancelOrderDto } from "./dto/cancel-order.dto";
 import { ConfirmPaymentDto } from "./dto/confirm-payment.dto";
 import { CreateCheckoutDto } from "./dto/create-checkout.dto";
 import { OrderResponseDto } from "./dto/order-response.dto";
+import { OrderQueryService } from "./order-query.service";
 import { OrdersService } from "./orders.service";
 
 @ApiTags("orders")
@@ -25,7 +26,10 @@ import { OrdersService } from "./orders.service";
 @UseGuards(JwtAuthGuard)
 @Controller("orders")
 export class OrdersController {
-  constructor(private readonly ordersService: OrdersService) {}
+  constructor(
+    private readonly orderQueryService: OrderQueryService,
+    private readonly ordersService: OrdersService,
+  ) {}
 
   @Get("me")
   @ApiOperation({
@@ -42,7 +46,7 @@ export class OrdersController {
     description: "Bearer token was missing, invalid, expired, or tied to an inactive user",
   })
   listMyOrders(@CurrentUser() user: AuthenticatedUser) {
-    return this.ordersService.listMyOrders(user);
+    return this.orderQueryService.listMyOrders(user);
   }
 
   @Get(":orderId")
@@ -66,7 +70,7 @@ export class OrdersController {
     @Param("orderId") orderId: string,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.ordersService.getOrder(orderId, user);
+    return this.orderQueryService.getOrder(orderId, user);
   }
 
   @Post("checkout")

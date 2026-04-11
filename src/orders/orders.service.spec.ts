@@ -7,6 +7,8 @@ import {
 } from "@prisma/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { CheckoutService } from "./checkout.service";
+import { OrderPaymentService } from "./order-payment.service";
 import { OrdersService } from "./orders.service";
 
 function createAuthenticatedUser() {
@@ -89,21 +91,27 @@ describe("OrdersService", () => {
       findUnique: vi.fn(),
     },
   };
-  const paymentsService = {
-    createCheckoutSession: vi.fn(),
-    reconcilePendingOrderWithStripe: vi.fn(),
+  const checkoutService = {
+    createCheckout: vi.fn(),
+  };
+  const orderPaymentService = {
+    confirmPayment: vi.fn(),
   };
 
   let service: OrdersService;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    service = new OrdersService(prisma as never, paymentsService as never);
+    service = new OrdersService(
+      prisma as never,
+      checkoutService as unknown as CheckoutService,
+      orderPaymentService as unknown as OrderPaymentService,
+    );
   });
 
   describe("createCheckout", () => {
     it("returns an existing order for the same user idempotency key", async () => {
-      prisma.order.findFirst.mockResolvedValue(createOrder());
+      checkoutService.createCheckout.mockResolvedValue(createOrder());
 
       const result = await service.createCheckout(
         {
@@ -115,15 +123,14 @@ describe("OrdersService", () => {
         createAuthenticatedUser(),
       );
 
-      expect(prisma.order.findFirst).toHaveBeenCalledWith(
+      expect(checkoutService.createCheckout).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: expect.objectContaining({
-            idempotencyKey: "idem_123",
-            userId: "user_123",
-          }),
+          idempotencyKey: "idem_123",
+        }),
+        expect.objectContaining({
+          id: "user_123",
         }),
       );
-      expect(prisma.event.findUnique).not.toHaveBeenCalled();
       expect(result.id).toBe("order_123");
       expect(result.checkoutSessionId).toBe("chk_existing");
     });

@@ -1,13 +1,11 @@
 import {
   BadRequestException,
-  ForbiddenException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
 import { Prisma, StaffRole } from "@prisma/client";
 
 import { AuthenticatedUser } from "../auth/types/authenticated-user.type";
-import { ListEventsQueryDto } from "./dto/list-events-query.dto";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateEventDto } from "./dto/create-event.dto";
 import { CreateTicketTypeDto } from "./dto/create-ticket-type.dto";
@@ -15,242 +13,28 @@ import { InviteStaffMemberDto } from "./dto/invite-staff-member.dto";
 import { UpdateStaffRoleDto } from "./dto/update-staff-role.dto";
 import { UpdateEventDto } from "./dto/update-event.dto";
 import { UpdateTicketTypeDto } from "./dto/update-ticket-type.dto";
+import { EventLifecycleService } from "./event-lifecycle.service";
+import {
+  toStaffMembershipResponse,
+  toTicketTypeResponse,
+} from "./mappers/event-response.mapper";
 
 @Injectable()
 export class EventsService {
-  constructor(private readonly prisma: PrismaService) {}
-
-  async listEvents(query: ListEventsQueryDto) {
-    const where = query.status
-      ? {
-          status: query.status,
-        }
-      : undefined;
-
-    const events = await this.prisma.event.findMany({
-      where,
-      orderBy: {
-        startsAt: query.sort,
-      },
-      include: {
-        organizer: {
-          include: {
-            profile: true,
-          },
-        },
-        ticketTypes: {
-          orderBy: {
-            sortOrder: "asc",
-          },
-        },
-        _count: {
-          select: {
-            tickets: true,
-          },
-        },
-      },
-    });
-
-    return events.map((event) => this.toEventSummaryResponse(event));
-  }
-
-  async getEventBySlug(slug: string) {
-    const event = await this.prisma.event.findUnique({
-      where: { slug },
-      include: {
-        organizer: {
-          include: {
-            profile: true,
-          },
-        },
-        ticketTypes: {
-          orderBy: {
-            sortOrder: "asc",
-          },
-        },
-        staffMemberships: {
-          include: {
-            user: {
-              include: {
-                profile: true,
-              },
-            },
-          },
-        },
-        _count: {
-          select: {
-            tickets: true,
-            scanAttempts: true,
-            resaleListings: true,
-          },
-        },
-      },
-    });
-
-    if (!event) {
-      throw new NotFoundException(`Event with slug "${slug}" was not found.`);
-    }
-
-    return this.toEventDetailResponse(event);
-  }
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly eventLifecycleService: EventLifecycleService,
+  ) {}
 
   async createEvent(payload: CreateEventDto, user: AuthenticatedUser) {
-    if (!this.canCreateEvents(user)) {
-      throw new ForbiddenException(
-        "Only organizer-capable users can create events.",
-      );
-    }
-
-    this.assertEventDates(payload);
-
-    const slug = await this.ensureUniqueSlug(
-      payload.slug ? this.slugify(payload.slug) : this.slugify(payload.title),
-    );
-    const startsAt = new Date(payload.startsAt);
-    const endsAt = payload.endsAt ? new Date(payload.endsAt) : null;
-
-    const event = await this.prisma.$transaction(async (tx) => {
-      const createdEvent = await tx.event.create({
-        data: {
-          organizerId: user.id,
-          title: payload.title.trim(),
-          slug,
-          description: payload.description?.trim(),
-          venueName: payload.venueName?.trim(),
-          venueAddress: payload.venueAddress?.trim(),
-          timezone: payload.timezone.trim(),
-          startsAt,
-          endsAt,
-          status: payload.status,
-          coverImageUrl: payload.coverImageUrl?.trim(),
-          salesStartAt: payload.salesStartAt
-            ? new Date(payload.salesStartAt)
-            : null,
-          salesEndAt: payload.salesEndAt ? new Date(payload.salesEndAt) : null,
-          allowResale: payload.allowResale ?? false,
-          maxResalePrice: payload.maxResalePrice
-            ? new Prisma.Decimal(payload.maxResalePrice)
-            : null,
-          resaleStartsAt: payload.resaleStartsAt
-            ? new Date(payload.resaleStartsAt)
-            : null,
-          resaleEndsAt: payload.resaleEndsAt
-            ? new Date(payload.resaleEndsAt)
-            : null,
-        },
-      });
-
-      await tx.staffMembership.create({
-        data: {
-          eventId: createdEvent.id,
-          userId: user.id,
-          role: StaffRole.OWNER,
-          invitedAt: new Date(),
-          acceptedAt: new Date(),
-        },
-      });
-
-      return tx.event.findUniqueOrThrow({
-        where: { id: createdEvent.id },
-        include: this.eventDetailInclude(),
-      });
-    });
-
-    return this.toEventDetailResponse(event);
+    return this.eventLifecycleService.createEvent(payload, user);
   }
 
-  async updateEvent(
-    eventId: string,
-    payload: UpdateEventDto,
-  ) {
-    const existingEvent = await this.prisma.event.findUnique({
-      where: { id: eventId },
-    });
-
-    if (!existingEvent) {
-      throw new NotFoundException(`Event with id "${eventId}" was not found.`);
-    }
-
-    this.assertEventDates(payload, existingEvent);
-
-    const slug = payload.slug
-      ? await this.ensureUniqueSlug(this.slugify(payload.slug), eventId)
-      : undefined;
-
-    const event = await this.prisma.event.update({
-      where: { id: eventId },
-      data: {
-        ...(payload.title !== undefined ? { title: payload.title.trim() } : {}),
-        ...(slug ? { slug } : {}),
-        ...(payload.description !== undefined
-          ? { description: payload.description?.trim() ?? null }
-          : {}),
-        ...(payload.venueName !== undefined
-          ? { venueName: payload.venueName?.trim() ?? null }
-          : {}),
-        ...(payload.venueAddress !== undefined
-          ? { venueAddress: payload.venueAddress?.trim() ?? null }
-          : {}),
-        ...(payload.timezone !== undefined
-          ? { timezone: payload.timezone.trim() }
-          : {}),
-        ...(payload.startsAt !== undefined
-          ? { startsAt: new Date(payload.startsAt) }
-          : {}),
-        ...(payload.endsAt !== undefined
-          ? { endsAt: payload.endsAt ? new Date(payload.endsAt) : null }
-          : {}),
-        ...(payload.status !== undefined ? { status: payload.status } : {}),
-        ...(payload.coverImageUrl !== undefined
-          ? { coverImageUrl: payload.coverImageUrl?.trim() ?? null }
-          : {}),
-        ...(payload.salesStartAt !== undefined
-          ? {
-              salesStartAt: payload.salesStartAt
-                ? new Date(payload.salesStartAt)
-                : null,
-            }
-          : {}),
-        ...(payload.salesEndAt !== undefined
-          ? {
-              salesEndAt: payload.salesEndAt ? new Date(payload.salesEndAt) : null,
-            }
-          : {}),
-        ...(payload.allowResale !== undefined
-          ? { allowResale: payload.allowResale }
-          : {}),
-        ...(payload.maxResalePrice !== undefined
-          ? {
-              maxResalePrice: payload.maxResalePrice
-                ? new Prisma.Decimal(payload.maxResalePrice)
-                : null,
-            }
-          : {}),
-        ...(payload.resaleStartsAt !== undefined
-          ? {
-              resaleStartsAt: payload.resaleStartsAt
-                ? new Date(payload.resaleStartsAt)
-                : null,
-            }
-          : {}),
-        ...(payload.resaleEndsAt !== undefined
-          ? {
-              resaleEndsAt: payload.resaleEndsAt
-                ? new Date(payload.resaleEndsAt)
-                : null,
-            }
-          : {}),
-      },
-      include: this.eventDetailInclude(),
-    });
-
-    return this.toEventDetailResponse(event);
+  async updateEvent(eventId: string, payload: UpdateEventDto) {
+    return this.eventLifecycleService.updateEvent(eventId, payload);
   }
 
-  async createTicketType(
-    eventId: string,
-    payload: CreateTicketTypeDto,
-  ) {
+  async createTicketType(eventId: string, payload: CreateTicketTypeDto) {
     const event = await this.prisma.event.findUnique({
       where: { id: eventId },
     });
@@ -276,7 +60,7 @@ export class EventsService {
       },
     });
 
-    return this.toTicketTypeResponse(ticketType);
+    return toTicketTypeResponse(ticketType);
   }
 
   async updateTicketType(
@@ -341,21 +125,18 @@ export class EventsService {
       },
     });
 
-    return this.toTicketTypeResponse(ticketType);
+    return toTicketTypeResponse(ticketType);
   }
 
   async listStaff(eventId: string) {
     const event = await this.requireEventWithDetail(eventId);
 
     return event.staffMemberships.map((membership) =>
-      this.toStaffMembershipResponse(membership),
+      toStaffMembershipResponse(membership),
     );
   }
 
-  async inviteStaff(
-    eventId: string,
-    payload: InviteStaffMemberDto,
-  ) {
+  async inviteStaff(eventId: string, payload: InviteStaffMemberDto) {
     if (payload.role !== StaffRole.ADMIN && payload.role !== StaffRole.SCANNER) {
       throw new BadRequestException("Only ADMIN or SCANNER roles can be invited.");
     }
@@ -403,7 +184,7 @@ export class EventsService {
       },
     });
 
-    return this.toStaffMembershipResponse(membership);
+    return toStaffMembershipResponse(membership);
   }
 
   async acceptStaffInvite(eventId: string, user: AuthenticatedUser) {
@@ -428,7 +209,7 @@ export class EventsService {
     }
 
     if (membership.role === StaffRole.OWNER) {
-      return this.toStaffMembershipResponse(membership);
+      return toStaffMembershipResponse(membership);
     }
 
     const acceptedMembership = await this.prisma.staffMembership.update({
@@ -445,7 +226,7 @@ export class EventsService {
       },
     });
 
-    return this.toStaffMembershipResponse(acceptedMembership);
+    return toStaffMembershipResponse(acceptedMembership);
   }
 
   async updateStaffRole(
@@ -497,13 +278,10 @@ export class EventsService {
       },
     });
 
-    return this.toStaffMembershipResponse(updatedMembership);
+    return toStaffMembershipResponse(updatedMembership);
   }
 
-  async revokeStaff(
-    eventId: string,
-    membershipId: string,
-  ) {
+  async revokeStaff(eventId: string, membershipId: string) {
     await this.requireEvent(eventId);
 
     const membership = await this.prisma.staffMembership.findFirst({
@@ -541,7 +319,7 @@ export class EventsService {
       },
     });
 
-    return this.toStaffMembershipResponse(deletedMembership);
+    return toStaffMembershipResponse(deletedMembership);
   }
 
   private eventDetailInclude() {
@@ -601,248 +379,6 @@ export class EventsService {
     return event;
   }
 
-  private toEventSummaryResponse(event: {
-    id: string;
-    slug: string;
-    title: string;
-    description: string | null;
-    venueName: string | null;
-    venueAddress: string | null;
-    timezone: string;
-    startsAt: Date;
-    endsAt: Date | null;
-    status: string;
-    coverImageUrl: string | null;
-    allowResale: boolean;
-    resaleStartsAt: Date | null;
-    resaleEndsAt: Date | null;
-    maxResalePrice: Prisma.Decimal | null;
-    organizer: {
-      id: string;
-      email: string;
-      profile: {
-        firstName: string | null;
-        lastName: string | null;
-      } | null;
-    };
-    ticketTypes: Array<{
-      id: string;
-      name: string;
-      description: string | null;
-      price: Prisma.Decimal;
-      currency: string;
-      quantity: number;
-      maxPerOrder: number | null;
-      isActive: boolean;
-      saleStartsAt?: Date | null;
-      saleEndsAt?: Date | null;
-    }>;
-    _count: {
-      tickets: number;
-    };
-  }) {
-    return {
-      id: event.id,
-      slug: event.slug,
-      title: event.title,
-      description: event.description,
-      venueName: event.venueName,
-      venueAddress: event.venueAddress,
-      timezone: event.timezone,
-      startsAt: event.startsAt,
-      endsAt: event.endsAt,
-      status: event.status,
-      coverImageUrl: event.coverImageUrl,
-      allowResale: event.allowResale,
-      resaleWindow: {
-        startsAt: event.resaleStartsAt,
-        endsAt: event.resaleEndsAt,
-        maxResalePrice: event.maxResalePrice?.toFixed(2) ?? null,
-      },
-      organizer: {
-        id: event.organizer.id,
-        email: event.organizer.email,
-        firstName: event.organizer.profile?.firstName ?? null,
-        lastName: event.organizer.profile?.lastName ?? null,
-      },
-      ticketTypes: event.ticketTypes.map((ticketType) =>
-        this.toTicketTypeResponse(ticketType),
-      ),
-      issuedTicketsCount: event._count.tickets,
-    };
-  }
-
-  private toEventDetailResponse(event: {
-    salesStartAt: Date | null;
-    salesEndAt: Date | null;
-    staffMemberships: Array<{
-      id: string;
-      role: string;
-      invitedAt: Date | null;
-      acceptedAt: Date | null;
-      user: {
-        id: string;
-        email: string;
-        profile: {
-          firstName: string | null;
-          lastName: string | null;
-        } | null;
-      };
-    }>;
-    _count: {
-      tickets: number;
-      scanAttempts: number;
-      resaleListings: number;
-    };
-  } & Parameters<EventsService["toEventSummaryResponse"]>[0]) {
-    return {
-      ...this.toEventSummaryResponse(event),
-      salesWindow: {
-        startsAt: event.salesStartAt,
-        endsAt: event.salesEndAt,
-      },
-      resalePolicy: {
-        allowResale: event.allowResale,
-        maxResalePrice: event.maxResalePrice?.toFixed(2) ?? null,
-        startsAt: event.resaleStartsAt,
-        endsAt: event.resaleEndsAt,
-      },
-      staff: event.staffMemberships.map((membership) => ({
-        ...this.toStaffMembershipResponse(membership),
-      })),
-      metrics: {
-        tickets: event._count.tickets,
-        scanAttempts: event._count.scanAttempts,
-        resaleListings: event._count.resaleListings,
-      },
-    };
-  }
-
-  private toTicketTypeResponse(ticketType: {
-    id: string;
-    name: string;
-    description: string | null;
-    price: Prisma.Decimal;
-    currency: string;
-    quantity: number;
-    maxPerOrder: number | null;
-    isActive: boolean;
-    saleStartsAt?: Date | null;
-    saleEndsAt?: Date | null;
-  }) {
-    return {
-      id: ticketType.id,
-      name: ticketType.name,
-      description: ticketType.description,
-      price: ticketType.price.toFixed(2),
-      currency: ticketType.currency,
-      quantity: ticketType.quantity,
-      maxPerOrder: ticketType.maxPerOrder,
-      isActive: ticketType.isActive,
-      saleStartsAt: ticketType.saleStartsAt ?? null,
-      saleEndsAt: ticketType.saleEndsAt ?? null,
-    };
-  }
-
-  private toStaffMembershipResponse(membership: {
-    id: string;
-    role: string;
-    invitedAt: Date | null;
-    acceptedAt: Date | null;
-    user: {
-      id: string;
-      email: string;
-      profile: {
-        firstName: string | null;
-        lastName: string | null;
-      } | null;
-    };
-  }) {
-    return {
-      id: membership.id,
-      role: membership.role,
-      invitedAt: membership.invitedAt,
-      acceptedAt: membership.acceptedAt,
-      user: {
-        id: membership.user.id,
-        email: membership.user.email,
-        firstName: membership.user.profile?.firstName ?? null,
-        lastName: membership.user.profile?.lastName ?? null,
-      },
-    };
-  }
-
-  private assertEventDates(
-    payload: Partial<CreateEventDto>,
-    existingEvent?: {
-      startsAt: Date;
-      endsAt: Date | null;
-      salesStartAt: Date | null;
-      salesEndAt: Date | null;
-      resaleStartsAt: Date | null;
-      resaleEndsAt: Date | null;
-      allowResale: boolean;
-    },
-  ) {
-    const startsAt = payload.startsAt
-      ? new Date(payload.startsAt)
-      : existingEvent?.startsAt;
-    const endsAt =
-      payload.endsAt !== undefined
-        ? payload.endsAt
-          ? new Date(payload.endsAt)
-          : null
-        : existingEvent?.endsAt;
-    const salesStartAt =
-      payload.salesStartAt !== undefined
-        ? payload.salesStartAt
-          ? new Date(payload.salesStartAt)
-          : null
-        : existingEvent?.salesStartAt;
-    const salesEndAt =
-      payload.salesEndAt !== undefined
-        ? payload.salesEndAt
-          ? new Date(payload.salesEndAt)
-          : null
-        : existingEvent?.salesEndAt;
-    const resaleStartsAt =
-      payload.resaleStartsAt !== undefined
-        ? payload.resaleStartsAt
-          ? new Date(payload.resaleStartsAt)
-          : null
-        : existingEvent?.resaleStartsAt;
-    const resaleEndsAt =
-      payload.resaleEndsAt !== undefined
-        ? payload.resaleEndsAt
-          ? new Date(payload.resaleEndsAt)
-          : null
-        : existingEvent?.resaleEndsAt;
-    const allowResale =
-      payload.allowResale !== undefined
-        ? payload.allowResale
-        : existingEvent?.allowResale ?? false;
-
-    if (startsAt && endsAt && endsAt <= startsAt) {
-      throw new BadRequestException("Event end time must be after start time.");
-    }
-
-    if (salesStartAt && salesEndAt && salesEndAt <= salesStartAt) {
-      throw new BadRequestException("Sales end time must be after sales start time.");
-    }
-
-    if (salesEndAt && startsAt && salesEndAt > startsAt) {
-      throw new BadRequestException("Sales must close on or before the event start time.");
-    }
-
-    if (allowResale && resaleStartsAt && resaleEndsAt && resaleEndsAt <= resaleStartsAt) {
-      throw new BadRequestException("Resale end time must be after resale start time.");
-    }
-
-    if (allowResale && resaleEndsAt && startsAt && resaleEndsAt > startsAt) {
-      throw new BadRequestException("Resale must close on or before the event start time.");
-    }
-  }
-
   private assertTicketTypeDates(
     payload: Partial<CreateTicketTypeDto>,
     event: {
@@ -884,43 +420,5 @@ export class EventsService {
         "Ticket-type sales cannot end after the event sales window.",
       );
     }
-  }
-
-  private async ensureUniqueSlug(slug: string, currentEventId?: string) {
-    const existingEvent = await this.prisma.event.findUnique({
-      where: { slug },
-    });
-
-    if (existingEvent && existingEvent.id !== currentEventId) {
-      throw new BadRequestException(`Event slug "${slug}" is already in use.`);
-    }
-
-    return slug;
-  }
-
-  private slugify(value: string) {
-    const slug = value
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "");
-
-    if (!slug) {
-      throw new BadRequestException("Event slug could not be derived from the provided value.");
-    }
-
-    return slug;
-  }
-
-  private canCreateEvents(user: AuthenticatedUser) {
-    if (user.platformRoles.includes("EVENT_OWNER")) {
-      return true;
-    }
-
-    return user.memberships.some(
-      (membership) =>
-        membership.acceptedAt !== null &&
-        (membership.role === StaffRole.OWNER || membership.role === StaffRole.ADMIN),
-    );
   }
 }

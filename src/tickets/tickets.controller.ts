@@ -23,12 +23,13 @@ import {
   TicketDetailResponseDto,
   TicketSummaryResponseDto,
 } from "./dto/ticket-response.dto";
+import { TicketQueryService } from "./ticket-query.service";
 import { TicketsService } from "./tickets.service";
 
 @ApiTags("tickets")
 @Controller("tickets")
 export class TicketsController {
-  constructor(private readonly ticketsService: TicketsService) {}
+  constructor(private readonly ticketQueryService: TicketQueryService) {}
 
   @Get()
   @ApiOperation({
@@ -63,7 +64,7 @@ export class TicketsController {
     isArray: true,
   })
   getTickets(@Query() query: ListTicketsQueryDto) {
-    return this.ticketsService.listTickets(query);
+    return this.ticketQueryService.listTickets(query);
   }
 
   @Get("/me/owned")
@@ -102,7 +103,7 @@ export class TicketsController {
     @Query() query: ListMyTicketsQueryDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.ticketsService.listMyTickets(query, user);
+    return this.ticketQueryService.listMyTickets(query, user);
   }
 
   @Get("/me/owned/:serialNumber")
@@ -129,7 +130,7 @@ export class TicketsController {
     @Param("serialNumber") serialNumber: string,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.ticketsService.getMyTicketBySerialNumber(serialNumber, user);
+    return this.ticketQueryService.getMyTicketBySerialNumber(serialNumber, user);
   }
 
   @Get("events/:eventId/:serialNumber/issue")
@@ -164,7 +165,7 @@ export class TicketsController {
     @Param("eventId") eventId: string,
     @Param("serialNumber") serialNumber: string,
   ) {
-    return this.ticketsService.getOperationalTicketBySerialNumber(
+    return this.ticketQueryService.getOperationalTicketBySerialNumber(
       eventId,
       serialNumber,
     );
@@ -189,6 +190,6 @@ export class TicketsController {
     description: "Ticket was not found",
   })
   getTicket(@Param("serialNumber") serialNumber: string) {
-    return this.ticketsService.getTicketBySerialNumber(serialNumber);
+    return this.ticketQueryService.getTicketBySerialNumber(serialNumber);
   }
 }

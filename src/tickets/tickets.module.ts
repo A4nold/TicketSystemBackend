@@ -1,16 +1,28 @@
 import { Module } from "@nestjs/common";
 
 import { NotificationsModule } from "../notifications/notifications.module";
-import { ResaleService } from "../resale/resale.service";
-import { TransfersService } from "../transfers/transfers.service";
+import { ResaleModule } from "../resale/resale.module";
+import { TransfersModule } from "../transfers/transfers.module";
 import { MyTicketActionsController } from "./my-ticket-actions.controller";
 import { MyTicketsController } from "./my-tickets.controller";
+import { MyTransferInboxController } from "./my-transfer-inbox.controller";
+import { TicketQueryService } from "./ticket-query.service";
+import { TicketOwnershipHistoryService } from "./ticket-ownership-history.service";
 import { TicketsController } from "./tickets.controller";
 import { TicketsService } from "./tickets.service";
 
 @Module({
-  imports: [NotificationsModule],
-  controllers: [TicketsController, MyTicketsController, MyTicketActionsController],
-  providers: [TicketsService, TransfersService, ResaleService],
+  imports: [NotificationsModule, TransfersModule, ResaleModule],
+  controllers: [
+    TicketsController,
+    MyTicketsController,
+    MyTransferInboxController,
+    MyTicketActionsController,
+  ],
+  providers: [
+    TicketOwnershipHistoryService,
+    TicketQueryService,
+    TicketsService,
+  ],
 })
 export class TicketsModule {}
