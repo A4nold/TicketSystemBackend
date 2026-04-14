@@ -52,7 +52,13 @@ export type EventSummarySource = {
   allowResale: boolean;
   resaleStartsAt: Date | null;
   resaleEndsAt: Date | null;
-  maxResalePrice: Prisma.Decimal | null;
+  minResalePrice?: Prisma.Decimal | null;
+  maxResalePrice?: Prisma.Decimal | null;
+  resaleRoyaltyPercent?: Prisma.Decimal | null;
+  postEventMessage?: string | null;
+  postEventCtaLabel?: string | null;
+  postEventCtaUrl?: string | null;
+  postEventPublishedAt?: Date | null;
   organizer: EventOrganizerShape;
   ticketTypes: EventTicketTypeShape[];
   _count: {
@@ -118,7 +124,9 @@ export function toEventSummaryResponse(event: EventSummarySource) {
     resaleWindow: {
       startsAt: event.resaleStartsAt,
       endsAt: event.resaleEndsAt,
+      minResalePrice: event.minResalePrice?.toFixed(2) ?? null,
       maxResalePrice: event.maxResalePrice?.toFixed(2) ?? null,
+      resaleRoyaltyPercent: event.resaleRoyaltyPercent?.toFixed(2) ?? null,
     },
     organizer: {
       id: event.organizer.id,
@@ -140,9 +148,17 @@ export function toEventDetailResponse(event: EventDetailSource) {
     },
     resalePolicy: {
       allowResale: event.allowResale,
+      minResalePrice: event.minResalePrice?.toFixed(2) ?? null,
       maxResalePrice: event.maxResalePrice?.toFixed(2) ?? null,
+      resaleRoyaltyPercent: event.resaleRoyaltyPercent?.toFixed(2) ?? null,
       startsAt: event.resaleStartsAt,
       endsAt: event.resaleEndsAt,
+    },
+    postEventContent: {
+      message: event.postEventMessage ?? null,
+      ctaLabel: event.postEventCtaLabel ?? null,
+      ctaUrl: event.postEventCtaUrl ?? null,
+      publishedAt: event.postEventPublishedAt ?? null,
     },
     staff: event.staffMemberships.map((membership) =>
       toStaffMembershipResponse(membership),

@@ -1,5 +1,32 @@
 import { Prisma } from "@prisma/client";
 
+function getAvailablePostEventContent(event: {
+  endsAt?: Date | null;
+  postEventCtaLabel?: string | null;
+  postEventCtaUrl?: string | null;
+  postEventMessage?: string | null;
+  postEventPublishedAt?: Date | null;
+  startsAt: Date;
+}) {
+  const eventEndTime = event.endsAt ?? event.startsAt;
+
+  if (
+    !event.postEventMessage ||
+    !event.postEventPublishedAt ||
+    event.postEventPublishedAt > new Date() ||
+    eventEndTime > new Date()
+  ) {
+    return null;
+  }
+
+  return {
+    ctaLabel: event.postEventCtaLabel ?? null,
+    ctaUrl: event.postEventCtaUrl ?? null,
+    message: event.postEventMessage,
+    publishedAt: event.postEventPublishedAt,
+  };
+}
+
 type TicketSummarySource = {
   id: string;
   serialNumber: string;
@@ -14,6 +41,16 @@ type TicketSummarySource = {
     title: string;
     status: string;
     startsAt: Date;
+    minResalePrice?: Prisma.Decimal | null;
+    maxResalePrice?: Prisma.Decimal | null;
+    resaleRoyaltyPercent?: Prisma.Decimal | null;
+    resaleStartsAt?: Date | null;
+    resaleEndsAt?: Date | null;
+    endsAt?: Date | null;
+    postEventMessage?: string | null;
+    postEventCtaLabel?: string | null;
+    postEventCtaUrl?: string | null;
+    postEventPublishedAt?: Date | null;
   };
   ticketType: {
     id: string;
@@ -44,6 +81,8 @@ type TicketDetailSource = Omit<TicketSummarySource, "scanAttempts"> & {
     status: string;
     askingPrice: Prisma.Decimal;
     currency: string;
+    organizerRoyaltyAmount?: Prisma.Decimal | null;
+    sellerNetAmount?: Prisma.Decimal | null;
     createdAt: Date;
     listedAt: Date | null;
     soldAt: Date | null;
@@ -81,6 +120,7 @@ type TicketDetailSource = Omit<TicketSummarySource, "scanAttempts"> & {
     acceptedAt: Date | null;
     cancelledAt: Date | null;
     expiresAt: Date;
+    reminderSentAt: Date | null;
   }>;
 };
 
@@ -99,6 +139,14 @@ export function toTicketSummaryResponse(ticket: TicketSummarySource) {
       title: ticket.event.title,
       status: ticket.event.status,
       startsAt: ticket.event.startsAt,
+      postEventContent: getAvailablePostEventContent(ticket.event),
+      resalePolicy: {
+        minResalePrice: ticket.event.minResalePrice?.toFixed(2) ?? null,
+        maxResalePrice: ticket.event.maxResalePrice?.toFixed(2) ?? null,
+        resaleRoyaltyPercent: ticket.event.resaleRoyaltyPercent?.toFixed(2) ?? null,
+        startsAt: ticket.event.resaleStartsAt ?? null,
+        endsAt: ticket.event.resaleEndsAt ?? null,
+      },
     },
     ticketType: {
       id: ticket.ticketType.id,
@@ -136,7 +184,9 @@ export function toTicketDetailResponse(ticket: TicketDetailSource) {
           senderUserId: latestTransfer.senderUserId,
           recipientEmail: latestTransfer.recipientEmail,
           expiresAt: latestTransfer.expiresAt,
+          reminderSentAt: latestTransfer.reminderSentAt,
           acceptedAt: latestTransfer.acceptedAt,
+          cancelledAt: latestTransfer.cancelledAt,
         }
       : null,
     latestResaleListing: latestResaleListing
@@ -145,6 +195,9 @@ export function toTicketDetailResponse(ticket: TicketDetailSource) {
           status: latestResaleListing.status,
           askingPrice: latestResaleListing.askingPrice.toFixed(2),
           currency: latestResaleListing.currency,
+          organizerRoyaltyAmount:
+            latestResaleListing.organizerRoyaltyAmount?.toFixed(2) ?? null,
+          sellerNetAmount: latestResaleListing.sellerNetAmount?.toFixed(2) ?? null,
           listedAt: latestResaleListing.listedAt,
           soldAt: latestResaleListing.soldAt,
         }
@@ -164,12 +217,15 @@ export function toTicketDetailResponse(ticket: TicketDetailSource) {
       createdAt: transfer.createdAt,
       acceptedAt: transfer.acceptedAt,
       cancelledAt: transfer.cancelledAt,
+      reminderSentAt: transfer.reminderSentAt,
     })),
     resaleHistory: ticket.resaleListings.map((listing) => ({
       id: listing.id,
       status: listing.status,
       askingPrice: listing.askingPrice.toFixed(2),
       currency: listing.currency,
+      organizerRoyaltyAmount: listing.organizerRoyaltyAmount?.toFixed(2) ?? null,
+      sellerNetAmount: listing.sellerNetAmount?.toFixed(2) ?? null,
       createdAt: listing.createdAt,
       listedAt: listing.listedAt,
       soldAt: listing.soldAt,

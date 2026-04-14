@@ -16,6 +16,7 @@ export type TransferResponse = {
   id: string;
   message: string | null;
   ownershipRevision: number;
+  reminderSentAt: string | null;
   recipientEmail: string | null;
   recipientUserId: string | null;
   senderUserId: string;
@@ -35,7 +36,9 @@ export type IncomingTransfer = {
   };
   expiresAt: string;
   id: string;
+  isExpired: boolean;
   message: string | null;
+  reminderSentAt: string | null;
   senderEmail: string;
   senderUserId: string;
   serialNumber: string;
@@ -92,6 +95,20 @@ export async function cancelTransfer(
   accessToken: string,
 ) {
   return apiFetch<TransferResponse>(`/api/me/tickets/${serialNumber}/cancel-transfer`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({}),
+  });
+}
+
+export async function remindTransfer(
+  serialNumber: string,
+  accessToken: string,
+) {
+  return apiFetch<TransferResponse>(`/api/me/tickets/${serialNumber}/remind-transfer`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${accessToken}`,

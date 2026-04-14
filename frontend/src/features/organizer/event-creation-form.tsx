@@ -18,6 +18,12 @@ const eventSchema = z.object({
   description: z.string().max(2000).optional(),
   endsAt: z.string().optional(),
   maxResalePrice: z.string().optional(),
+  minResalePrice: z.string().optional(),
+  postEventCtaLabel: z.string().optional(),
+  postEventCtaUrl: z.string().optional(),
+  postEventMessage: z.string().optional(),
+  postEventPublishedAt: z.string().optional(),
+  resaleRoyaltyPercent: z.string().optional(),
   resaleEndsAt: z.string().optional(),
   resaleStartsAt: z.string().optional(),
   salesEndAt: z.string().optional(),
@@ -63,6 +69,12 @@ const initialFormState: {
   description: string;
   endsAt: string;
   maxResalePrice: string;
+  minResalePrice: string;
+  postEventCtaLabel: string;
+  postEventCtaUrl: string;
+  postEventMessage: string;
+  postEventPublishedAt: string;
+  resaleRoyaltyPercent: string;
   resaleEndsAt: string;
   resaleStartsAt: string;
   salesEndAt: string;
@@ -79,6 +91,12 @@ const initialFormState: {
   description: "",
   endsAt: "",
   maxResalePrice: "",
+  minResalePrice: "",
+  postEventCtaLabel: "",
+  postEventCtaUrl: "",
+  postEventMessage: "",
+  postEventPublishedAt: "",
+  resaleRoyaltyPercent: "",
   resaleEndsAt: "",
   resaleStartsAt: "",
   salesEndAt: "",
@@ -135,6 +153,12 @@ export function EventCreationForm({ onCreated }: EventCreationFormProps) {
             description: parsed.data.description || undefined,
             endsAt: toIsoDateTime(parsed.data.endsAt),
             maxResalePrice: parsed.data.maxResalePrice || undefined,
+            minResalePrice: parsed.data.minResalePrice || undefined,
+            postEventCtaLabel: parsed.data.postEventCtaLabel || undefined,
+            postEventCtaUrl: parsed.data.postEventCtaUrl || undefined,
+            postEventMessage: parsed.data.postEventMessage || undefined,
+            postEventPublishedAt: toIsoDateTime(parsed.data.postEventPublishedAt),
+            resaleRoyaltyPercent: parsed.data.resaleRoyaltyPercent || undefined,
             resaleEndsAt: toIsoDateTime(parsed.data.resaleEndsAt),
             resaleStartsAt: toIsoDateTime(parsed.data.resaleStartsAt),
             salesEndAt: toIsoDateTime(parsed.data.salesEndAt),
@@ -432,6 +456,20 @@ export function EventCreationForm({ onCreated }: EventCreationFormProps) {
 
               <label className="block space-y-2">
                 <span className="text-xs font-semibold uppercase tracking-[0.24em] text-muted">
+                  Min resale price
+                </span>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={form.minResalePrice}
+                  onChange={(event) => updateField("minResalePrice", event.target.value)}
+                  placeholder="15.00"
+                  className="w-full rounded-[1.2rem] border border-border bg-black/10 px-4 py-3 text-sm text-foreground outline-hidden transition focus:border-accent-warm/50"
+                />
+              </label>
+
+              <label className="block space-y-2">
+                <span className="text-xs font-semibold uppercase tracking-[0.24em] text-muted">
                   Max resale price
                 </span>
                 <input
@@ -440,6 +478,84 @@ export function EventCreationForm({ onCreated }: EventCreationFormProps) {
                   value={form.maxResalePrice}
                   onChange={(event) => updateField("maxResalePrice", event.target.value)}
                   placeholder="25.00"
+                  className="w-full rounded-[1.2rem] border border-border bg-black/10 px-4 py-3 text-sm text-foreground outline-hidden transition focus:border-accent-warm/50"
+                />
+              </label>
+
+              <label className="block space-y-2">
+                <span className="text-xs font-semibold uppercase tracking-[0.24em] text-muted">
+                  Organizer royalty %
+                </span>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={form.resaleRoyaltyPercent}
+                  onChange={(event) => updateField("resaleRoyaltyPercent", event.target.value)}
+                  placeholder="10.00"
+                  className="w-full rounded-[1.2rem] border border-border bg-black/10 px-4 py-3 text-sm text-foreground outline-hidden transition focus:border-accent-warm/50"
+                />
+              </label>
+            </div>
+          </div>
+
+          <div className="space-y-4 rounded-[1.5rem] border border-border bg-black/10 p-4 lg:col-span-2">
+            <div className="space-y-2">
+              <p className="text-sm font-medium uppercase tracking-[0.24em] text-accent-warm">
+                Post-event follow-up
+              </p>
+              <p className="text-sm leading-6 text-muted">
+                Add an optional message and CTA that appears in attendee wallets after the event ends.
+              </p>
+            </div>
+
+            <label className="block space-y-2">
+              <span className="text-xs font-semibold uppercase tracking-[0.24em] text-muted">
+                Post-event message
+              </span>
+              <textarea
+                value={form.postEventMessage}
+                onChange={(event) => updateField("postEventMessage", event.target.value)}
+                rows={4}
+                placeholder="Thanks for coming. Replay moments and early access are now live."
+                className="w-full rounded-[1.2rem] border border-border bg-black/10 px-4 py-3 text-sm text-foreground outline-hidden transition focus:border-accent-warm/50"
+              />
+            </label>
+
+            <div className="grid gap-5 lg:grid-cols-3">
+              <label className="block space-y-2">
+                <span className="text-xs font-semibold uppercase tracking-[0.24em] text-muted">
+                  CTA label
+                </span>
+                <input
+                  type="text"
+                  value={form.postEventCtaLabel}
+                  onChange={(event) => updateField("postEventCtaLabel", event.target.value)}
+                  placeholder="View replay"
+                  className="w-full rounded-[1.2rem] border border-border bg-black/10 px-4 py-3 text-sm text-foreground outline-hidden transition focus:border-accent-warm/50"
+                />
+              </label>
+
+              <label className="block space-y-2">
+                <span className="text-xs font-semibold uppercase tracking-[0.24em] text-muted">
+                  CTA URL
+                </span>
+                <input
+                  type="url"
+                  value={form.postEventCtaUrl}
+                  onChange={(event) => updateField("postEventCtaUrl", event.target.value)}
+                  placeholder="https://example.com/replay"
+                  className="w-full rounded-[1.2rem] border border-border bg-black/10 px-4 py-3 text-sm text-foreground outline-hidden transition focus:border-accent-warm/50"
+                />
+              </label>
+
+              <label className="block space-y-2">
+                <span className="text-xs font-semibold uppercase tracking-[0.24em] text-muted">
+                  Publish at
+                </span>
+                <input
+                  type="datetime-local"
+                  value={form.postEventPublishedAt}
+                  onChange={(event) => updateField("postEventPublishedAt", event.target.value)}
                   className="w-full rounded-[1.2rem] border border-border bg-black/10 px-4 py-3 text-sm text-foreground outline-hidden transition focus:border-accent-warm/50"
                 />
               </label>

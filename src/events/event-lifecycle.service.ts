@@ -2,11 +2,13 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from "@nestjs/common";
 import { Prisma, StaffRole } from "@prisma/client";
 
 import { AuthenticatedUser } from "../auth/types/authenticated-user.type";
+import { PostEventNotificationSweepService } from "../notifications/post-event-notification-sweep.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateEventDto } from "./dto/create-event.dto";
 import { UpdateEventDto } from "./dto/update-event.dto";
@@ -14,7 +16,12 @@ import { toEventDetailResponse } from "./mappers/event-response.mapper";
 
 @Injectable()
 export class EventLifecycleService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(EventLifecycleService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly postEventNotificationSweepService: PostEventNotificationSweepService,
+  ) {}
 
   async createEvent(payload: CreateEventDto, user: AuthenticatedUser) {
     if (!this.canCreateEvents(user)) {
@@ -50,14 +57,26 @@ export class EventLifecycleService {
             : null,
           salesEndAt: payload.salesEndAt ? new Date(payload.salesEndAt) : null,
           allowResale: payload.allowResale ?? false,
+          minResalePrice: payload.minResalePrice
+            ? new Prisma.Decimal(payload.minResalePrice)
+            : null,
           maxResalePrice: payload.maxResalePrice
             ? new Prisma.Decimal(payload.maxResalePrice)
+            : null,
+          resaleRoyaltyPercent: payload.resaleRoyaltyPercent
+            ? new Prisma.Decimal(payload.resaleRoyaltyPercent)
             : null,
           resaleStartsAt: payload.resaleStartsAt
             ? new Date(payload.resaleStartsAt)
             : null,
           resaleEndsAt: payload.resaleEndsAt
             ? new Date(payload.resaleEndsAt)
+            : null,
+          postEventMessage: payload.postEventMessage?.trim(),
+          postEventCtaLabel: payload.postEventCtaLabel?.trim(),
+          postEventCtaUrl: payload.postEventCtaUrl?.trim(),
+          postEventPublishedAt: payload.postEventPublishedAt
+            ? new Date(payload.postEventPublishedAt)
             : null,
         },
       });
@@ -78,6 +97,8 @@ export class EventLifecycleService {
       });
     });
 
+    await this.trySweepPostEventNotifications(event.id);
+
     return toEventDetailResponse(event);
   }
 
@@ -91,6 +112,8 @@ export class EventLifecycleService {
     }
 
     this.assertEventDates(payload, existingEvent);
+
+    const wasPostEventPublished = this.isPostEventContentPublished(existingEvent);
 
     const slug = payload.slug
       ? await this.ensureUniqueSlug(this.slugify(payload.slug), eventId)
@@ -138,10 +161,24 @@ export class EventLifecycleService {
         ...(payload.allowResale !== undefined
           ? { allowResale: payload.allowResale }
           : {}),
+        ...(payload.minResalePrice !== undefined
+          ? {
+              minResalePrice: payload.minResalePrice
+                ? new Prisma.Decimal(payload.minResalePrice)
+                : null,
+            }
+          : {}),
         ...(payload.maxResalePrice !== undefined
           ? {
               maxResalePrice: payload.maxResalePrice
                 ? new Prisma.Decimal(payload.maxResalePrice)
+                : null,
+            }
+          : {}),
+        ...(payload.resaleRoyaltyPercent !== undefined
+          ? {
+              resaleRoyaltyPercent: payload.resaleRoyaltyPercent
+                ? new Prisma.Decimal(payload.resaleRoyaltyPercent)
                 : null,
             }
           : {}),
@@ -159,9 +196,29 @@ export class EventLifecycleService {
                 : null,
             }
           : {}),
+        ...(payload.postEventMessage !== undefined
+          ? { postEventMessage: payload.postEventMessage?.trim() ?? null }
+          : {}),
+        ...(payload.postEventCtaLabel !== undefined
+          ? { postEventCtaLabel: payload.postEventCtaLabel?.trim() ?? null }
+          : {}),
+        ...(payload.postEventCtaUrl !== undefined
+          ? { postEventCtaUrl: payload.postEventCtaUrl?.trim() ?? null }
+          : {}),
+        ...(payload.postEventPublishedAt !== undefined
+          ? {
+              postEventPublishedAt: payload.postEventPublishedAt
+                ? new Date(payload.postEventPublishedAt)
+                : null,
+            }
+          : {}),
       },
       include: this.eventDetailInclude(),
     });
+
+    if (!wasPostEventPublished && this.isPostEventContentPublished(event)) {
+      await this.trySweepPostEventNotifications(event.id);
+    }
 
     return toEventDetailResponse(event);
   }
@@ -215,6 +272,13 @@ export class EventLifecycleService {
       resaleStartsAt: Date | null;
       resaleEndsAt: Date | null;
       allowResale: boolean;
+      minResalePrice?: Prisma.Decimal | null;
+      maxResalePrice: Prisma.Decimal | null;
+      resaleRoyaltyPercent?: Prisma.Decimal | null;
+      postEventMessage?: string | null;
+      postEventCtaLabel?: string | null;
+      postEventCtaUrl?: string | null;
+      postEventPublishedAt?: Date | null;
     },
   ) {
     const startsAt = payload.startsAt
@@ -254,6 +318,42 @@ export class EventLifecycleService {
       payload.allowResale !== undefined
         ? payload.allowResale
         : existingEvent?.allowResale ?? false;
+    const minResalePrice =
+      payload.minResalePrice !== undefined
+        ? payload.minResalePrice
+          ? new Prisma.Decimal(payload.minResalePrice)
+          : null
+        : existingEvent?.minResalePrice;
+    const maxResalePrice =
+      payload.maxResalePrice !== undefined
+        ? payload.maxResalePrice
+          ? new Prisma.Decimal(payload.maxResalePrice)
+          : null
+        : existingEvent?.maxResalePrice;
+    const resaleRoyaltyPercent =
+      payload.resaleRoyaltyPercent !== undefined
+        ? payload.resaleRoyaltyPercent
+          ? new Prisma.Decimal(payload.resaleRoyaltyPercent)
+          : null
+        : existingEvent?.resaleRoyaltyPercent;
+    const postEventMessage =
+      payload.postEventMessage !== undefined
+        ? payload.postEventMessage?.trim() ?? null
+        : existingEvent?.postEventMessage ?? null;
+    const postEventCtaLabel =
+      payload.postEventCtaLabel !== undefined
+        ? payload.postEventCtaLabel?.trim() ?? null
+        : existingEvent?.postEventCtaLabel ?? null;
+    const postEventCtaUrl =
+      payload.postEventCtaUrl !== undefined
+        ? payload.postEventCtaUrl?.trim() ?? null
+        : existingEvent?.postEventCtaUrl ?? null;
+    const postEventPublishedAt =
+      payload.postEventPublishedAt !== undefined
+        ? payload.postEventPublishedAt
+          ? new Date(payload.postEventPublishedAt)
+          : null
+        : existingEvent?.postEventPublishedAt ?? null;
 
     if (startsAt && endsAt && endsAt <= startsAt) {
       throw new BadRequestException("Event end time must be after start time.");
@@ -273,6 +373,66 @@ export class EventLifecycleService {
 
     if (allowResale && resaleEndsAt && startsAt && resaleEndsAt > startsAt) {
       throw new BadRequestException("Resale must close on or before the event start time.");
+    }
+
+    if (
+      allowResale &&
+      minResalePrice &&
+      maxResalePrice &&
+      minResalePrice.greaterThan(maxResalePrice)
+    ) {
+      throw new BadRequestException(
+        "Minimum resale price must be less than or equal to maximum resale price.",
+      );
+    }
+
+    if (
+      allowResale &&
+      resaleRoyaltyPercent &&
+      (resaleRoyaltyPercent.lessThan(0) || resaleRoyaltyPercent.greaterThan(100))
+    ) {
+      throw new BadRequestException(
+        "Resale royalty percent must be between 0 and 100.",
+      );
+    }
+
+    if ((postEventCtaLabel && !postEventCtaUrl) || (!postEventCtaLabel && postEventCtaUrl)) {
+      throw new BadRequestException(
+        "Post-event CTA label and CTA URL must be provided together.",
+      );
+    }
+
+    if (postEventPublishedAt && !postEventMessage) {
+      throw new BadRequestException(
+        "Post-event content cannot be published without a message.",
+      );
+    }
+  }
+
+  private isPostEventContentPublished(event: {
+    endsAt?: Date | null;
+    postEventMessage?: string | null;
+    postEventPublishedAt?: Date | null;
+    startsAt: Date;
+  }) {
+    const eventEndTime = event.endsAt ?? event.startsAt;
+
+    return Boolean(
+      event.postEventMessage &&
+        event.postEventPublishedAt &&
+        event.postEventPublishedAt <= new Date() &&
+        eventEndTime <= new Date(),
+    );
+  }
+
+  private async trySweepPostEventNotifications(eventId: string) {
+    try {
+      await this.postEventNotificationSweepService.sweepEventById(eventId);
+    } catch (error) {
+      this.logger.error(
+        `Post-event notification sweep failed for event "${eventId}" after save.`,
+        error,
+      );
     }
   }
 

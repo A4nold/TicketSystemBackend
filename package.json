@@ -17,6 +17,7 @@
     "migrate:deploy": "prisma migrate deploy --schema prisma/schema.prisma",
     "db:seed": "node prisma/seed.js",
     "db:seed:demo": "node prisma/seed.js",
+    "db:seed:campus-neon-takeover2": "node prisma/seed-campus-neon-takeover2-test-data.js",
     "db:seed:production-reset": "node prisma/seed-production-reset.js",
     "db:seed:production-memberships": "node prisma/seed-production-memberships.js"
   },

@@ -6,6 +6,7 @@ import {
 import { Prisma, ResaleStatus, TicketStatus } from "@prisma/client";
 
 import { AuthenticatedUser } from "../auth/types/authenticated-user.type";
+import { NotificationsService } from "../notifications/notifications.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { TicketOwnershipHistoryService } from "../tickets/ticket-ownership-history.service";
 import { CreateResaleListingDto } from "./dto/create-resale-listing.dto";
@@ -16,6 +17,7 @@ import { ResaleTicketRepository } from "./repositories/resale-ticket.repository"
 export class CreateResaleListingService {
   constructor(
     private readonly prisma: PrismaService,
+    private readonly notificationsService: NotificationsService,
     private readonly ticketOwnershipHistoryService: TicketOwnershipHistoryService,
     private readonly resaleTicketRepository: ResaleTicketRepository,
   ) {}
@@ -85,15 +87,32 @@ export class CreateResaleListingService {
     }
 
     const askingPrice = new Prisma.Decimal(payload.askingPrice);
+    const resaleEvent = ticket.event as typeof ticket.event & {
+      minResalePrice?: Prisma.Decimal | null;
+      resaleRoyaltyPercent?: Prisma.Decimal | null;
+    };
+    const minResalePrice = resaleEvent.minResalePrice ?? null;
+    const maxResalePrice = ticket.event.maxResalePrice;
+    const resaleRoyaltyPercent = resaleEvent.resaleRoyaltyPercent ?? null;
 
-    if (
-      ticket.event.maxResalePrice &&
-      askingPrice.greaterThan(ticket.event.maxResalePrice)
-    ) {
+    if (minResalePrice && askingPrice.lessThan(minResalePrice)) {
+      throw new BadRequestException(
+        `Asking price is below the organizer resale floor for event "${ticket.event.slug}".`,
+      );
+    }
+
+    if (maxResalePrice && askingPrice.greaterThan(maxResalePrice)) {
       throw new BadRequestException(
         `Asking price exceeds the resale cap for event "${ticket.event.slug}".`,
       );
     }
+
+    const organizerRoyaltyAmount = resaleRoyaltyPercent
+      ? askingPrice.mul(resaleRoyaltyPercent).div(100).toDecimalPlaces(2)
+      : null;
+    const sellerNetAmount = organizerRoyaltyAmount
+      ? askingPrice.minus(organizerRoyaltyAmount).toDecimalPlaces(2)
+      : askingPrice.toDecimalPlaces(2);
 
     const result = await this.prisma.$transaction(async (tx) => {
       const listing = await tx.resaleListing.create({
@@ -103,6 +122,8 @@ export class CreateResaleListingService {
           eventId: ticket.eventId,
           askingPrice,
           currency: "EUR",
+          organizerRoyaltyAmount,
+          sellerNetAmount,
           status: ResaleStatus.LISTED,
           paymentProvider: "STRIPE",
           saleReference: generateSaleReference(),
@@ -130,6 +151,12 @@ export class CreateResaleListingService {
       });
 
       return { listing, updatedTicket };
+    });
+
+    await this.notificationsService.notifyResaleListed({
+      eventTitle: ticket.event.title,
+      sellerUserId: user.id,
+      serialNumber,
     });
 
     return toResaleResponse(

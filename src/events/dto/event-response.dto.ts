@@ -53,8 +53,14 @@ export class EventResaleWindowDto {
   @ApiProperty({ nullable: true })
   endsAt!: Date | null;
 
+  @ApiProperty({ example: "15", nullable: true })
+  minResalePrice!: string | null;
+
   @ApiProperty({ example: "25", nullable: true })
   maxResalePrice!: string | null;
+
+  @ApiProperty({ example: "10.00", nullable: true })
+  resaleRoyaltyPercent!: string | null;
 }
 
 export class EventSalesWindowDto {
@@ -63,6 +69,20 @@ export class EventSalesWindowDto {
 
   @ApiProperty({ nullable: true })
   endsAt!: Date | null;
+}
+
+export class EventPostEventContentDto {
+  @ApiProperty({ nullable: true })
+  message!: string | null;
+
+  @ApiProperty({ nullable: true })
+  ctaLabel!: string | null;
+
+  @ApiProperty({ nullable: true })
+  ctaUrl!: string | null;
+
+  @ApiProperty({ nullable: true })
+  publishedAt!: Date | null;
 }
 
 export class EventStaffMemberDto {
@@ -149,6 +169,9 @@ export class EventDetailResponseDto extends EventSummaryResponseDto {
 
   @ApiProperty({ type: EventResaleWindowDto })
   resalePolicy!: EventResaleWindowDto;
+
+  @ApiProperty({ type: EventPostEventContentDto })
+  postEventContent!: EventPostEventContentDto;
 
   @ApiProperty({ type: [EventStaffMemberDto] })
   staff!: EventStaffMemberDto[];

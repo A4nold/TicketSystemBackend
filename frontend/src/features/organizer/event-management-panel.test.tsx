@@ -131,6 +131,8 @@ describe("EventManagementPanel", () => {
         resaleWindow: {
           endsAt: null,
           maxResalePrice: null,
+          minResalePrice: null,
+          resaleRoyaltyPercent: null,
           startsAt: null,
         },
         slug: "managed-event",
@@ -165,7 +167,15 @@ describe("EventManagementPanel", () => {
       resalePolicy: {
         endsAt: null,
         maxResalePrice: null,
+        minResalePrice: null,
+        resaleRoyaltyPercent: null,
         startsAt: null,
+      },
+      postEventContent: {
+        ctaLabel: null,
+        ctaUrl: null,
+        message: null,
+        publishedAt: null,
       },
       salesWindow: {
         endsAt: null,

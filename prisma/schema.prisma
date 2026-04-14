@@ -94,6 +94,22 @@ enum PayoutStatus {
   CANCELLED
 }
 
+enum NotificationType {
+  TRANSFER_CREATED
+  TRANSFER_RECEIVED
+  TRANSFER_ACCEPTED
+  TRANSFER_CANCELLED
+  RESALE_LISTED
+  RESALE_SOLD
+  RESALE_CANCELLED
+  POST_EVENT_PUBLISHED
+}
+
+enum NotificationStatus {
+  UNREAD
+  READ
+}
+
 enum OwnershipChangeType {
   PURCHASE
   TRANSFER_OUT
@@ -127,6 +143,7 @@ model User {
   staffMemberships         StaffMembership[]
   scanSessionsStarted      ScanSession[]            @relation("scan_session_started_by")
   scanAttempts             ScanAttempt[]            @relation("scan_attempt_staff")
+  notifications            UserNotification[]
 
   @@map("users")
 }
@@ -161,9 +178,16 @@ model Event {
   salesStartAt         DateTime?         @map("sales_start_at")
   salesEndAt           DateTime?         @map("sales_end_at")
   allowResale          Boolean           @default(false) @map("allow_resale")
+  minResalePrice       Decimal?          @db.Decimal(10, 2) @map("min_resale_price")
   maxResalePrice       Decimal?          @db.Decimal(10, 2) @map("max_resale_price")
+  resaleRoyaltyPercent Decimal?          @db.Decimal(5, 2) @map("resale_royalty_percent")
   resaleStartsAt       DateTime?         @map("resale_starts_at")
   resaleEndsAt         DateTime?         @map("resale_ends_at")
+  postEventMessage     String?           @map("post_event_message")
+  postEventCtaLabel    String?           @map("post_event_cta_label")
+  postEventCtaUrl      String?           @map("post_event_cta_url")
+  postEventPublishedAt DateTime?         @map("post_event_published_at")
+  postEventNotifiedAt  DateTime?         @map("post_event_notified_at")
   offlineManifestSalt  String?           @map("offline_manifest_salt")
   createdAt            DateTime          @default(now()) @map("created_at")
   updatedAt            DateTime          @updatedAt @map("updated_at")
@@ -312,6 +336,7 @@ model TransferRequest {
   transferToken         String         @unique @map("transfer_token")
   message               String?
   expiresAt             DateTime       @map("expires_at")
+  reminderSentAt        DateTime?      @map("reminder_sent_at")
   acceptedAt            DateTime?      @map("accepted_at")
   cancelledAt           DateTime?      @map("cancelled_at")
   createdAt             DateTime       @default(now()) @map("created_at")
@@ -326,6 +351,25 @@ model TransferRequest {
   @@map("transfer_requests")
 }
 
+model UserNotification {
+  id         String             @id @default(cuid())
+  userId     String             @map("user_id")
+  type       NotificationType
+  status     NotificationStatus @default(UNREAD)
+  title      String
+  body       String
+  actionUrl  String?            @map("action_url")
+  metadata   Json?
+  readAt     DateTime?          @map("read_at")
+  createdAt  DateTime           @default(now()) @map("created_at")
+  updatedAt  DateTime           @updatedAt @map("updated_at")
+  user       User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status, createdAt])
+  @@index([type, createdAt])
+  @@map("user_notifications")
+}
+
 model ResaleListing {
   id                    String        @id @default(cuid())
   ticketId              String        @map("ticket_id")
@@ -334,6 +378,8 @@ model ResaleListing {
   eventId               String        @map("event_id")
   askingPrice           Decimal       @db.Decimal(10, 2) @map("asking_price")
   currency              String        @default("EUR")
+  organizerRoyaltyAmount Decimal?     @db.Decimal(10, 2) @map("organizer_royalty_amount")
+  sellerNetAmount       Decimal?      @db.Decimal(10, 2) @map("seller_net_amount")
   status                ResaleStatus  @default(DRAFT)
   paymentProvider       PaymentProvider @default(STRIPE) @map("payment_provider")
   saleReference         String?       @unique @map("sale_reference")

@@ -21,6 +21,7 @@ type PublicTicketDetail = {
   latestTransfer: {
     acceptedAt: string | null;
     expiresAt: string;
+    reminderSentAt: string | null;
     recipientEmail: string | null;
     status: string;
   } | null;
@@ -54,6 +55,10 @@ function getUnavailableTransferMessage(
     return "This transfer has already been accepted, so the ticket has already moved to its new owner.";
   }
 
+  if (transfer?.status === "EXPIRED") {
+    return "This transfer expired before acceptance was completed, so the ticket stayed with the original owner.";
+  }
+
   if (ticketStatus === "ISSUED" || ticketStatus === "PAID") {
     return "This ticket is no longer in a transfer-pending state, so there is no active transfer to accept.";
   }
@@ -75,6 +80,10 @@ function getTransferStateHeading(
 
   if (transfer?.status === "CANCELLED") {
     return "This transfer is no longer active";
+  }
+
+  if (transfer?.status === "EXPIRED") {
+    return "This transfer expired before it was accepted";
   }
 
   return "This transfer is unavailable right now";
@@ -111,8 +120,13 @@ export function TransferAcceptanceScreen({
   const ticket = ticketQuery.data;
   const transfer = ticket?.latestTransfer;
   const needsAuth = !isHydrating && !isAuthenticated;
+  const transferExpired =
+    transfer?.status === "EXPIRED" ||
+    (transfer?.status === "PENDING" && new Date(transfer.expiresAt) < new Date());
   const canAttemptAcceptance =
-    transfer?.status === "PENDING" && ticket?.status === "TRANSFER_PENDING";
+    transfer?.status === "PENDING" &&
+    ticket?.status === "TRANSFER_PENDING" &&
+    !transferExpired;
   const unavailableMessage = getUnavailableTransferMessage(transfer, ticket?.status);
 
   function beginAcceptance() {
@@ -259,6 +273,9 @@ export function TransferAcceptanceScreen({
                 This transfer remains pending until you accept it. Once accepted, the ticket
                 moves into your wallet and the previous owner loses active ownership.
                 {" "}Expiry: {formatDateTime(transfer.expiresAt)}.
+                {transfer.reminderSentAt
+                  ? ` Last reminder: ${formatDateTime(transfer.reminderSentAt)}.`
+                  : ""}
               </div>
             ) : null}
 

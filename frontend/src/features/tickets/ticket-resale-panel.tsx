@@ -10,11 +10,20 @@ import { ApiError } from "@/lib/api/client";
 import { createResaleListing } from "@/lib/resale/resale-client";
 
 type TicketResalePanelProps = Readonly<{
+  eventResalePolicy?: {
+    endsAt: string | null;
+    maxResalePrice: string | null;
+    minResalePrice: string | null;
+    resaleRoyaltyPercent: string | null;
+    startsAt: string | null;
+  } | null;
   latestResaleListing:
     | {
         askingPrice: string;
         currency: string;
         listedAt: string | null;
+        organizerRoyaltyAmount: string | null;
+        sellerNetAmount: string | null;
         soldAt: string | null;
         status: string;
       }
@@ -108,6 +117,7 @@ function getErrorText(error: unknown) {
 }
 
 export function TicketResalePanel({
+  eventResalePolicy,
   eventSlug,
   latestResaleListing,
   latestTransfer,
@@ -121,6 +131,11 @@ export function TicketResalePanel({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [settlementPreview, setSettlementPreview] = useState<{
+    currency: string;
+    organizerRoyaltyAmount: string | null;
+    sellerNetAmount: string | null;
+  } | null>(null);
   const eligibility = getResaleEligibility(
     status,
     latestTransfer,
@@ -152,6 +167,7 @@ export function TicketResalePanel({
 
     setErrorMessage(null);
     setSuccessMessage(null);
+    setSettlementPreview(null);
 
     startTransition(async () => {
       try {
@@ -161,8 +177,13 @@ export function TicketResalePanel({
           session.accessToken,
         );
         await onResaleCreated();
+        setSettlementPreview({
+          currency: listing.currency,
+          organizerRoyaltyAmount: listing.organizerRoyaltyAmount,
+          sellerNetAmount: listing.sellerNetAmount,
+        });
         setSuccessMessage(
-          `Resale listing created at ${listing.askingPrice} ${listing.currency}. This ticket is now in the resale workflow until the listing changes.`,
+          `Resale listing created at ${listing.askingPrice} ${listing.currency}. Seller net is ${listing.sellerNetAmount ?? listing.askingPrice} ${listing.currency}${listing.organizerRoyaltyAmount ? ` after ${listing.organizerRoyaltyAmount} ${listing.currency} organizer royalty.` : "."}`,
         );
       } catch (error) {
         setErrorMessage(getErrorText(error));
@@ -185,6 +206,20 @@ export function TicketResalePanel({
           <p className="max-w-2xl text-sm leading-6 text-foreground/85">
             {eligibility.summary}
           </p>
+          {eventResalePolicy ? (
+            <p className="max-w-2xl text-sm leading-6 text-muted">
+              Organizer policy:
+              {eventResalePolicy.minResalePrice
+                ? ` floor ${eventResalePolicy.minResalePrice} EUR.`
+                : " no floor set."}{" "}
+              {eventResalePolicy.maxResalePrice
+                ? `cap ${eventResalePolicy.maxResalePrice} EUR.`
+                : "No cap set."}{" "}
+              {eventResalePolicy.resaleRoyaltyPercent
+                ? `Royalty ${eventResalePolicy.resaleRoyaltyPercent}% is deducted from the sale price before seller payout.`
+                : "No organizer royalty is currently configured."}
+            </p>
+          ) : null}
         </div>
 
         {latestResaleListing ? (
@@ -195,6 +230,14 @@ export function TicketResalePanel({
             <p className="mt-1">
               Asking price {latestResaleListing.askingPrice} {latestResaleListing.currency}.
             </p>
+            {latestResaleListing.sellerNetAmount ? (
+              <p>
+                Seller net {latestResaleListing.sellerNetAmount} {latestResaleListing.currency}
+                {latestResaleListing.organizerRoyaltyAmount
+                  ? ` after ${latestResaleListing.organizerRoyaltyAmount} ${latestResaleListing.currency} organizer royalty.`
+                  : "."}
+              </p>
+            ) : null}
             <p>
               Listed: {formatDateTime(latestResaleListing.listedAt)}. Sold:{" "}
               {formatDateTime(latestResaleListing.soldAt)}.
@@ -246,6 +289,14 @@ export function TicketResalePanel({
               listing is not the same as a completed sale.
             </div>
 
+            {eventResalePolicy?.resaleRoyaltyPercent || eventResalePolicy?.minResalePrice || eventResalePolicy?.maxResalePrice ? (
+              <div className="rounded-[1.2rem] border border-accent/20 bg-accent/8 px-4 py-3 text-sm leading-6 text-muted">
+                Your listing must stay within the organizer&apos;s resale band. Any configured
+                organizer royalty is calculated from the final asking price and stored with
+                the listing so settlement stays transparent.
+              </div>
+            ) : null}
+
             <button
               type="button"
               onClick={submitResale}
@@ -260,6 +311,15 @@ export function TicketResalePanel({
         {successMessage ? (
           <div className="rounded-[1.2rem] border border-success/30 bg-success/10 px-4 py-3 text-sm leading-6 text-success">
             {successMessage}
+          </div>
+        ) : null}
+
+        {settlementPreview?.sellerNetAmount ? (
+          <div className="rounded-[1.2rem] border border-success/20 bg-success/8 px-4 py-3 text-sm leading-6 text-foreground/85">
+            Expected seller net: {settlementPreview.sellerNetAmount} {settlementPreview.currency}
+            {settlementPreview.organizerRoyaltyAmount
+              ? `. Organizer royalty: ${settlementPreview.organizerRoyaltyAmount} ${settlementPreview.currency}.`
+              : "."}
           </div>
         ) : null}
 

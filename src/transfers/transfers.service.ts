@@ -7,6 +7,8 @@ import { CreateTransferDto } from "./dto/create-transfer.dto";
 import { AcceptTransferService } from "./accept-transfer.service";
 import { CancelTransferService } from "./cancel-transfer.service";
 import { CreateTransferService } from "./create-transfer.service";
+import { ExpireTransferService } from "./expire-transfer.service";
+import { RemindTransferService } from "./remind-transfer.service";
 
 @Injectable()
 export class TransfersService {
@@ -14,6 +16,8 @@ export class TransfersService {
     private readonly createTransferService: CreateTransferService,
     private readonly acceptTransferService: AcceptTransferService,
     private readonly cancelTransferService: CancelTransferService,
+    private readonly expireTransferService: ExpireTransferService,
+    private readonly remindTransferService: RemindTransferService,
   ) {}
 
   async createTransfer(
@@ -38,5 +42,19 @@ export class TransfersService {
     user: AuthenticatedUser,
   ) {
     return this.cancelTransferService.cancelTransfer(serialNumber, payload, user);
+  }
+
+  async remindTransfer(serialNumber: string, user: AuthenticatedUser) {
+    return this.remindTransferService.remindTransfer(serialNumber, user);
+  }
+
+  async expireOverdueTransfersForUser(user: AuthenticatedUser) {
+    return this.expireTransferService.expireOverdueTransfersForUser(user);
+  }
+
+  async expireOverdueTransferForSerialNumber(serialNumber: string) {
+    return this.expireTransferService.expireOverdueTransferForSerialNumber(
+      serialNumber,
+    );
   }
 }

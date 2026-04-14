@@ -6,6 +6,7 @@ import {
 import { ResaleStatus, TicketStatus } from "@prisma/client";
 
 import { AuthenticatedUser } from "../auth/types/authenticated-user.type";
+import { NotificationsService } from "../notifications/notifications.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { TicketOwnershipHistoryService } from "../tickets/ticket-ownership-history.service";
 import { BuyResaleListingDto } from "./dto/buy-resale-listing.dto";
@@ -16,6 +17,7 @@ import { ResaleTicketRepository } from "./repositories/resale-ticket.repository"
 export class BuyResaleListingService {
   constructor(
     private readonly prisma: PrismaService,
+    private readonly notificationsService: NotificationsService,
     private readonly ticketOwnershipHistoryService: TicketOwnershipHistoryService,
     private readonly resaleTicketRepository: ResaleTicketRepository,
   ) {}
@@ -91,6 +93,13 @@ export class BuyResaleListingService {
       });
 
       return { soldListing, updatedTicket };
+    });
+
+    await this.notificationsService.notifyResaleSold({
+      buyerUserId: user.id,
+      eventTitle: ticket.event.title,
+      sellerUserId: listing.sellerUserId,
+      serialNumber,
     });
 
     return toResaleResponse(

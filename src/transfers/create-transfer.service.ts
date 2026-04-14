@@ -115,6 +115,14 @@ export class CreateTransferService {
       });
     }
 
+    await this.notificationsService.notifyTransferCreated({
+      eventTitle: ticket.event.title,
+      recipientEmail: payload.recipientEmail ?? null,
+      recipientUserId: payload.recipientUserId ?? null,
+      senderUserId: user.id,
+      serialNumber,
+    });
+
     return this.toTransferResponse(
       transfer.createdTransfer,
       serialNumber,
@@ -134,6 +142,7 @@ export class CreateTransferService {
       transferToken: string;
       message: string | null;
       expiresAt: Date;
+      reminderSentAt?: Date | null;
       acceptedAt?: Date | null;
       cancelledAt?: Date | null;
     },
@@ -153,6 +162,7 @@ export class CreateTransferService {
       transferToken: transfer.transferToken,
       message: transfer.message,
       expiresAt: transfer.expiresAt,
+      reminderSentAt: transfer.reminderSentAt ?? null,
       acceptedAt: transfer.acceptedAt ?? null,
       cancelledAt: transfer.cancelledAt ?? null,
     };

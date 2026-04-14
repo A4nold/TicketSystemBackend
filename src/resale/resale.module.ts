@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 
+import { NotificationsModule } from "../notifications/notifications.module";
 import { TicketOwnershipHistoryService } from "../tickets/ticket-ownership-history.service";
 import { BuyResaleListingService } from "./buy-resale-listing.service";
 import { CancelResaleListingService } from "./cancel-resale-listing.service";
@@ -10,6 +11,7 @@ import { ResaleController } from "./resale.controller";
 import { ResaleService } from "./resale.service";
 
 @Module({
+  imports: [NotificationsModule],
   controllers: [ResaleController],
   providers: [
     BuyResaleListingService,

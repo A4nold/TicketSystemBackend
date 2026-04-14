@@ -10,16 +10,20 @@ import {
 } from "@prisma/client";
 
 import { AuthenticatedUser } from "../auth/types/authenticated-user.type";
+import { NotificationsService } from "../notifications/notifications.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { TicketOwnershipHistoryService } from "../tickets/ticket-ownership-history.service";
 import { AcceptTransferDto } from "./dto/accept-transfer.dto";
+import { ExpireTransferService } from "./expire-transfer.service";
 import { TransferTicketRepository } from "./repositories/transfer-ticket.repository";
 
 @Injectable()
 export class AcceptTransferService {
   constructor(
     private readonly prisma: PrismaService,
+    private readonly notificationsService: NotificationsService,
     private readonly ticketOwnershipHistoryService: TicketOwnershipHistoryService,
+    private readonly expireTransferService: ExpireTransferService,
     private readonly transferTicketRepository: TransferTicketRepository,
   ) {}
 
@@ -48,6 +52,9 @@ export class AcceptTransferService {
     }
 
     if (pendingTransfer.expiresAt < new Date()) {
+      await this.expireTransferService.expireOverdueTransferForSerialNumber(
+        serialNumber,
+      );
       throw new BadRequestException(
         `Transfer "${pendingTransfer.id}" has expired and can no longer be accepted.`,
       );
@@ -113,6 +120,13 @@ export class AcceptTransferService {
       return { updatedTransfer, updatedTicket };
     });
 
+    await this.notificationsService.notifyTransferAccepted({
+      eventTitle: ticket.event.title,
+      recipientUserId: user.id,
+      senderUserId: ticket.currentOwnerId,
+      serialNumber,
+    });
+
     return this.toTransferResponse(
       result.updatedTransfer,
       serialNumber,
@@ -131,6 +145,7 @@ export class AcceptTransferService {
       transferToken: string;
       message: string | null;
       expiresAt: Date;
+      reminderSentAt?: Date | null;
       acceptedAt?: Date | null;
       cancelledAt?: Date | null;
     },
@@ -150,6 +165,7 @@ export class AcceptTransferService {
       transferToken: transfer.transferToken,
       message: transfer.message,
       expiresAt: transfer.expiresAt,
+      reminderSentAt: transfer.reminderSentAt ?? null,
       acceptedAt: transfer.acceptedAt ?? null,
       cancelledAt: transfer.cancelledAt ?? null,
     };

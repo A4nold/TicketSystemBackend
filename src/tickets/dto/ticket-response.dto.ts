@@ -29,6 +29,44 @@ export class TicketEventDto {
 
   @ApiProperty()
   startsAt!: Date;
+
+  @ApiProperty({
+    nullable: true,
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      minResalePrice: { type: "string", nullable: true, example: "15.00" },
+      maxResalePrice: { type: "string", nullable: true, example: "40.00" },
+      resaleRoyaltyPercent: { type: "string", nullable: true, example: "10.00" },
+      startsAt: { type: "string", format: "date-time", nullable: true },
+      endsAt: { type: "string", format: "date-time", nullable: true },
+    },
+  })
+  resalePolicy!: {
+    endsAt: Date | null;
+    maxResalePrice: string | null;
+    minResalePrice: string | null;
+    resaleRoyaltyPercent: string | null;
+    startsAt: Date | null;
+  } | null;
+
+  @ApiProperty({
+    nullable: true,
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      message: { type: "string", nullable: true },
+      ctaLabel: { type: "string", nullable: true },
+      ctaUrl: { type: "string", nullable: true },
+      publishedAt: { type: "string", format: "date-time", nullable: true },
+    },
+  })
+  postEventContent!: {
+    ctaLabel: string | null;
+    ctaUrl: string | null;
+    message: string | null;
+    publishedAt: Date | null;
+  } | null;
 }
 
 export class TicketTypeSummaryDto {
@@ -77,6 +115,12 @@ export class TicketResaleSummaryDto {
 
   @ApiProperty()
   currency!: string;
+
+  @ApiProperty({ example: "1.80", nullable: true })
+  organizerRoyaltyAmount!: string | null;
+
+  @ApiProperty({ example: "16.20", nullable: true })
+  sellerNetAmount!: string | null;
 
   @ApiProperty({ nullable: true })
   listedAt!: Date | null;
@@ -148,6 +192,12 @@ export class TicketIncidentResaleDto {
 
   @ApiProperty()
   currency!: string;
+
+  @ApiProperty({ example: "1.80", nullable: true })
+  organizerRoyaltyAmount!: string | null;
+
+  @ApiProperty({ example: "16.20", nullable: true })
+  sellerNetAmount!: string | null;
 
   @ApiProperty()
   createdAt!: Date;

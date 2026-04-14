@@ -32,13 +32,35 @@ function formatOptionalDate(date: string | null) {
 
 function getStatusMeta(ticket: {
   latestResaleListing: { status: string } | null;
-  latestTransfer: { status: string } | null;
+  latestTransfer: {
+    cancelledAt?: string | null;
+    expiresAt?: string;
+    status: string;
+  } | null;
   scanSummary: { latestOutcome: string | null };
   status: string;
 }) {
   switch (ticket.status) {
     case "ISSUED":
     case "PAID":
+      if (ticket.latestTransfer?.status === "EXPIRED") {
+        return {
+          badgeClass: "border-success/30 bg-success/10 text-success",
+          heading: "Transfer expired and ownership stayed with you",
+          summary:
+            "The previous transfer request expired before acceptance, so the ticket stayed in your wallet and remains the active source of truth for entry.",
+        };
+      }
+
+      if (ticket.latestTransfer?.status === "CANCELLED") {
+        return {
+          badgeClass: "border-success/30 bg-success/10 text-success",
+          heading: "Transfer was cancelled and ownership stayed with you",
+          summary:
+            "The previous transfer request was cancelled before acceptance, so this ticket remains fully owned by your account.",
+        };
+      }
+
       return {
         badgeClass: "border-success/30 bg-success/10 text-success",
         heading: "Active and ready for entry",
@@ -82,6 +104,33 @@ function getStatusMeta(ticket: {
 
 function isQrEligible(status: string) {
   return status === "ISSUED" || status === "PAID";
+}
+
+function getLatestTransferSummary(transfer: {
+  acceptedAt: string | null;
+  cancelledAt: string | null;
+  expiresAt: string;
+  recipientEmail: string | null;
+  reminderSentAt: string | null;
+  status: string;
+}) {
+  if (transfer.status === "PENDING") {
+    return `Recipient: ${transfer.recipientEmail ?? "Not provided"}. Expires: ${formatDateTime(transfer.expiresAt)}.${transfer.reminderSentAt ? ` Last reminder: ${formatDateTime(transfer.reminderSentAt)}.` : ""}`;
+  }
+
+  if (transfer.status === "CANCELLED") {
+    return `The transfer was cancelled before ownership changed.${transfer.cancelledAt ? ` Cancelled: ${formatDateTime(transfer.cancelledAt)}.` : ""} The ticket stayed in your wallet and the previous acceptance link is no longer valid.`;
+  }
+
+  if (transfer.status === "EXPIRED") {
+    return `The transfer expired before acceptance was completed. Expiry: ${formatDateTime(transfer.expiresAt)}. Ownership stayed with your account and the prior acceptance link is no longer valid.`;
+  }
+
+  if (transfer.status === "ACCEPTED") {
+    return `The transfer was accepted successfully.${transfer.acceptedAt ? ` Accepted: ${formatDateTime(transfer.acceptedAt)}.` : ""}`;
+  }
+
+  return `Transfer state: ${transfer.status.replaceAll("_", " ")}.`;
 }
 
 export function OwnedTicketDetail({ serialNumber }: OwnedTicketDetailProps) {
@@ -327,6 +376,14 @@ export function OwnedTicketDetail({ serialNumber }: OwnedTicketDetailProps) {
                       {formatOptionalDate(ticket.scanSummary.lastScannedAt)}
                     </p>
                   </div>
+                  <div className="rounded-[1.2rem] border border-border bg-black/10 px-4 py-3">
+                    <p className="text-xs font-semibold uppercase tracking-[0.24em] text-muted">
+                      Active QR token
+                    </p>
+                    <p className="mt-2 font-mono text-sm text-foreground">
+                      {ticket.qrTokenId}
+                    </p>
+                  </div>
                 </div>
 
                 {ticket.latestTransfer || ticket.latestResaleListing ? (
@@ -340,8 +397,7 @@ export function OwnedTicketDetail({ serialNumber }: OwnedTicketDetailProps) {
                           {ticket.latestTransfer.status.replaceAll("_", " ")}
                         </p>
                         <p className="mt-1 text-sm leading-6 text-muted">
-                          Recipient: {ticket.latestTransfer.recipientEmail ?? "Not provided"}.
-                          {" "}Expires: {formatDateTime(ticket.latestTransfer.expiresAt)}.
+                          {getLatestTransferSummary(ticket.latestTransfer)}
                         </p>
                       </div>
                     ) : null}
@@ -355,7 +411,10 @@ export function OwnedTicketDetail({ serialNumber }: OwnedTicketDetailProps) {
                         </p>
                         <p className="mt-1 text-sm leading-6 text-muted">
                           Asking price {ticket.latestResaleListing.askingPrice}{" "}
-                          {ticket.latestResaleListing.currency}.
+                          {ticket.latestResaleListing.currency}.{" "}
+                          {ticket.latestResaleListing.sellerNetAmount
+                            ? `Seller net ${ticket.latestResaleListing.sellerNetAmount} ${ticket.latestResaleListing.currency}${ticket.latestResaleListing.organizerRoyaltyAmount ? ` after ${ticket.latestResaleListing.organizerRoyaltyAmount} ${ticket.latestResaleListing.currency} organizer royalty.` : "."}`
+                            : ""}
                         </p>
                       </div>
                     ) : null}
@@ -379,6 +438,7 @@ export function OwnedTicketDetail({ serialNumber }: OwnedTicketDetailProps) {
             />
 
             <TicketResalePanel
+              eventResalePolicy={ticket.event.resalePolicy}
               eventSlug={ticket.event.slug}
               latestResaleListing={ticket.latestResaleListing}
               latestTransfer={ticket.latestTransfer}
@@ -386,6 +446,37 @@ export function OwnedTicketDetail({ serialNumber }: OwnedTicketDetailProps) {
               status={ticket.status}
               onResaleCreated={() => ticketQuery.refetch()}
             />
+
+            {ticket.event.postEventContent ? (
+              <Panel className="border-accent/20 bg-accent/8">
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <p className="text-sm font-medium uppercase tracking-[0.28em] text-accent">
+                      Post-event update
+                    </p>
+                    <h2 className="font-display text-3xl">
+                      This ticket still carries value after the event
+                    </h2>
+                    <p className="max-w-2xl text-sm leading-6 text-foreground/85">
+                      {ticket.event.postEventContent.message}
+                    </p>
+                  </div>
+
+                  {ticket.event.postEventContent.ctaLabel && ticket.event.postEventContent.ctaUrl ? (
+                    <div className="flex flex-wrap gap-3">
+                      <a
+                        href={ticket.event.postEventContent.ctaUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-surface-soft"
+                      >
+                        {ticket.event.postEventContent.ctaLabel}
+                      </a>
+                    </div>
+                  ) : null}
+                </div>
+              </Panel>
+            ) : null}
 
             <Panel>
               <div className="space-y-5">

@@ -28,6 +28,12 @@ export class ResaleResponseDto {
   @ApiProperty()
   currency!: string;
 
+  @ApiProperty({ example: "1.80", nullable: true })
+  organizerRoyaltyAmount!: string | null;
+
+  @ApiProperty({ example: "16.20", nullable: true })
+  sellerNetAmount!: string | null;
+
   @ApiProperty({ nullable: true })
   saleReference!: string | null;
 

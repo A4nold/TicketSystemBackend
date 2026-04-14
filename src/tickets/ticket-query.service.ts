@@ -1,8 +1,10 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { Injectable, NotFoundException, Optional } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 
 import { AuthenticatedUser } from "../auth/types/authenticated-user.type";
 import { PrismaService } from "../prisma/prisma.service";
+import { PostEventNotificationSweepService } from "../notifications/post-event-notification-sweep.service";
+import { TransfersService } from "../transfers/transfers.service";
 import { ListMyTicketsQueryDto } from "./dto/list-my-tickets-query.dto";
 import { ListTicketsQueryDto } from "./dto/list-tickets-query.dto";
 import {
@@ -13,7 +15,13 @@ import { ticketDetailInclude, ticketSummaryInclude } from "./queries/ticket.incl
 
 @Injectable()
 export class TicketQueryService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional()
+    private readonly transfersService?: TransfersService,
+    @Optional()
+    private readonly postEventNotificationSweepService?: PostEventNotificationSweepService,
+  ) {}
 
   async listTickets(query: ListTicketsQueryDto) {
     const where: Prisma.TicketWhereInput = {
@@ -46,6 +54,9 @@ export class TicketQueryService {
   }
 
   async listMyTickets(query: ListMyTicketsQueryDto, user: AuthenticatedUser) {
+    await this.transfersService?.expireOverdueTransfersForUser(user);
+    await this.postEventNotificationSweepService?.trySweepEligibleEvents();
+
     const tickets = await this.prisma.ticket.findMany({
       where: {
         currentOwnerId: user.id,
@@ -70,6 +81,10 @@ export class TicketQueryService {
   }
 
   async getTicketBySerialNumber(serialNumber: string) {
+    await this.transfersService?.expireOverdueTransferForSerialNumber(
+      serialNumber,
+    );
+
     const ticket = await this.prisma.ticket.findUnique({
       where: { serialNumber },
       include: ticketDetailInclude(),
@@ -109,6 +124,12 @@ export class TicketQueryService {
     serialNumber: string,
     user: AuthenticatedUser,
   ) {
+    await this.transfersService?.expireOverdueTransfersForUser(user);
+    await this.transfersService?.expireOverdueTransferForSerialNumber(
+      serialNumber,
+    );
+    await this.postEventNotificationSweepService?.trySweepEligibleEvents();
+
     const ticket = await this.prisma.ticket.findFirst({
       where: {
         serialNumber,
@@ -127,6 +148,8 @@ export class TicketQueryService {
   }
 
   async listIncomingTransfers(user: AuthenticatedUser) {
+    await this.transfersService?.expireOverdueTransfersForUser(user);
+
     const transfers = await this.prisma.transferRequest.findMany({
       where: {
         status: "PENDING",
@@ -155,7 +178,9 @@ export class TicketQueryService {
       },
       expiresAt: transfer.expiresAt,
       id: transfer.id,
+      isExpired: transfer.expiresAt < new Date(),
       message: transfer.message,
+      reminderSentAt: transfer.reminderSentAt ?? null,
       senderEmail: transfer.senderUser.email,
       senderUserId: transfer.senderUserId,
       serialNumber: transfer.ticket.serialNumber,

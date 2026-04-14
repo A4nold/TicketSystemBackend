@@ -106,6 +106,27 @@ export class MyTicketActionsController {
     return this.transfersService.cancelTransfer(serialNumber, payload, user);
   }
 
+  @Post("remind-transfer")
+  @ApiOperation({
+    summary: "Send a reminder for a pending transfer",
+    description:
+      "Re-notifies the pending transfer recipient when the authenticated attendee is the original sender.",
+  })
+  @ApiParam({
+    name: "serialNumber",
+    example: "CNT-GA-0002",
+  })
+  @ApiCreatedResponse({
+    description: "Transfer reminder sent",
+    type: TransferResponseDto,
+  })
+  remindTransfer(
+    @Param("serialNumber") serialNumber: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.transfersService.remindTransfer(serialNumber, user);
+  }
+
   @Post("resale")
   @ApiOperation({
     summary: "Create a resale listing for an owned ticket",

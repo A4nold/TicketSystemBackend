@@ -6,6 +6,7 @@ import {
   IsEnum,
   IsOptional,
   IsString,
+  IsUrl,
   MaxLength,
 } from "class-validator";
 
@@ -108,11 +109,25 @@ export class CreateEventDto {
   allowResale?: boolean;
 
   @ApiPropertyOptional({
+    example: "15.00",
+  })
+  @IsOptional()
+  @IsString()
+  minResalePrice?: string;
+
+  @ApiPropertyOptional({
     example: "25.00",
   })
   @IsOptional()
   @IsString()
   maxResalePrice?: string;
+
+  @ApiPropertyOptional({
+    example: "10.00",
+  })
+  @IsOptional()
+  @IsString()
+  resaleRoyaltyPercent?: string;
 
   @ApiPropertyOptional({
     example: "2026-04-20T10:00:00.000Z",
@@ -127,4 +142,37 @@ export class CreateEventDto {
   @IsOptional()
   @IsDateString()
   resaleEndsAt?: string;
+
+  @ApiPropertyOptional({
+    example: "Thanks for coming. Replay moments and priority access for the next drop are now live.",
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  postEventMessage?: string;
+
+  @ApiPropertyOptional({
+    example: "View replay",
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  postEventCtaLabel?: string;
+
+  @ApiPropertyOptional({
+    example: "https://example.com/events/campus-neon-takeover/replay",
+  })
+  @IsOptional()
+  @IsUrl({
+    require_tld: true,
+  })
+  @MaxLength(500)
+  postEventCtaUrl?: string;
+
+  @ApiPropertyOptional({
+    example: "2026-05-16T12:00:00.000Z",
+  })
+  @IsOptional()
+  @IsDateString()
+  postEventPublishedAt?: string;
 }

@@ -6,6 +6,7 @@ import {
 import { ResaleStatus, TicketStatus } from "@prisma/client";
 
 import { AuthenticatedUser } from "../auth/types/authenticated-user.type";
+import { NotificationsService } from "../notifications/notifications.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { CancelResaleListingDto } from "./dto/cancel-resale-listing.dto";
 import { toResaleResponse } from "./mappers/resale-response.mapper";
@@ -15,6 +16,7 @@ import { ResaleTicketRepository } from "./repositories/resale-ticket.repository"
 export class CancelResaleListingService {
   constructor(
     private readonly prisma: PrismaService,
+    private readonly notificationsService: NotificationsService,
     private readonly resaleTicketRepository: ResaleTicketRepository,
   ) {}
 
@@ -65,6 +67,12 @@ export class CancelResaleListingService {
       });
 
       return { cancelledListing, updatedTicket };
+    });
+
+    await this.notificationsService.notifyResaleCancelled({
+      eventTitle: ticket.event.title,
+      sellerUserId: user.id,
+      serialNumber,
     });
 
     return toResaleResponse(

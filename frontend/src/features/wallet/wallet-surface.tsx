@@ -38,11 +38,11 @@ export function WalletSurface({ eventSlug, recentOrderId }: WalletSurfaceProps) 
 
       <PendingStaffInvitesPanel />
 
-      <PendingTransferInboxPanel />
-
       {recentOrderId ? <RecentOrderPanel orderId={recentOrderId} /> : null}
 
       <WalletActivityPanel recentOrderId={recentOrderId} tickets={walletTickets} />
+
+      <PendingTransferInboxPanel />
 
       <WalletAccountPanel
         email={session?.user.email}

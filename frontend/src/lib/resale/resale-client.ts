@@ -34,9 +34,11 @@ export type ResaleResponse = {
   expiresAt: string | null;
   id: string;
   listedAt: string | null;
+  organizerRoyaltyAmount: string | null;
   ownershipRevision: number;
   saleReference: string | null;
   sellerUserId: string;
+  sellerNetAmount: string | null;
   serialNumber: string;
   soldAt: string | null;
   status: string;

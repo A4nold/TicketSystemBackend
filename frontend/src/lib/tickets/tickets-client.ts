@@ -12,6 +12,19 @@ export type OwnedTicketSummary = {
   usedAt: string | null;
   event: {
     id: string;
+    postEventContent: {
+      ctaLabel: string | null;
+      ctaUrl: string | null;
+      message: string | null;
+      publishedAt: string | null;
+    } | null;
+    resalePolicy: {
+      endsAt: string | null;
+      maxResalePrice: string | null;
+      minResalePrice: string | null;
+      resaleRoyaltyPercent: string | null;
+      startsAt: string | null;
+    } | null;
     slug: string;
     startsAt: string;
     status: string;
@@ -43,13 +56,17 @@ export type OwnedTicketDetail = OwnedTicketSummary & {
     currency: string;
     id: string;
     listedAt: string | null;
+    organizerRoyaltyAmount: string | null;
+    sellerNetAmount: string | null;
     soldAt: string | null;
     status: string;
   } | null;
   latestTransfer: {
     acceptedAt: string | null;
+    cancelledAt: string | null;
     expiresAt: string;
     id: string;
+    reminderSentAt: string | null;
     recipientEmail: string | null;
     senderUserId: string;
     status: string;

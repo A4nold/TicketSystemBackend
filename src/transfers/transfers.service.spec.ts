@@ -71,6 +71,7 @@ describe("CreateTransferService", () => {
       ),
     };
     const notifications = {
+      notifyTransferCreated: vi.fn().mockResolvedValue(undefined),
       sendTransferRecipientEmail: vi.fn().mockResolvedValue(undefined),
     } as unknown as NotificationsService;
     const transferTicketRepository = {
@@ -99,6 +100,13 @@ describe("CreateTransferService", () => {
         serialNumber: "CNT-GA-0001",
       }),
     );
+    expect(notifications.notifyTransferCreated).toHaveBeenCalledWith({
+      eventTitle: "Campus Neon Takeover",
+      recipientEmail: "tobi@student.ie",
+      recipientUserId: null,
+      senderUserId: "user_1",
+      serialNumber: "CNT-GA-0001",
+    });
   });
 });
 

@@ -10,12 +10,14 @@ import {
   cancelTransfer,
   createTransfer,
   getTransferAcceptPath,
+  remindTransfer,
 } from "@/lib/transfers/transfers-client";
 
 type TicketTransferPanelProps = Readonly<{
   latestTransfer:
     | {
         expiresAt: string;
+        reminderSentAt: string | null;
         recipientEmail: string | null;
         senderUserId: string;
         status: string;
@@ -89,6 +91,13 @@ function getPendingTransferRecipientSummary(
   return "Waiting on the selected recipient to accept before ownership changes.";
 }
 
+function formatDateTime(date: string) {
+  return new Intl.DateTimeFormat("en-IE", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(date));
+}
+
 function getTransferCancellationState(
   status: string,
   latestTransfer: TicketTransferPanelProps["latestTransfer"],
@@ -149,6 +158,15 @@ export function TicketTransferPanel({
     latestTransfer,
     session?.user.id ?? null,
   );
+  const transferExpired =
+    latestTransfer?.status === "EXPIRED" ||
+    (latestTransfer?.status === "PENDING" &&
+      new Date(latestTransfer.expiresAt) < new Date());
+  const canRemind =
+    status === "TRANSFER_PENDING" &&
+    latestTransfer?.status === "PENDING" &&
+    latestTransfer.senderUserId === session?.user.id &&
+    !transferExpired;
 
   async function submitTransfer() {
     if (!session) {
@@ -211,6 +229,33 @@ export function TicketTransferPanel({
     });
   }
 
+  function submitReminder() {
+    if (!session) {
+      setErrorMessage("Your attendee session is not available. Sign in again to continue.");
+      return;
+    }
+
+    setErrorMessage(null);
+    setSuccessMessage(null);
+
+    startTransition(async () => {
+      try {
+        const transfer = await remindTransfer(serialNumber, session.accessToken);
+        await onTransferCreated();
+        setAcceptPath(getTransferAcceptPath(transfer.serialNumber));
+        setSuccessMessage(
+          `Reminder sent. The recipient can still accept ticket ${transfer.serialNumber} before ${formatDateTime(transfer.expiresAt)}.`,
+        );
+      } catch (error) {
+        setErrorMessage(
+          error instanceof ApiError
+            ? error.message
+            : "Transfer reminder could not be sent right now. Please try again.",
+        );
+      }
+    });
+  }
+
   const toneClass =
     eligibility.tone === "success"
       ? "border-success/30 bg-success/10"
@@ -238,6 +283,16 @@ export function TicketTransferPanel({
         {status === "TRANSFER_PENDING" && latestTransfer?.status === "PENDING" ? (
           <div className="rounded-[1.2rem] border border-warning/30 bg-warning/8 px-4 py-3 text-sm leading-6 text-foreground/85">
             {getPendingTransferRecipientSummary(latestTransfer)}
+            {" "}Expires: {formatDateTime(latestTransfer.expiresAt)}.
+            {latestTransfer.reminderSentAt
+              ? ` Last reminder: ${formatDateTime(latestTransfer.reminderSentAt)}.`
+              : ""}
+          </div>
+        ) : null}
+
+        {latestTransfer?.status === "EXPIRED" ? (
+          <div className="rounded-[1.2rem] border border-border bg-black/10 px-4 py-3 text-sm leading-6 text-muted">
+            The latest transfer request expired before the recipient accepted it. This ticket stays with you and can be transferred again if you still need to hand it off.
           </div>
         ) : null}
 
@@ -300,11 +355,11 @@ export function TicketTransferPanel({
             {latestTransfer ? (
               <div className="rounded-[1rem] border border-warning/20 bg-black/10 px-3 py-3 text-sm leading-6 text-muted">
                 Recipient: {latestTransfer.recipientEmail ?? "Not provided"}. Expires:{" "}
-                {new Intl.DateTimeFormat("en-IE", {
-                  dateStyle: "medium",
-                  timeStyle: "short",
-                }).format(new Date(latestTransfer.expiresAt))}
+                {formatDateTime(latestTransfer.expiresAt)}
                 .
+                {latestTransfer.reminderSentAt
+                  ? ` Last reminder: ${formatDateTime(latestTransfer.reminderSentAt)}.`
+                  : ""}
               </div>
             ) : null}
 
@@ -313,14 +368,26 @@ export function TicketTransferPanel({
               current acceptance link immediately.
             </div>
 
-            <button
-              type="button"
-              onClick={submitCancellation}
-              disabled={isPending}
-              className="inline-flex rounded-full border border-warning/40 bg-warning/12 px-5 py-3 text-sm font-semibold text-foreground transition hover:border-warning/60 hover:bg-warning/18 disabled:cursor-not-allowed disabled:opacity-65"
-            >
-              {isPending ? "Cancelling transfer..." : "Cancel transfer"}
-            </button>
+            <div className="flex flex-wrap gap-3">
+              {canRemind ? (
+                <button
+                  type="button"
+                  onClick={submitReminder}
+                  disabled={isPending}
+                  className="inline-flex rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-surface-soft disabled:cursor-not-allowed disabled:opacity-65"
+                >
+                  {isPending ? "Sending reminder..." : "Send reminder"}
+                </button>
+              ) : null}
+              <button
+                type="button"
+                onClick={submitCancellation}
+                disabled={isPending}
+                className="inline-flex rounded-full border border-warning/40 bg-warning/12 px-5 py-3 text-sm font-semibold text-foreground transition hover:border-warning/60 hover:bg-warning/18 disabled:cursor-not-allowed disabled:opacity-65"
+              >
+                {isPending ? "Cancelling transfer..." : "Cancel transfer"}
+              </button>
+            </div>
           </div>
         ) : null}
 

@@ -44,6 +44,12 @@ export class IncomingTransferResponseDto {
   @ApiProperty()
   expiresAt!: Date;
 
+  @ApiProperty()
+  isExpired!: boolean;
+
+  @ApiProperty({ nullable: true })
+  reminderSentAt!: Date | null;
+
   @ApiProperty({ type: IncomingTransferEventDto })
   event!: IncomingTransferEventDto;
 

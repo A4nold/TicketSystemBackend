@@ -74,7 +74,19 @@ describe("EventsService.createEvent", () => {
         id: "user_123",
         lastName: "User",
       },
-      resaleWindow: null,
+      postEventContent: {
+        ctaLabel: null,
+        ctaUrl: null,
+        message: null,
+        publishedAt: null,
+      },
+      resaleWindow: {
+        endsAt: null,
+        maxResalePrice: null,
+        minResalePrice: null,
+        resaleRoyaltyPercent: null,
+        startsAt: null,
+      },
       salesWindow: null,
       slug: "organizer-event",
       staff: [],
@@ -141,9 +153,17 @@ describe("EventsService response mapping", () => {
         id: "user_123",
         lastName: "User",
       },
+      postEventContent: {
+        ctaLabel: "View replay",
+        ctaUrl: "https://example.com/replay",
+        message: "Thanks for coming.",
+        publishedAt: new Date("2026-05-16T12:00:00.000Z"),
+      },
       resaleWindow: {
         endsAt: new Date("2026-05-15T19:30:00.000Z"),
         maxResalePrice: "40.00",
+        minResalePrice: "15.00",
+        resaleRoyaltyPercent: "10.00",
         startsAt: new Date("2026-05-10T12:00:00.000Z"),
       },
       salesWindow: null,
@@ -188,6 +208,8 @@ describe("EventsService response mapping", () => {
       {
         allowResale: true,
         maxResalePrice: "40.00",
+        minResalePrice: "15.00",
+        resaleRoyaltyPercent: "10.00",
         resaleEndsAt: "2026-05-15T19:30:00.000Z",
         resaleStartsAt: "2026-05-10T12:00:00.000Z",
         startsAt: "2026-05-15T20:00:00.000Z",
@@ -226,12 +248,20 @@ describe("EventsService response mapping", () => {
     expect(result.resaleWindow).toEqual({
       endsAt: new Date("2026-05-15T19:30:00.000Z"),
       maxResalePrice: "40.00",
+      minResalePrice: "15.00",
+      resaleRoyaltyPercent: "10.00",
       startsAt: new Date("2026-05-10T12:00:00.000Z"),
     });
     expect(result.metrics).toEqual({
       resaleListings: 0,
       scanAttempts: 0,
       tickets: 3,
+    });
+    expect(result.postEventContent).toEqual({
+      ctaLabel: "View replay",
+      ctaUrl: "https://example.com/replay",
+      message: "Thanks for coming.",
+      publishedAt: new Date("2026-05-16T12:00:00.000Z"),
     });
   });
 });

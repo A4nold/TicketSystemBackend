@@ -10,6 +10,8 @@ export function toResaleResponse(
     status: ResaleStatus;
     askingPrice: Prisma.Decimal;
     currency: string;
+    organizerRoyaltyAmount?: Prisma.Decimal | null;
+    sellerNetAmount?: Prisma.Decimal | null;
     saleReference: string | null;
     listedAt: Date | null;
     soldAt: Date | null;
@@ -30,6 +32,8 @@ export function toResaleResponse(
     status: listing.status,
     askingPrice: listing.askingPrice.toString(),
     currency: listing.currency,
+    organizerRoyaltyAmount: listing.organizerRoyaltyAmount?.toFixed(2) ?? null,
+    sellerNetAmount: listing.sellerNetAmount?.toFixed(2) ?? null,
     saleReference: listing.saleReference,
     listedAt: listing.listedAt,
     soldAt: listing.soldAt,

@@ -30,6 +30,7 @@ export class TransferTicketRepository {
     return this.prisma.ticket.findUnique({
       where: { serialNumber },
       include: {
+        event: true,
         transferRequests: {
           where: {
             status: TransferStatus.PENDING,
@@ -46,6 +47,26 @@ export class TransferTicketRepository {
     return this.prisma.ticket.findUnique({
       where: { serialNumber },
       include: {
+        event: true,
+        transferRequests: {
+          where: {
+            status: TransferStatus.PENDING,
+          },
+          orderBy: {
+            createdAt: "desc",
+          },
+        },
+      },
+    });
+  }
+
+  findTicketForTransferReminder(serialNumber: string) {
+    return this.prisma.ticket.findUnique({
+      where: { serialNumber },
+      include: {
+        currentOwner: true,
+        event: true,
+        ticketType: true,
         transferRequests: {
           where: {
             status: TransferStatus.PENDING,

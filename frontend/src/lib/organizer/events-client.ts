@@ -9,6 +9,12 @@ export type CreateOrganizerEventPayload = {
   description?: string;
   endsAt?: string;
   maxResalePrice?: string;
+  minResalePrice?: string;
+  postEventCtaLabel?: string;
+  postEventCtaUrl?: string;
+  postEventMessage?: string;
+  postEventPublishedAt?: string;
+  resaleRoyaltyPercent?: string;
   resaleEndsAt?: string;
   resaleStartsAt?: string;
   salesEndAt?: string;
@@ -43,7 +49,15 @@ export type OrganizerEventResponse = {
   resalePolicy: {
     endsAt: string | null;
     maxResalePrice: string | null;
+    minResalePrice: string | null;
+    resaleRoyaltyPercent: string | null;
     startsAt: string | null;
+  };
+  postEventContent: {
+    ctaLabel: string | null;
+    ctaUrl: string | null;
+    message: string | null;
+    publishedAt: string | null;
   };
   salesWindow: {
     endsAt: string | null;
@@ -87,6 +101,8 @@ export type OrganizerEventSummary = {
   resaleWindow: {
     endsAt: string | null;
     maxResalePrice: string | null;
+    minResalePrice: string | null;
+    resaleRoyaltyPercent: string | null;
     startsAt: string | null;
   };
   slug: string;

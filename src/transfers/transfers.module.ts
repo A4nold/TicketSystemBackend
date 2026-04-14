@@ -5,7 +5,9 @@ import { TicketOwnershipHistoryService } from "../tickets/ticket-ownership-histo
 import { AcceptTransferService } from "./accept-transfer.service";
 import { CancelTransferService } from "./cancel-transfer.service";
 import { CreateTransferService } from "./create-transfer.service";
+import { ExpireTransferService } from "./expire-transfer.service";
 import { TransferTicketRepository } from "./repositories/transfer-ticket.repository";
+import { RemindTransferService } from "./remind-transfer.service";
 import { TransfersController } from "./transfers.controller";
 import { TransfersService } from "./transfers.service";
 
@@ -16,6 +18,8 @@ import { TransfersService } from "./transfers.service";
     AcceptTransferService,
     CancelTransferService,
     CreateTransferService,
+    ExpireTransferService,
+    RemindTransferService,
     TicketOwnershipHistoryService,
     TransferTicketRepository,
     TransfersService,

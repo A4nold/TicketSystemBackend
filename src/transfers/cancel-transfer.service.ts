@@ -6,14 +6,18 @@ import {
 import { TicketStatus, TransferStatus } from "@prisma/client";
 
 import { AuthenticatedUser } from "../auth/types/authenticated-user.type";
+import { NotificationsService } from "../notifications/notifications.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { CancelTransferDto } from "./dto/cancel-transfer.dto";
+import { ExpireTransferService } from "./expire-transfer.service";
 import { TransferTicketRepository } from "./repositories/transfer-ticket.repository";
 
 @Injectable()
 export class CancelTransferService {
   constructor(
     private readonly prisma: PrismaService,
+    private readonly notificationsService: NotificationsService,
+    private readonly expireTransferService: ExpireTransferService,
     private readonly transferTicketRepository: TransferTicketRepository,
   ) {}
 
@@ -38,6 +42,15 @@ export class CancelTransferService {
     if (!pendingTransfer) {
       throw new BadRequestException(
         `Ticket "${serialNumber}" does not have a pending transfer to cancel.`,
+      );
+    }
+
+    if (pendingTransfer.expiresAt < new Date()) {
+      await this.expireTransferService.expireOverdueTransferForSerialNumber(
+        serialNumber,
+      );
+      throw new BadRequestException(
+        `Transfer "${pendingTransfer.id}" has already expired and can no longer be cancelled.`,
       );
     }
 
@@ -66,6 +79,13 @@ export class CancelTransferService {
       return { cancelledTransfer, updatedTicket };
     });
 
+    await this.notificationsService.notifyTransferCancelled({
+      eventTitle: ticket.event.title,
+      recipientUserId: pendingTransfer.recipientUserId,
+      senderUserId: user.id,
+      serialNumber,
+    });
+
     return this.toTransferResponse(
       result.cancelledTransfer,
       serialNumber,
@@ -84,6 +104,7 @@ export class CancelTransferService {
       transferToken: string;
       message: string | null;
       expiresAt: Date;
+      reminderSentAt?: Date | null;
       acceptedAt?: Date | null;
       cancelledAt?: Date | null;
     },
@@ -103,6 +124,7 @@ export class CancelTransferService {
       transferToken: transfer.transferToken,
       message: transfer.message,
       expiresAt: transfer.expiresAt,
+      reminderSentAt: transfer.reminderSentAt ?? null,
       acceptedAt: transfer.acceptedAt ?? null,
       cancelledAt: transfer.cancelledAt ?? null,
     };

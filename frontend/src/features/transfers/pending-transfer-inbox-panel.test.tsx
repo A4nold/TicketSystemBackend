@@ -154,4 +154,14 @@ describe("PendingTransferInboxPanel", () => {
       expect(push).toHaveBeenCalledWith("/wallet/CNT-GA-0001");
     });
   });
+
+  it("stays hidden when there are no incoming transfers", async () => {
+    vi.mocked(listIncomingTransfers).mockResolvedValue([]);
+
+    const { container } = renderPanel();
+
+    await waitFor(() => {
+      expect(container).toBeEmptyDOMElement();
+    });
+  });
 });

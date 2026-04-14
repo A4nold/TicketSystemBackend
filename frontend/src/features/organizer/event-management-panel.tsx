@@ -27,6 +27,12 @@ type EventFormState = {
   description: string;
   endsAt: string;
   maxResalePrice: string;
+  minResalePrice: string;
+  postEventCtaLabel: string;
+  postEventCtaUrl: string;
+  postEventMessage: string;
+  postEventPublishedAt: string;
+  resaleRoyaltyPercent: string;
   resaleEndsAt: string;
   resaleStartsAt: string;
   salesEndAt: string;
@@ -74,6 +80,12 @@ function toEventFormState(event: Awaited<ReturnType<typeof getOrganizerEventBySl
     description: event.description ?? "",
     endsAt: toLocalDateTime(event.endsAt),
     maxResalePrice: event.resalePolicy.maxResalePrice ?? "",
+    minResalePrice: event.resalePolicy.minResalePrice ?? "",
+    postEventCtaLabel: event.postEventContent.ctaLabel ?? "",
+    postEventCtaUrl: event.postEventContent.ctaUrl ?? "",
+    postEventMessage: event.postEventContent.message ?? "",
+    postEventPublishedAt: toLocalDateTime(event.postEventContent.publishedAt),
+    resaleRoyaltyPercent: event.resalePolicy.resaleRoyaltyPercent ?? "",
     resaleEndsAt: toLocalDateTime(event.resalePolicy.endsAt),
     resaleStartsAt: toLocalDateTime(event.resalePolicy.startsAt),
     salesEndAt: toLocalDateTime(event.salesWindow.endsAt),
@@ -271,6 +283,8 @@ export function EventManagementPanel({ refreshKey = 0 }: EventManagementPanelPro
           description:
             currentEventForm?.allowResale
               ? currentEventForm.resaleStartsAt || currentEventForm.resaleEndsAt || currentEventForm.maxResalePrice
+                || currentEventForm.minResalePrice
+                || currentEventForm.resaleRoyaltyPercent
                 ? "Resale rules are enabled and at least one operational boundary is configured."
                 : "Resale is enabled, but no window or cap has been defined yet."
               : "Resale is disabled, which is valid if informal resale should remain blocked.",
@@ -279,7 +293,9 @@ export function EventManagementPanel({ refreshKey = 0 }: EventManagementPanelPro
               ? Boolean(
                   currentEventForm.resaleStartsAt ||
                     currentEventForm.resaleEndsAt ||
-                    currentEventForm.maxResalePrice,
+                    currentEventForm.maxResalePrice ||
+                    currentEventForm.minResalePrice ||
+                    currentEventForm.resaleRoyaltyPercent,
                 )
               : true,
           title: "Resale policy",
@@ -318,6 +334,12 @@ export function EventManagementPanel({ refreshKey = 0 }: EventManagementPanelPro
             description: currentEventForm.description || undefined,
             endsAt: toIsoDateTime(currentEventForm.endsAt),
             maxResalePrice: currentEventForm.maxResalePrice || undefined,
+            minResalePrice: currentEventForm.minResalePrice || undefined,
+            postEventCtaLabel: currentEventForm.postEventCtaLabel || undefined,
+            postEventCtaUrl: currentEventForm.postEventCtaUrl || undefined,
+            postEventMessage: currentEventForm.postEventMessage || undefined,
+            postEventPublishedAt: toIsoDateTime(currentEventForm.postEventPublishedAt),
+            resaleRoyaltyPercent: currentEventForm.resaleRoyaltyPercent || undefined,
             resaleEndsAt: toIsoDateTime(currentEventForm.resaleEndsAt),
             resaleStartsAt: toIsoDateTime(currentEventForm.resaleStartsAt),
             salesEndAt: toIsoDateTime(currentEventForm.salesEndAt),
@@ -410,6 +432,8 @@ export function EventManagementPanel({ refreshKey = 0 }: EventManagementPanelPro
           {
             allowResale: currentEventForm.allowResale,
             maxResalePrice: currentEventForm.maxResalePrice || undefined,
+            minResalePrice: currentEventForm.minResalePrice || undefined,
+            resaleRoyaltyPercent: currentEventForm.resaleRoyaltyPercent || undefined,
             resaleEndsAt: toIsoDateTime(currentEventForm.resaleEndsAt),
             resaleStartsAt: toIsoDateTime(currentEventForm.resaleStartsAt),
           },
@@ -420,6 +444,36 @@ export function EventManagementPanel({ refreshKey = 0 }: EventManagementPanelPro
       } catch (error) {
         setErrorMessage(
           getErrorText(error, "Resale policy could not be saved right now."),
+        );
+      }
+    });
+  }
+
+  function submitPostEventContentUpdate() {
+    if (!session || !selectedSummary || !currentEventForm) {
+      return;
+    }
+
+    setNotice(null);
+    setErrorMessage(null);
+
+    startTransition(async () => {
+      try {
+        await updateOrganizerEvent(
+          selectedSummary.id,
+          {
+            postEventCtaLabel: currentEventForm.postEventCtaLabel || undefined,
+            postEventCtaUrl: currentEventForm.postEventCtaUrl || undefined,
+            postEventMessage: currentEventForm.postEventMessage || undefined,
+            postEventPublishedAt: toIsoDateTime(currentEventForm.postEventPublishedAt),
+          },
+          session.accessToken,
+        );
+        await Promise.all([eventsQuery.refetch(), eventDetailQuery.refetch()]);
+        setNotice("Post-event content updated.");
+      } catch (error) {
+        setErrorMessage(
+          getErrorText(error, "Post-event content could not be saved right now."),
         );
       }
     });
@@ -811,11 +865,12 @@ export function EventManagementPanel({ refreshKey = 0 }: EventManagementPanelPro
                 <h3 className="font-display text-3xl">Resale policy</h3>
                 <p className="text-sm leading-6 text-muted">
                   Control whether attendees can resell tickets, when resale opens and closes,
-                  and whether a maximum resale price should cap secondary transfers.
+                  the minimum and maximum price band, and whether organizer royalties apply
+                  to secondary transfers.
                 </p>
               </div>
 
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
                 <div className="rounded-[1.2rem] border border-border bg-black/10 px-4 py-3">
                   <p className="text-xs font-semibold uppercase tracking-[0.24em] text-muted">
                     Resale status
@@ -852,12 +907,32 @@ export function EventManagementPanel({ refreshKey = 0 }: EventManagementPanelPro
                 </div>
                 <div className="rounded-[1.2rem] border border-border bg-black/10 px-4 py-3">
                   <p className="text-xs font-semibold uppercase tracking-[0.24em] text-muted">
+                    Price floor
+                  </p>
+                  <p className="mt-2 text-sm text-foreground">
+                    {currentEventForm.minResalePrice
+                      ? `${currentEventForm.minResalePrice} EUR`
+                      : "No floor set"}
+                  </p>
+                </div>
+                <div className="rounded-[1.2rem] border border-border bg-black/10 px-4 py-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.24em] text-muted">
                     Price cap
                   </p>
                   <p className="mt-2 text-sm text-foreground">
                     {currentEventForm.maxResalePrice
                       ? `${currentEventForm.maxResalePrice} EUR`
                       : "No cap set"}
+                  </p>
+                </div>
+                <div className="rounded-[1.2rem] border border-border bg-black/10 px-4 py-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.24em] text-muted">
+                    Organizer royalty
+                  </p>
+                  <p className="mt-2 text-sm text-foreground">
+                    {currentEventForm.resaleRoyaltyPercent
+                      ? `${currentEventForm.resaleRoyaltyPercent}%`
+                      : "No royalty set"}
                   </p>
                 </div>
               </div>
@@ -873,10 +948,10 @@ export function EventManagementPanel({ refreshKey = 0 }: EventManagementPanelPro
                 <p className="text-sm leading-6 text-muted">
                   When resale is enabled, attendee resale eligibility is still governed by
                   ticket state and this event&apos;s active resale window. Use the window and
-                  cap below to define the operational boundaries clearly.
+                  settlement controls below to define the operational boundaries clearly.
                 </p>
 
-                <div className="grid gap-5 lg:grid-cols-3">
+                <div className="grid gap-5 lg:grid-cols-5">
                   <label className="block space-y-2">
                     <span className="text-xs font-semibold uppercase tracking-[0.24em] text-muted">Resale start</span>
                     <input type="datetime-local" value={currentEventForm.resaleStartsAt} onChange={(event) => updateEventFormField(eventDetailQuery.data.id, currentEventForm, setEventFormState, { resaleStartsAt: event.target.value })} className="w-full rounded-[1.2rem] border border-border bg-black/10 px-4 py-3 text-sm text-foreground outline-hidden transition focus:border-accent-warm/50" />
@@ -886,13 +961,100 @@ export function EventManagementPanel({ refreshKey = 0 }: EventManagementPanelPro
                     <input type="datetime-local" value={currentEventForm.resaleEndsAt} onChange={(event) => updateEventFormField(eventDetailQuery.data.id, currentEventForm, setEventFormState, { resaleEndsAt: event.target.value })} className="w-full rounded-[1.2rem] border border-border bg-black/10 px-4 py-3 text-sm text-foreground outline-hidden transition focus:border-accent-warm/50" />
                   </label>
                   <label className="block space-y-2">
+                    <span className="text-xs font-semibold uppercase tracking-[0.24em] text-muted">Min resale price</span>
+                    <input type="text" value={currentEventForm.minResalePrice} onChange={(event) => updateEventFormField(eventDetailQuery.data.id, currentEventForm, setEventFormState, { minResalePrice: event.target.value })} placeholder="15.00" className="w-full rounded-[1.2rem] border border-border bg-black/10 px-4 py-3 text-sm text-foreground outline-hidden transition focus:border-accent-warm/50" />
+                  </label>
+                  <label className="block space-y-2">
                     <span className="text-xs font-semibold uppercase tracking-[0.24em] text-muted">Max resale price</span>
                     <input type="text" value={currentEventForm.maxResalePrice} onChange={(event) => updateEventFormField(eventDetailQuery.data.id, currentEventForm, setEventFormState, { maxResalePrice: event.target.value })} placeholder="25.00" className="w-full rounded-[1.2rem] border border-border bg-black/10 px-4 py-3 text-sm text-foreground outline-hidden transition focus:border-accent-warm/50" />
+                  </label>
+                  <label className="block space-y-2">
+                    <span className="text-xs font-semibold uppercase tracking-[0.24em] text-muted">Organizer royalty %</span>
+                    <input type="text" value={currentEventForm.resaleRoyaltyPercent} onChange={(event) => updateEventFormField(eventDetailQuery.data.id, currentEventForm, setEventFormState, { resaleRoyaltyPercent: event.target.value })} placeholder="10.00" className="w-full rounded-[1.2rem] border border-border bg-black/10 px-4 py-3 text-sm text-foreground outline-hidden transition focus:border-accent-warm/50" />
                   </label>
                 </div>
 
                 <button type="button" onClick={submitResalePolicyUpdate} disabled={isPending} className="inline-flex rounded-full border border-accent-warm/50 bg-accent-warm/12 px-5 py-3 text-sm font-semibold text-foreground transition hover:border-accent-warm/70 hover:bg-accent-warm/18 disabled:cursor-not-allowed disabled:opacity-65">
                   {isPending ? "Saving resale policy..." : "Save resale policy"}
+                </button>
+              </div>
+            </div>
+          </Panel>
+
+          <Panel>
+            <div className="space-y-5">
+              <div className="space-y-2">
+                <h3 className="font-display text-3xl">Post-event content</h3>
+                <p className="text-sm leading-6 text-muted">
+                  Keep the wallet useful after attendance with one lightweight message and an optional CTA.
+                </p>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="rounded-[1.2rem] border border-border bg-black/10 px-4 py-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.24em] text-muted">
+                    Publish state
+                  </p>
+                  <p className="mt-2 text-sm text-foreground">
+                    {currentEventForm.postEventPublishedAt ? "Scheduled or live" : "Draft"}
+                  </p>
+                </div>
+                <div className="rounded-[1.2rem] border border-border bg-black/10 px-4 py-3 sm:col-span-2">
+                  <p className="text-xs font-semibold uppercase tracking-[0.24em] text-muted">
+                    Message preview
+                  </p>
+                  <p className="mt-2 text-sm text-foreground">
+                    {currentEventForm.postEventMessage || "No post-event message set yet."}
+                  </p>
+                </div>
+                <div className="rounded-[1.2rem] border border-border bg-black/10 px-4 py-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.24em] text-muted">
+                    CTA
+                  </p>
+                  <p className="mt-2 text-sm text-foreground">
+                    {currentEventForm.postEventCtaLabel || "No CTA"}
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-4 rounded-[1.5rem] border border-border bg-black/10 p-4">
+                <label className="block space-y-2">
+                  <span className="text-xs font-semibold uppercase tracking-[0.24em] text-muted">
+                    Post-event message
+                  </span>
+                  <textarea
+                    value={currentEventForm.postEventMessage}
+                    onChange={(event) =>
+                      updateEventFormField(
+                        eventDetailQuery.data.id,
+                        currentEventForm,
+                        setEventFormState,
+                        { postEventMessage: event.target.value },
+                      )
+                    }
+                    rows={4}
+                    placeholder="Thanks for coming. Replay moments and early access are now live."
+                    className="w-full rounded-[1.2rem] border border-border bg-black/10 px-4 py-3 text-sm text-foreground outline-hidden transition focus:border-accent-warm/50"
+                  />
+                </label>
+
+                <div className="grid gap-5 lg:grid-cols-3">
+                  <label className="block space-y-2">
+                    <span className="text-xs font-semibold uppercase tracking-[0.24em] text-muted">CTA label</span>
+                    <input type="text" value={currentEventForm.postEventCtaLabel} onChange={(event) => updateEventFormField(eventDetailQuery.data.id, currentEventForm, setEventFormState, { postEventCtaLabel: event.target.value })} placeholder="View replay" className="w-full rounded-[1.2rem] border border-border bg-black/10 px-4 py-3 text-sm text-foreground outline-hidden transition focus:border-accent-warm/50" />
+                  </label>
+                  <label className="block space-y-2">
+                    <span className="text-xs font-semibold uppercase tracking-[0.24em] text-muted">CTA URL</span>
+                    <input type="url" value={currentEventForm.postEventCtaUrl} onChange={(event) => updateEventFormField(eventDetailQuery.data.id, currentEventForm, setEventFormState, { postEventCtaUrl: event.target.value })} placeholder="https://example.com/replay" className="w-full rounded-[1.2rem] border border-border bg-black/10 px-4 py-3 text-sm text-foreground outline-hidden transition focus:border-accent-warm/50" />
+                  </label>
+                  <label className="block space-y-2">
+                    <span className="text-xs font-semibold uppercase tracking-[0.24em] text-muted">Publish at</span>
+                    <input type="datetime-local" value={currentEventForm.postEventPublishedAt} onChange={(event) => updateEventFormField(eventDetailQuery.data.id, currentEventForm, setEventFormState, { postEventPublishedAt: event.target.value })} className="w-full rounded-[1.2rem] border border-border bg-black/10 px-4 py-3 text-sm text-foreground outline-hidden transition focus:border-accent-warm/50" />
+                  </label>
+                </div>
+
+                <button type="button" onClick={submitPostEventContentUpdate} disabled={isPending} className="inline-flex rounded-full border border-accent-warm/50 bg-accent-warm/12 px-5 py-3 text-sm font-semibold text-foreground transition hover:border-accent-warm/70 hover:bg-accent-warm/18 disabled:cursor-not-allowed disabled:opacity-65">
+                  {isPending ? "Saving post-event content..." : "Save post-event content"}
                 </button>
               </div>
             </div>

@@ -50,6 +50,7 @@ export class ResaleTicketRepository {
     return this.prisma.ticket.findUnique({
       where: { serialNumber },
       include: {
+        event: true,
         resaleListings: {
           where: {
             status: ResaleStatus.LISTED,

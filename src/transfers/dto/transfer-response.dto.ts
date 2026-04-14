@@ -32,6 +32,9 @@ export class TransferResponseDto {
   expiresAt!: Date;
 
   @ApiProperty({ nullable: true })
+  reminderSentAt!: Date | null;
+
+  @ApiProperty({ nullable: true })
   acceptedAt!: Date | null;
 
   @ApiProperty({ nullable: true })
