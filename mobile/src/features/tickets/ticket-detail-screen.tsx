@@ -1,7 +1,17 @@
 import { useQuery } from "@tanstack/react-query";
 import QRCode from "react-native-qrcode-svg";
-import { useMemo, useState } from "react";
-import { ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { useEffect, useMemo, useState } from "react";
+import {
+  LayoutAnimation,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  UIManager,
+  View,
+} from "react-native";
 
 import { useAuth } from "@/components/providers/auth-provider";
 import { useWalletSync } from "@/components/providers/wallet-sync-provider";
@@ -24,6 +34,82 @@ import {
 } from "@/lib/tickets/tickets-client";
 import { palette } from "@/styles/theme";
 
+if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
+
+function animateLayout() {
+  LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+}
+
+function isValidEmail(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+}
+
+function isValidPrice(value: string) {
+  return /^\d+(\.\d{1,2})?$/.test(value.trim());
+}
+
+function SectionCard({
+  title,
+  subtitle,
+  status,
+  expanded,
+  onToggle,
+  children,
+}: {
+  children: React.ReactNode;
+  expanded: boolean;
+  onToggle: () => void;
+  status?: "attention" | "default" | "saving" | "saved";
+  subtitle: string;
+  title: string;
+}) {
+  return (
+    <Card padded={false}>
+      <View style={styles.sectionShell}>
+        <Pressable onPress={onToggle} style={styles.sectionHeaderButton}>
+          <View style={styles.sectionHeaderCopy}>
+            <Text style={styles.sectionTitle}>{title}</Text>
+            <Text style={styles.copy}>{subtitle}</Text>
+          </View>
+          <View style={styles.sectionHeaderMeta}>
+            {status ? (
+              <View
+                style={[
+                  styles.sectionStatePill,
+                  status === "attention" ? styles.sectionStateAttention : null,
+                  status === "saving" ? styles.sectionStateSaving : null,
+                  status === "saved" ? styles.sectionStateSaved : null,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.sectionStatePillText,
+                    status === "attention" ? styles.sectionStateAttentionText : null,
+                    status === "saving" ? styles.sectionStateSavingText : null,
+                    status === "saved" ? styles.sectionStateSavedText : null,
+                  ]}
+                >
+                  {status === "attention"
+                    ? "Needs review"
+                    : status === "saving"
+                      ? "Saving"
+                      : status === "saved"
+                        ? "Saved"
+                        : "Ready"}
+                </Text>
+              </View>
+            ) : null}
+            <Text style={styles.sectionChevron}>{expanded ? "Hide" : "Open"}</Text>
+          </View>
+        </Pressable>
+        {expanded ? children : null}
+      </View>
+    </Card>
+  );
+}
+
 export function TicketDetailScreen({ serialNumber }: { serialNumber: string }) {
   const { session } = useAuth();
   const { setTicketStatusOverride } = useWalletSync();
@@ -31,6 +117,12 @@ export function TicketDetailScreen({ serialNumber }: { serialNumber: string }) {
   const [transferEmail, setTransferEmail] = useState("");
   const [resalePrice, setResalePrice] = useState("");
   const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [expandedSections, setExpandedSections] = useState({
+    qr: true,
+    resale: false,
+    transfer: false,
+  });
+  const [activeAction, setActiveAction] = useState<"resale" | "transfer" | null>(null);
 
   const ticketQuery = useQuery({
     enabled: Boolean(session?.accessToken),
@@ -49,6 +141,10 @@ export function TicketDetailScreen({ serialNumber }: { serialNumber: string }) {
   const canShowQr = ticket?.status === "ISSUED" || ticket?.status === "PAID";
   const canTransfer = canShowQr;
   const canResell = canShowQr;
+  const transferIsDirty = Boolean(transferEmail.trim());
+  const resaleIsDirty = Boolean(resalePrice.trim());
+  const transferIsValid = !transferEmail.trim() || isValidEmail(transferEmail);
+  const resaleIsValid = !resalePrice.trim() || isValidPrice(resalePrice);
 
   const resaleSummary = useMemo(() => {
     if (!ticket?.latestResaleListing) {
@@ -60,6 +156,98 @@ export function TicketDetailScreen({ serialNumber }: { serialNumber: string }) {
       ticket.latestResaleListing.currency,
     )}`;
   }, [ticket?.latestResaleListing]);
+  const stickyAction = useMemo(() => {
+    if (expandedSections.transfer && transferIsDirty) {
+      return {
+        disabled: !canTransfer || !transferIsValid || activeAction === "transfer",
+        label: transferIsValid ? "Start transfer" : "Complete transfer details",
+        onPress: () =>
+          void runAction(
+            () =>
+              createTransfer(
+                serialNumber,
+                { recipientEmail: transferEmail.trim() },
+                session!.accessToken,
+              ),
+            "Transfer sent.",
+            "transfer",
+          ),
+        subtitle: "Transfer ready to send",
+      };
+    }
+
+    if (expandedSections.resale && resaleIsDirty) {
+      return {
+        disabled: !canResell || !resaleIsValid || activeAction === "resale",
+        label: resaleIsValid ? "List for resale" : "Complete resale details",
+        onPress: () =>
+          void runAction(
+            () =>
+              createResaleListing(
+                serialNumber,
+                { askingPrice: resalePrice.trim() },
+                session!.accessToken,
+              ),
+            "Listing created.",
+            "resale",
+          ),
+        subtitle: "Resale draft ready",
+      };
+    }
+
+    if (transferIsDirty) {
+      return {
+        disabled: !transferIsValid,
+        label: transferIsValid ? "Review transfer" : "Complete transfer details",
+        onPress: () => {
+          animateLayout();
+          setExpandedSections((current) => ({ ...current, transfer: true }));
+        },
+        subtitle: "Transfer draft in progress",
+      };
+    }
+
+    if (resaleIsDirty) {
+      return {
+        disabled: !resaleIsValid,
+        label: resaleIsValid ? "Review resale" : "Complete resale details",
+        onPress: () => {
+          animateLayout();
+          setExpandedSections((current) => ({ ...current, resale: true }));
+        },
+        subtitle: "Resale draft in progress",
+      };
+    }
+
+    return null;
+  }, [
+    activeAction,
+    canResell,
+    canTransfer,
+    expandedSections.resale,
+    expandedSections.transfer,
+    resaleIsDirty,
+    resaleIsValid,
+    resalePrice,
+    serialNumber,
+    session,
+    transferEmail,
+    transferIsDirty,
+    transferIsValid,
+  ]);
+
+  useEffect(() => {
+    if (!actionMessage) {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      animateLayout();
+      setActionMessage(null);
+    }, 2600);
+
+    return () => clearTimeout(timer);
+  }, [actionMessage]);
 
   function applyTicketStatusToWallet(nextStatus: string) {
     setTicketStatusOverride(serialNumber, nextStatus);
@@ -68,7 +256,12 @@ export function TicketDetailScreen({ serialNumber }: { serialNumber: string }) {
   async function runAction(
     action: () => Promise<TransferResponse | ResaleResponse | unknown>,
     successMessage: string,
+    actionKey?: "resale" | "transfer",
   ) {
+    if (actionKey) {
+      setActiveAction(actionKey);
+    }
+
     try {
       const result = await action();
 
@@ -83,9 +276,27 @@ export function TicketDetailScreen({ serialNumber }: { serialNumber: string }) {
 
       await ticketQuery.refetch();
       setActionMessage(successMessage);
+      if (actionKey === "transfer") {
+        setTransferEmail("");
+      }
+      if (actionKey === "resale") {
+        setResalePrice("");
+      }
     } catch (error) {
       setActionMessage(error instanceof Error ? error.message : "Action failed.");
+    } finally {
+      if (actionKey) {
+        setActiveAction(null);
+      }
     }
+  }
+
+  function toggleSection(section: "qr" | "resale" | "transfer") {
+    animateLayout();
+    setExpandedSections((current) => ({
+      ...current,
+      [section]: !current[section],
+    }));
   }
 
   return (
@@ -93,6 +304,7 @@ export function TicketDetailScreen({ serialNumber }: { serialNumber: string }) {
       title="Ticket detail"
       subtitle="View your ticket, show your QR code, or manage ticket actions."
     >
+      <>
       <ScrollView contentContainerStyle={styles.content}>
         {ticketQuery.isLoading ? (
           <Card>
@@ -141,16 +353,26 @@ export function TicketDetailScreen({ serialNumber }: { serialNumber: string }) {
               </View>
             </Card>
 
-            <Card padded={false}>
-              <View style={styles.sectionShell}>
-              <Text style={styles.sectionTitle}>Entry QR</Text>
+            <SectionCard
+              expanded={expandedSections.qr}
+              onToggle={() => toggleSection("qr")}
+              status={showQr ? "saved" : "default"}
+              subtitle="Open your scan-ready QR only when you need it."
+              title="Entry QR"
+            >
               {!canShowQr ? (
                 <Text style={styles.copy}>
                   This ticket isn't available for entry right now, so the QR code is hidden.
                 </Text>
               ) : null}
               {canShowQr && !showQr ? (
-                <ActionButton onPress={() => setShowQr(true)} title="Show scan-ready QR" />
+                <ActionButton
+                  onPress={() => {
+                    animateLayout();
+                    setShowQr(true);
+                  }}
+                  title="Show scan-ready QR"
+                />
               ) : null}
               {showQr && qrQuery.isLoading ? (
                 <Text style={styles.copy}>Preparing your QR code.</Text>
@@ -182,26 +404,38 @@ export function TicketDetailScreen({ serialNumber }: { serialNumber: string }) {
                   </View>
                 </View>
               ) : null}
-              </View>
-            </Card>
+            </SectionCard>
 
-            <Card padded={false}>
-              <View style={styles.sectionShell}>
-              <Text style={styles.sectionTitle}>Transfer ticket</Text>
-              <Text style={styles.copy}>
-                Send this ticket to someone else. Ownership changes only after they accept.
-              </Text>
+            <SectionCard
+              expanded={expandedSections.transfer}
+              onToggle={() => toggleSection("transfer")}
+              status={
+                activeAction === "transfer"
+                  ? "saving"
+                  : transferIsDirty
+                    ? "attention"
+                    : actionMessage === "Transfer sent."
+                      ? "saved"
+                      : "default"
+              }
+              subtitle="Send this ticket to someone else. Ownership only changes after they accept."
+              title="Transfer ticket"
+            >
               <TextInput
                 autoCapitalize="none"
                 keyboardType="email-address"
                 onChangeText={setTransferEmail}
-                placeholder="recipient@example.com"
+                placeholder="friend@example.com"
                 placeholderTextColor={palette.muted}
-                style={styles.input}
+                style={[styles.input, !transferIsValid && transferIsDirty ? styles.inputError : null]}
                 value={transferEmail}
               />
+              {!transferIsValid && transferIsDirty ? (
+                <Text style={styles.errorText}>Use a valid email address.</Text>
+              ) : null}
               <ActionButton
-                disabled={!canTransfer || !transferEmail.trim()}
+                disabled={!canTransfer || !transferEmail.trim() || !transferIsValid}
+                loading={activeAction === "transfer"}
                 onPress={() =>
                   void runAction(
                     () =>
@@ -211,6 +445,7 @@ export function TicketDetailScreen({ serialNumber }: { serialNumber: string }) {
                         session!.accessToken,
                       ),
                     "Transfer sent.",
+                    "transfer",
                   )
                 }
                 title="Start transfer"
@@ -237,23 +472,37 @@ export function TicketDetailScreen({ serialNumber }: { serialNumber: string }) {
                 title="Send reminder"
                 variant="secondary"
               />
-              </View>
-            </Card>
+            </SectionCard>
 
-            <Card padded={false}>
-              <View style={styles.sectionShell}>
-              <Text style={styles.sectionTitle}>Resale listing</Text>
-              <Text style={styles.copy}>{resaleSummary}</Text>
+            <SectionCard
+              expanded={expandedSections.resale}
+              onToggle={() => toggleSection("resale")}
+              status={
+                activeAction === "resale"
+                  ? "saving"
+                  : resaleIsDirty
+                    ? "attention"
+                    : actionMessage === "Listing created."
+                      ? "saved"
+                      : "default"
+              }
+              subtitle={resaleSummary}
+              title="Resale listing"
+            >
               <TextInput
                 keyboardType="numeric"
                 onChangeText={setResalePrice}
-                placeholder="Price in minor units, e.g. 2500"
+                placeholder="Price in euros, e.g. 15.00"
                 placeholderTextColor={palette.muted}
-                style={styles.input}
+                style={[styles.input, !resaleIsValid && resaleIsDirty ? styles.inputError : null]}
                 value={resalePrice}
               />
+              {!resaleIsValid && resaleIsDirty ? (
+                <Text style={styles.errorText}>Use a price like 15.00.</Text>
+              ) : null}
               <ActionButton
-                disabled={!canResell || !resalePrice.trim()}
+                disabled={!canResell || !resalePrice.trim() || !resaleIsValid}
+                loading={activeAction === "resale"}
                 onPress={() =>
                   void runAction(
                     () =>
@@ -263,6 +512,7 @@ export function TicketDetailScreen({ serialNumber }: { serialNumber: string }) {
                         session!.accessToken,
                       ),
                     "Listing created.",
+                    "resale",
                   )
                 }
                 title="List for resale"
@@ -278,8 +528,7 @@ export function TicketDetailScreen({ serialNumber }: { serialNumber: string }) {
                 title="Cancel listing"
                 variant="secondary"
               />
-              </View>
-            </Card>
+            </SectionCard>
           </>
         ) : null}
 
@@ -288,12 +537,38 @@ export function TicketDetailScreen({ serialNumber }: { serialNumber: string }) {
             <Text style={styles.copy}>{actionMessage}</Text>
           </Card>
         ) : null}
+        <View style={styles.bottomSpacer} />
       </ScrollView>
+      {stickyAction ? (
+        <View style={styles.stickyBarShell}>
+          <View style={styles.stickyBar}>
+            <View style={styles.stickyCopy}>
+              <Text style={styles.stickyTitle}>{stickyAction.subtitle}</Text>
+              <Text style={styles.stickyHint}>
+                {stickyAction.disabled
+                  ? "Finish the required fields to continue."
+                  : "You can complete this action now."}
+              </Text>
+            </View>
+            <View style={styles.stickyActionWrap}>
+              <ActionButton
+                disabled={stickyAction.disabled}
+                onPress={stickyAction.onPress}
+                title={stickyAction.label}
+              />
+            </View>
+          </View>
+        </View>
+      ) : null}
+      </>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
+  bottomSpacer: {
+    height: 100,
+  },
   content: {
     gap: 18,
     padding: 20,
@@ -303,6 +578,12 @@ const styles = StyleSheet.create({
     color: palette.muted,
     fontSize: 15,
     lineHeight: 22,
+  },
+  errorText: {
+    color: palette.danger,
+    fontSize: 12,
+    fontWeight: "600",
+    lineHeight: 18,
   },
   detailLabel: {
     color: palette.mutedSoft,
@@ -366,6 +647,9 @@ const styles = StyleSheet.create({
     minHeight: 52,
     paddingHorizontal: 16,
   },
+  inputError: {
+    borderColor: palette.danger,
+  },
   metaRow: {
     flexDirection: "row",
     gap: 12,
@@ -392,6 +676,63 @@ const styles = StyleSheet.create({
     gap: 14,
     padding: 18,
   },
+  sectionChevron: {
+    color: palette.muted,
+    fontSize: 12,
+    fontWeight: "800",
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
+  },
+  sectionHeaderButton: {
+    alignItems: "flex-start",
+    flexDirection: "row",
+    gap: 12,
+    justifyContent: "space-between",
+  },
+  sectionHeaderCopy: {
+    flex: 1,
+    gap: 6,
+  },
+  sectionHeaderMeta: {
+    alignItems: "flex-end",
+    gap: 8,
+  },
+  sectionStateAttention: {
+    backgroundColor: palette.warningSoft,
+    borderColor: "#ead39a",
+  },
+  sectionStateAttentionText: {
+    color: palette.warning,
+  },
+  sectionStatePill: {
+    backgroundColor: palette.backgroundMuted,
+    borderColor: palette.divider,
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  sectionStatePillText: {
+    color: palette.muted,
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+  },
+  sectionStateSaved: {
+    backgroundColor: palette.successSoft,
+    borderColor: "#b8d9ca",
+  },
+  sectionStateSavedText: {
+    color: palette.successDeep,
+  },
+  sectionStateSaving: {
+    backgroundColor: palette.accentSoft,
+    borderColor: "#e7b98f",
+  },
+  sectionStateSavingText: {
+    color: palette.accentDeep,
+  },
   sectionTitle: {
     color: palette.ink,
     fontSize: 22,
@@ -415,5 +756,43 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     letterSpacing: 0.8,
     textTransform: "uppercase",
+  },
+  stickyActionWrap: {
+    minWidth: 180,
+  },
+  stickyBar: {
+    backgroundColor: palette.glass,
+    borderColor: palette.divider,
+    borderRadius: 24,
+    borderWidth: 1,
+    gap: 14,
+    padding: 14,
+    shadowColor: palette.black,
+    shadowOffset: {
+      height: 10,
+      width: 0,
+    },
+    shadowOpacity: 0.12,
+    shadowRadius: 20,
+  },
+  stickyBarShell: {
+    backgroundColor: "transparent",
+    bottom: 12,
+    left: 16,
+    position: "absolute",
+    right: 16,
+  },
+  stickyCopy: {
+    gap: 4,
+  },
+  stickyHint: {
+    color: palette.mutedSoft,
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  stickyTitle: {
+    color: palette.ink,
+    fontSize: 14,
+    fontWeight: "800",
   },
 });

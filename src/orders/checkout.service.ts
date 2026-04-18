@@ -112,10 +112,12 @@ export class CheckoutService {
       process.env.STRIPE_SECRET_KEY
     ) {
       const session = await this.paymentsService.createCheckoutSession({
+        cancelReturnUrl: payload.cancelReturnUrl,
         id: order.id,
         currency: order.currency,
         totalAmount: order.totalAmount,
         userId: order.userId,
+        successReturnUrl: payload.successReturnUrl,
         event: {
           title: order.event.title,
           slug: order.event.slug,

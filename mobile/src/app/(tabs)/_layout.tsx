@@ -1,6 +1,8 @@
 import { Redirect, Tabs } from "expo-router";
 
 import { useAuth } from "@/components/providers/auth-provider";
+import { hasOrganizerSurfaceAccess } from "@/features/auth/organizer-access";
+import { hasScannerSurfaceAccess } from "@/features/auth/scanner-access";
 import { palette } from "@/styles/theme";
 
 export default function TabLayout() {
@@ -9,6 +11,9 @@ export default function TabLayout() {
   if (!session) {
     return <Redirect href="/(auth)/login" />;
   }
+
+  const showOrganizerTab = hasOrganizerSurfaceAccess(session.user);
+  const showScannerTab = hasScannerSurfaceAccess(session.user);
 
   return (
     <Tabs
@@ -33,6 +38,22 @@ export default function TabLayout() {
         options={{
           tabBarLabel: "Activity",
           title: "Activity",
+        }}
+      />
+      <Tabs.Screen
+        name="organizer"
+        options={{
+          href: showOrganizerTab ? undefined : null,
+          tabBarLabel: "Organizer",
+          title: "Organizer",
+        }}
+      />
+      <Tabs.Screen
+        name="scanner/index"
+        options={{
+          href: showScannerTab ? undefined : null,
+          tabBarLabel: "Scanner",
+          title: "Scanner",
         }}
       />
       <Tabs.Screen

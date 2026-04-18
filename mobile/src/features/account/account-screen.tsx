@@ -2,12 +2,18 @@ import { useRouter } from "expo-router";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { useAuth } from "@/components/providers/auth-provider";
+import { canManageOrganizerEvents, hasOrganizerSurfaceAccess } from "@/features/auth/organizer-access";
+import { canAccessScannerEvents, hasScannerSurfaceAccess } from "@/features/auth/scanner-access";
 import { ActionButton, Card, Screen } from "@/components/ui";
 import { palette } from "@/styles/theme";
 
 export function AccountScreen() {
   const router = useRouter();
   const { session, signOut } = useAuth();
+  const hasOrganizerAccess = hasOrganizerSurfaceAccess(session?.user);
+  const canManageEvents = canManageOrganizerEvents(session?.user);
+  const hasScannerAccess = hasScannerSurfaceAccess(session?.user);
+  const canScanEvents = canAccessScannerEvents(session?.user);
 
   return (
     <Screen
@@ -67,11 +73,40 @@ export function AccountScreen() {
 
         <Card tone="accent" padded={false}>
           <View style={styles.sectionShell}>
-            <Text style={styles.sectionTitle}>About this app</Text>
-            <Text style={styles.value}>Built for attendees first.</Text>
-            <Text style={styles.copy}>
-              Organizer and scanner tools aren't available in this version yet.
+            <Text style={styles.sectionTitle}>Product access</Text>
+            <Text style={styles.value}>
+              {hasOrganizerAccess || hasScannerAccess
+                ? "Expanded tools available"
+                : "Attendee experience active"}
             </Text>
+            <Text style={styles.copy}>
+              {hasOrganizerAccess
+                ? canManageEvents
+                  ? "You can move between your wallet and organizer workflows on this device."
+                  : "Organizer access is enabled for this account, but there are no accepted owner or admin event memberships available yet."
+                : hasScannerAccess
+                  ? canScanEvents
+                    ? "This account is ready for scanner operations alongside the wallet experience."
+                    : "Scanner access is enabled for this account, but there are no accepted event memberships available yet."
+                  : "This app keeps your wallet front and center, with organizer and scanner access added only when the account supports it."}
+            </Text>
+            {hasOrganizerAccess ? (
+              <ActionButton
+                onPress={() => {
+                  router.push("/organizer" as never);
+                }}
+                title="Open organizer"
+              />
+            ) : null}
+            {hasScannerAccess ? (
+              <ActionButton
+                onPress={() => {
+                  router.push("/scanner" as never);
+                }}
+                title="Open scanner"
+                variant="secondary"
+              />
+            ) : null}
           </View>
         </Card>
 

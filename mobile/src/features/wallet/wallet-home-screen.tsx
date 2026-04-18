@@ -1,7 +1,16 @@
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
-import { useCallback, useEffect, useMemo } from "react";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { useEffect, useMemo, useState } from "react";
+import {
+  LayoutAnimation,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  UIManager,
+  View,
+} from "react-native";
 
 import { useAuth } from "@/components/providers/auth-provider";
 import { useWalletSync } from "@/components/providers/wallet-sync-provider";
@@ -12,10 +21,58 @@ import type { OwnedTicketSummary } from "@/lib/tickets/tickets-client";
 import { listOwnedTickets } from "@/lib/tickets/tickets-client";
 import { palette } from "@/styles/theme";
 
+if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
+
+function animateLayout() {
+  LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+}
+
+function WalletSection({
+  title,
+  subtitle,
+  statusLabel,
+  expanded,
+  onToggle,
+  children,
+}: {
+  children: React.ReactNode;
+  expanded: boolean;
+  onToggle: () => void;
+  statusLabel?: string;
+  subtitle: string;
+  title: string;
+}) {
+  return (
+    <Card padded={false}>
+      <View style={styles.sectionShell}>
+        <Pressable onPress={onToggle} style={styles.sectionHeaderButton}>
+          <View style={styles.sectionHeaderCopy}>
+            <Text style={styles.sectionTitle}>{title}</Text>
+            <Text style={styles.copy}>{subtitle}</Text>
+          </View>
+          <View style={styles.sectionHeaderMeta}>
+            {statusLabel ? (
+              <View style={styles.sectionStatePill}>
+                <Text style={styles.sectionStatePillText}>{statusLabel}</Text>
+              </View>
+            ) : null}
+            <Text style={styles.sectionChevron}>{expanded ? "Hide" : "Open"}</Text>
+          </View>
+        </Pressable>
+        {expanded ? children : null}
+      </View>
+    </Card>
+  );
+}
+
 export function WalletHomeScreen() {
   const router = useRouter();
   const { session } = useAuth();
   const { clearTicketStatusOverride, getTicketStatusOverride } = useWalletSync();
+  const [isPriorityExpanded, setIsPriorityExpanded] = useState(true);
+  const [expandedEventIds, setExpandedEventIds] = useState<Record<string, boolean>>({});
   const walletQuery = useQuery({
     enabled: Boolean(session?.accessToken),
     queryFn: () => listOwnedTickets(session!.accessToken, { sort: "asc" }),
@@ -53,6 +110,24 @@ export function WalletHomeScreen() {
   const primaryTicket = groupedTickets[0]?.tickets[0] ?? null;
   const walletTicketCount = ticketsWithOverrides.length;
 
+  const effectiveExpandedEventIds = useMemo(
+    () =>
+      Object.fromEntries(
+        groupedTickets.map((group, index) => [
+          group.event.id,
+          expandedEventIds[group.event.id] ?? index === 0,
+        ]),
+      ),
+    [expandedEventIds, groupedTickets],
+  );
+
+  function openTicket(serialNumber: string) {
+    router.push({
+      params: { serialNumber },
+      pathname: "/tickets/[serialNumber]",
+    });
+  }
+
   return (
     <Screen
       title={session?.user.firstName ? `${session.user.firstName}'s wallet` : "Ticket wallet"}
@@ -64,9 +139,7 @@ export function WalletHomeScreen() {
             <View style={styles.heroGlowPrimary} />
             <View style={styles.heroGlowSecondary} />
             <Text style={styles.heroEyebrow}>Live wallet</Text>
-            <Text style={styles.heroHeadline}>
-              Everything you need for your next event.
-            </Text>
+            <Text style={styles.heroHeadline}>Everything you need for your next event.</Text>
             <Text style={styles.heroCopy}>
               See active tickets first, then keep track of the rest by event.
             </Text>
@@ -106,26 +179,28 @@ export function WalletHomeScreen() {
         {!walletQuery.isLoading && !walletQuery.isError && !primaryTicket ? (
           <Card>
             <Text style={styles.sectionTitle}>No tickets yet</Text>
-            <Text style={styles.copy}>
-              You don't have any tickets on this account yet.
-            </Text>
+            <Text style={styles.copy}>You don't have any tickets on this account yet.</Text>
           </Card>
         ) : null}
 
         {primaryTicket ? (
-          <Card tone="success" padded={false}>
+          <WalletSection
+            expanded={isPriorityExpanded}
+            onToggle={() => {
+              animateLayout();
+              setIsPriorityExpanded((current) => !current);
+            }}
+            statusLabel={primaryTicket.status.replaceAll("_", " ")}
+            subtitle={`${primaryTicket.ticketType.name} · ${formatDateTime(primaryTicket.event.startsAt)}`}
+            title="Priority ticket"
+          >
             <View style={styles.primaryTicketShell}>
               <View style={styles.primaryTicketTop}>
                 <View style={styles.primaryTicketHeading}>
-                  <Text style={styles.eyebrow}>Priority ticket</Text>
+                  <Text style={styles.eyebrow}>Up next</Text>
                   <Text style={styles.heroTitle}>{primaryTicket.event.title}</Text>
                   <Text style={styles.copy}>
-                    {primaryTicket.ticketType.name} · {formatDateTime(primaryTicket.event.startsAt)}
-                  </Text>
-                </View>
-                <View style={styles.statusPill}>
-                  <Text style={styles.statusPillText}>
-                    {primaryTicket.status.replaceAll("_", " ")}
+                    {getTicketStatusMeta(primaryTicket.status).description}
                   </Text>
                 </View>
               </View>
@@ -143,65 +218,66 @@ export function WalletHomeScreen() {
                 </View>
               </View>
 
-              <ActionButton
-                onPress={() =>
-                  router.push({
-                    params: { serialNumber: primaryTicket.serialNumber },
-                    pathname: "/tickets/[serialNumber]",
-                  })
-                }
-                title="Open ticket"
-              />
+              <ActionButton onPress={() => openTicket(primaryTicket.serialNumber)} title="Open ticket" />
             </View>
-          </Card>
+          </WalletSection>
         ) : null}
 
         {groupedTickets.map((group) => (
-          <View key={group.event.id} style={styles.group}>
-            <View style={styles.groupHeader}>
-              <Text style={styles.groupTitle}>{group.event.title}</Text>
-              <Text style={styles.groupCount}>{group.tickets.length} ticket{group.tickets.length > 1 ? "s" : ""}</Text>
+          <WalletSection
+            key={group.event.id}
+            expanded={Boolean(effectiveExpandedEventIds[group.event.id])}
+            onToggle={() => {
+              animateLayout();
+              setExpandedEventIds((current) => ({
+                ...current,
+                [group.event.id]: !current[group.event.id],
+              }));
+            }}
+            statusLabel={`${group.tickets.length} ticket${group.tickets.length > 1 ? "s" : ""}`}
+            subtitle={formatDateTime(group.event.startsAt)}
+            title={group.event.title}
+          >
+            <View style={styles.group}>
+              {group.tickets.map((ticket) => {
+                const meta = getTicketStatusMeta(ticket.status);
+
+                return (
+                  <Card
+                    key={ticket.id}
+                    tone={meta.tone === "success" ? "success" : "default"}
+                    padded={false}
+                  >
+                    <View style={styles.ticketCardShell}>
+                      <View style={styles.ticketHeaderRow}>
+                        <View style={styles.ticketHeaderText}>
+                          <Text style={styles.ticketTitle}>{ticket.ticketType.name}</Text>
+                          <Text style={styles.copy}>{meta.description}</Text>
+                        </View>
+                        <View style={styles.smallStatusPill}>
+                          <Text style={styles.smallStatusPillText}>
+                            {ticket.status.replaceAll("_", " ")}
+                          </Text>
+                        </View>
+                      </View>
+
+                      <View style={styles.ticketFooterRow}>
+                        <View>
+                          <Text style={styles.serialLabel}>Serial</Text>
+                          <Text style={styles.serial}>{ticket.serialNumber}</Text>
+                        </View>
+                        <ActionButton
+                          onPress={() => openTicket(ticket.serialNumber)}
+                          title="View detail"
+                          variant="secondary"
+                        />
+                      </View>
+                    </View>
+                  </Card>
+                );
+              })}
             </View>
-            <Text style={styles.groupSubtitle}>{formatDateTime(group.event.startsAt)}</Text>
-            {group.tickets.map((ticket) => {
-              const meta = getTicketStatusMeta(ticket.status);
-
-              return (
-                <Card key={ticket.id} tone={meta.tone === "success" ? "success" : "default"} padded={false}>
-                  <View style={styles.ticketCardShell}>
-                    <View style={styles.ticketHeaderRow}>
-                      <View style={styles.ticketHeaderText}>
-                        <Text style={styles.ticketTitle}>{ticket.ticketType.name}</Text>
-                        <Text style={styles.copy}>{meta.description}</Text>
-                      </View>
-                      <View style={styles.smallStatusPill}>
-                        <Text style={styles.smallStatusPillText}>
-                          {ticket.status.replaceAll("_", " ")}
-                        </Text>
-                      </View>
-                    </View>
-
-                    <View style={styles.ticketFooterRow}>
-                      <View>
-                        <Text style={styles.serialLabel}>Serial</Text>
-                        <Text style={styles.serial}>{ticket.serialNumber}</Text>
-                      </View>
-                      <ActionButton
-                        onPress={() =>
-                          router.push({
-                            params: { serialNumber: ticket.serialNumber },
-                            pathname: "/tickets/[serialNumber]",
-                          })
-                        }
-                        title="View detail"
-                        variant="secondary"
-                      />
-                    </View>
-                  </View>
-                </Card>
-              );
-            })}
-          </View>
+          </WalletSection>
         ))}
       </ScrollView>
     </Screen>
@@ -261,25 +337,6 @@ const styles = StyleSheet.create({
   group: {
     gap: 12,
   },
-  groupCount: {
-    color: palette.mutedSoft,
-    fontSize: 13,
-    fontWeight: "700",
-  },
-  groupHeader: {
-    alignItems: "flex-end",
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  groupSubtitle: {
-    color: palette.muted,
-    fontSize: 14,
-  },
-  groupTitle: {
-    color: palette.ink,
-    fontSize: 24,
-    fontWeight: "800",
-  },
   heroTitle: {
     color: palette.ink,
     fontSize: 32,
@@ -319,10 +376,10 @@ const styles = StyleSheet.create({
   },
   heroHeadline: {
     color: palette.white,
-    fontSize: 29,
+    fontSize: 32,
     fontWeight: "800",
-    lineHeight: 34,
-    maxWidth: 310,
+    lineHeight: 36,
+    maxWidth: 320,
   },
   heroShell: {
     backgroundColor: palette.black,
@@ -363,6 +420,55 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "700",
   },
+  primaryTicketHeading: {
+    gap: 6,
+  },
+  primaryTicketShell: {
+    gap: 16,
+  },
+  primaryTicketTop: {
+    gap: 12,
+  },
+  sectionChevron: {
+    color: palette.muted,
+    fontSize: 12,
+    fontWeight: "800",
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
+  },
+  sectionHeaderButton: {
+    alignItems: "flex-start",
+    flexDirection: "row",
+    gap: 12,
+    justifyContent: "space-between",
+  },
+  sectionHeaderCopy: {
+    flex: 1,
+    gap: 6,
+  },
+  sectionHeaderMeta: {
+    alignItems: "flex-end",
+    gap: 8,
+  },
+  sectionShell: {
+    gap: 14,
+    padding: 18,
+  },
+  sectionStatePill: {
+    backgroundColor: palette.backgroundMuted,
+    borderColor: palette.divider,
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  sectionStatePillText: {
+    color: palette.muted,
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+  },
   sectionTitle: {
     color: palette.ink,
     fontSize: 22,
@@ -372,24 +478,23 @@ const styles = StyleSheet.create({
     color: palette.ink,
     fontFamily: "Courier",
     fontSize: 13,
-    fontWeight: "600",
+    fontWeight: "700",
   },
   serialLabel: {
     color: palette.mutedSoft,
     fontSize: 11,
     fontWeight: "800",
-    letterSpacing: 1,
+    letterSpacing: 1.1,
     textTransform: "uppercase",
   },
   smallStatusPill: {
-    alignItems: "center",
+    alignSelf: "flex-start",
     backgroundColor: palette.backgroundMuted,
     borderColor: palette.divider,
     borderRadius: 999,
     borderWidth: 1,
-    justifyContent: "center",
     paddingHorizontal: 10,
-    paddingVertical: 8,
+    paddingVertical: 7,
   },
   smallStatusPillText: {
     color: palette.ink,
@@ -398,38 +503,25 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
     textTransform: "uppercase",
   },
-  primaryTicketHeading: {
-    flex: 1,
-    gap: 6,
-  },
-  primaryTicketShell: {
-    gap: 16,
-    padding: 18,
-  },
-  primaryTicketTop: {
-    flexDirection: "row",
-    gap: 12,
-    justifyContent: "space-between",
-  },
   statusPill: {
     alignSelf: "flex-start",
-    backgroundColor: "rgba(255,255,255,0.72)",
-    borderColor: "rgba(255,255,255,0.82)",
+    backgroundColor: palette.backgroundMuted,
+    borderColor: palette.divider,
     borderRadius: 999,
     borderWidth: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
   },
   statusPillText: {
-    color: palette.successDeep,
+    color: palette.ink,
     fontSize: 10,
     fontWeight: "800",
     letterSpacing: 0.8,
     textTransform: "uppercase",
   },
   ticketCardShell: {
-    gap: 16,
-    padding: 18,
+    gap: 14,
+    padding: 16,
   },
   ticketFooterRow: {
     alignItems: "center",
@@ -437,13 +529,14 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   ticketHeaderRow: {
+    alignItems: "center",
     flexDirection: "row",
     gap: 12,
     justifyContent: "space-between",
   },
   ticketHeaderText: {
     flex: 1,
-    gap: 4,
+    gap: 6,
   },
   ticketTitle: {
     color: palette.ink,

@@ -68,4 +68,22 @@ export class CreateCheckoutDto {
   @IsString()
   @MaxLength(120)
   idempotencyKey?: string;
+
+  @ApiPropertyOptional({
+    example: "exp://127.0.0.1:8081/--/checkout/success",
+    description: "Optional mobile success return URL. When provided with a cancel URL, Stripe returns into the app instead of the web frontend.",
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  successReturnUrl?: string;
+
+  @ApiPropertyOptional({
+    example: "exp://127.0.0.1:8081/--/checkout/cancel",
+    description: "Optional mobile cancel return URL. When provided with a success URL, Stripe returns into the app instead of the web frontend.",
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  cancelReturnUrl?: string;
 }

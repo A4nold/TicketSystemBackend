@@ -3,7 +3,7 @@ import { Redirect, useLocalSearchParams } from "expo-router";
 import { useAuth } from "@/components/providers/auth-provider";
 import { AuthScreen } from "@/features/auth/auth-screen";
 
-export default function LoginRoute() {
+export default function RegisterRoute() {
   const { session } = useAuth();
   const params = useLocalSearchParams<{
     eventSlug?: string;
@@ -35,5 +35,5 @@ export default function LoginRoute() {
     return <Redirect href="/(tabs)/wallet" />;
   }
 
-  return <AuthScreen defaultMode="login" />;
+  return <AuthScreen defaultMode="register" />;
 }

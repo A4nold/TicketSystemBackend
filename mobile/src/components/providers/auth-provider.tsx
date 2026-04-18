@@ -7,7 +7,13 @@ import {
   useState,
 } from "react";
 
-import { getCurrentAttendee, loginAttendee, type LoginPayload } from "@/lib/auth/auth-client";
+import {
+  getCurrentAttendee,
+  loginAttendee,
+  registerAttendee,
+  type LoginPayload,
+  type RegisterPayload,
+} from "@/lib/auth/auth-client";
 import {
   clearStoredSession,
   loadStoredSession,
@@ -21,6 +27,7 @@ type AuthContextValue = {
   isAuthenticating: boolean;
   session: AuthSession | null;
   signIn: (payload: LoginPayload) => Promise<boolean>;
+  signUp: (payload: RegisterPayload) => Promise<boolean>;
   signOut: () => Promise<void>;
 };
 
@@ -79,6 +86,28 @@ export function AuthProvider({ children }: PropsWithChildren) {
         } catch (error) {
           setErrorMessage(
             error instanceof Error ? error.message : "Sign in failed. Please try again.",
+          );
+          return false;
+        } finally {
+          setIsAuthenticating(false);
+        }
+      },
+      signUp: async (payload) => {
+        setIsAuthenticating(true);
+        setErrorMessage(null);
+
+        try {
+          const authResponse = await registerAttendee(payload);
+          const nextSession = {
+            ...authResponse,
+            user: await getCurrentAttendee(authResponse.accessToken),
+          };
+          setSession(nextSession);
+          await persistSession(nextSession);
+          return true;
+        } catch (error) {
+          setErrorMessage(
+            error instanceof Error ? error.message : "Sign up failed. Please try again.",
           );
           return false;
         } finally {

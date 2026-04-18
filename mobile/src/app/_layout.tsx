@@ -26,8 +26,17 @@ function RootNavigator() {
   return (
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="index" />
+      <Stack.Screen name="(public)" />
       <Stack.Screen name="(auth)" />
       <Stack.Screen name="(tabs)" />
+      <Stack.Screen
+        name="checkout/start"
+        options={{
+          presentation: "modal",
+        }}
+      />
+      <Stack.Screen name="checkout/success" />
+      <Stack.Screen name="checkout/cancel" />
       <Stack.Screen
         name="tickets/[serialNumber]"
         options={{

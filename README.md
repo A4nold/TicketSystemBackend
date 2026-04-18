@@ -68,7 +68,7 @@ The app is currently organized around four main product surfaces:
 │   └── transfers/
 ├── prisma/             # Prisma schema and seed scripts
 ├── frontend/           # Next.js frontend
-├── mobile/             # Expo React Native attendee app
+├── mobile/             # Expo React Native public, attendee, organizer, and scanner app
 └── _bmad-output/       # planning and story artifacts
 ```
 
@@ -92,6 +92,13 @@ Current frontend direction:
 - organizer event management has been expanded rather than replaced
 - scanner workspace split into focused UI panels
 - public homepage, marketplace, and event presentation extracted into reusable view sections
+
+Current mobile direction:
+
+- public discovery and event-detail entry now exist before authentication
+- mobile auth supports attendee sign-in and sign-up with event-context continuation
+- organizer and scanner surfaces coexist alongside the wallet instead of requiring separate apps
+- checkout started from mobile can return into app-specific success and cancel routes while web checkout keeps using the frontend return URLs
 
 ## Local Development
 
@@ -145,6 +152,8 @@ Mobile uses:
 EXPO_PUBLIC_API_BASE_URL=http://localhost:3000
 ```
 
+For real-device Expo Go testing against Railway, point `EXPO_PUBLIC_API_BASE_URL` at the backend API service domain that serves `/api/*`, not the frontend/static Railway domain.
+
 ### 3. Run the backend
 
 ```bash
@@ -175,6 +184,15 @@ npm run start
 ```
 
 Set `EXPO_PUBLIC_API_BASE_URL` before launching if your backend is not on `http://localhost:3000`.
+
+For a real device via Expo Go, tunnel mode is usually the most reliable:
+
+```bash
+cd mobile
+npx expo start --tunnel
+```
+
+If mobile checkout is started from the app, Stripe can now return into the app via the `ticketsystem://` scheme on success or cancel. Web checkout continues to return to `FRONTEND_APP_URL`.
 
 ## Database and Seeds
 
@@ -239,7 +257,7 @@ Coverage currently exists around:
 - wallet activity, notifications, and transfer inbox flows
 - transfer lifecycle, expiry, reminder, and ownership audit behavior
 - public and owned-ticket resale behavior
-- organizer resale policy and post-event content behavior
+- organizer resale policy and post-event content behavior on mobile
 - scanner workflow behavior
 - event and ticket response shaping
 

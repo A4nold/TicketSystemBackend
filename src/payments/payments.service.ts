@@ -9,9 +9,11 @@ import Stripe from "stripe";
 import { PrismaService } from "../prisma/prisma.service";
 
 type CheckoutOrder = {
+  cancelReturnUrl?: string;
   id: string;
   currency: string;
   totalAmount: Prisma.Decimal;
+  successReturnUrl?: string;
   userId: string;
   event: {
     title: string;
@@ -44,16 +46,29 @@ export class PaymentsService {
     const stripe = this.getStripeClient();
     const frontendUrl = process.env.FRONTEND_APP_URL;
 
-    if (!frontendUrl) {
+    if (!frontendUrl && (!order.successReturnUrl || !order.cancelReturnUrl)) {
       throw new NotImplementedException(
-        "FRONTEND_APP_URL must be configured to create Stripe checkout sessions.",
+        "FRONTEND_APP_URL must be configured to create Stripe checkout sessions unless explicit mobile return URLs are provided.",
       );
     }
 
+    const successUrl = this.buildCheckoutReturnUrl({
+      fallbackBaseUrl: `${frontendUrl?.replace(/\/$/, "") ?? ""}/checkout/success`,
+      orderId: order.id,
+      providedUrl: order.successReturnUrl,
+      sessionPlaceholder: true,
+    });
+    const cancelUrl = this.buildCheckoutReturnUrl({
+      fallbackBaseUrl: `${frontendUrl?.replace(/\/$/, "") ?? ""}/checkout/cancel`,
+      orderId: order.id,
+      providedUrl: order.cancelReturnUrl,
+      sessionPlaceholder: false,
+    });
+
     const session = await stripe.checkout.sessions.create({
       mode: "payment",
-      success_url: `${frontendUrl.replace(/\/$/, "")}/checkout/success?orderId=${order.id}&session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${frontendUrl.replace(/\/$/, "")}/checkout/cancel?orderId=${order.id}`,
+      success_url: successUrl,
+      cancel_url: cancelUrl,
       customer_creation: "if_required",
       client_reference_id: order.id,
       line_items: order.items.map((item) => ({
@@ -82,6 +97,42 @@ export class PaymentsService {
       isAwaitingPaymentConfirmation:
         session.payment_status !== "paid" && session.status !== "expired",
     };
+  }
+
+  private buildCheckoutReturnUrl({
+    fallbackBaseUrl,
+    orderId,
+    providedUrl,
+    sessionPlaceholder,
+  }: {
+    fallbackBaseUrl: string;
+    orderId: string;
+    providedUrl?: string;
+    sessionPlaceholder: boolean;
+  }) {
+    const baseUrl = providedUrl?.trim() || fallbackBaseUrl;
+
+    if (!baseUrl) {
+      throw new NotImplementedException("A valid checkout return URL could not be resolved.");
+    }
+
+    try {
+      const url = new URL(baseUrl);
+      url.searchParams.set("orderId", orderId);
+
+      if (sessionPlaceholder) {
+        url.searchParams.set("session_id", "{CHECKOUT_SESSION_ID}");
+      }
+
+      return url.toString();
+    } catch {
+      const separator = baseUrl.includes("?") ? "&" : "?";
+      const sessionSuffix = sessionPlaceholder
+        ? `&session_id=${encodeURIComponent("{CHECKOUT_SESSION_ID}")}`
+        : "";
+
+      return `${baseUrl}${separator}orderId=${encodeURIComponent(orderId)}${sessionSuffix}`;
+    }
   }
 
   async handleStripeWebhook(rawBody: Buffer, signature: string) {
