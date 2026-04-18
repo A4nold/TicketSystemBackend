@@ -11,6 +11,7 @@ import {
 
 import { AuthenticatedUser } from "../auth/types/authenticated-user.type";
 import { PrismaService } from "../prisma/prisma.service";
+import { ListUserNotificationsQueryDto } from "./dto/list-user-notifications-query.dto";
 
 type TransferRecipientEmailInput = Readonly<{
   acceptUrl: string;
@@ -50,28 +51,44 @@ export class NotificationsService {
     });
   }
 
-  async listUserNotifications(user: AuthenticatedUser) {
+  async listUserNotifications(
+    user: AuthenticatedUser,
+    query: ListUserNotificationsQueryDto = {},
+  ) {
+    const take = query.limit ?? 10;
     const notifications = await this.prisma.userNotification.findMany({
       where: {
         userId: user.id,
       },
-      orderBy: {
-        createdAt: "desc",
-      },
-      take: 12,
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      ...(query.cursor
+        ? {
+            cursor: {
+              id: query.cursor,
+            },
+            skip: 1,
+          }
+        : {}),
+      take: take + 1,
     });
 
-    return notifications.map((notification) => ({
-      actionUrl: notification.actionUrl,
-      body: notification.body,
-      createdAt: notification.createdAt,
-      id: notification.id,
-      metadata: notification.metadata,
-      readAt: notification.readAt,
-      status: notification.status,
-      title: notification.title,
-      type: notification.type,
-    }));
+    const hasMore = notifications.length > take;
+    const pageItems = hasMore ? notifications.slice(0, take) : notifications;
+
+    return {
+      items: pageItems.map((notification) => ({
+        actionUrl: notification.actionUrl,
+        body: notification.body,
+        createdAt: notification.createdAt,
+        id: notification.id,
+        metadata: notification.metadata,
+        readAt: notification.readAt,
+        status: notification.status,
+        title: notification.title,
+        type: notification.type,
+      })),
+      nextCursor: hasMore ? pageItems[pageItems.length - 1]?.id ?? null : null,
+    };
   }
 
   async markNotificationAsRead(notificationId: string, user: AuthenticatedUser) {

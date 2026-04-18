@@ -48,6 +48,7 @@ The app is currently organized around four main product surfaces:
 
 - Backend: NestJS, Prisma, PostgreSQL
 - Frontend: Next.js App Router, React 19, React Query
+- Mobile: Expo, React Native, Expo Router, React Query
 - Payments: Stripe
 - Notifications: in-app notifications plus Resend-backed email sends where configured
 - Deployment: Railway with separate backend and frontend services
@@ -67,6 +68,7 @@ The app is currently organized around four main product surfaces:
 │   └── transfers/
 ├── prisma/             # Prisma schema and seed scripts
 ├── frontend/           # Next.js frontend
+├── mobile/             # Expo React Native attendee app
 └── _bmad-output/       # planning and story artifacts
 ```
 
@@ -137,6 +139,12 @@ Frontend uses [`.env.example`](/Users/arnoldekechi/RiderProjects/ticketsystem/fr
 NEXT_PUBLIC_API_BASE_URL=http://localhost:3000
 ```
 
+Mobile uses:
+
+```env
+EXPO_PUBLIC_API_BASE_URL=http://localhost:3000
+```
+
 ### 3. Run the backend
 
 ```bash
@@ -158,6 +166,15 @@ npm run dev
 Frontend runs at:
 
 - `http://localhost:3001`
+
+### 5. Run the mobile app
+
+```bash
+cd mobile
+npm run start
+```
+
+Set `EXPO_PUBLIC_API_BASE_URL` before launching if your backend is not on `http://localhost:3000`.
 
 ## Database and Seeds
 
@@ -205,6 +222,14 @@ cd frontend
 npm test
 npm run lint
 npm run build
+```
+
+Mobile:
+
+```bash
+cd mobile
+npm test
+npm run typecheck
 ```
 
 Coverage currently exists around:

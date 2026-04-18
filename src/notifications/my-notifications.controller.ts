@@ -3,6 +3,7 @@ import {
   Get,
   Param,
   Post,
+  Query,
   UseGuards,
 } from "@nestjs/common";
 import {
@@ -11,6 +12,7 @@ import {
   ApiOkResponse,
   ApiOperation,
   ApiParam,
+  ApiQuery,
   ApiTags,
   ApiUnauthorizedResponse,
 } from "@nestjs/swagger";
@@ -18,6 +20,8 @@ import {
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { AuthenticatedUser } from "../auth/types/authenticated-user.type";
+import { ListUserNotificationsQueryDto } from "./dto/list-user-notifications-query.dto";
+import { PaginatedUserNotificationResponseDto } from "./dto/paginated-user-notification-response.dto";
 import { PostEventNotificationSweepService } from "./post-event-notification-sweep.service";
 import { NotificationsService } from "./notifications.service";
 import { UserNotificationResponseDto } from "./dto/user-notification-response.dto";
@@ -36,17 +40,30 @@ export class MyNotificationsController {
   @ApiOperation({
     summary: "List recent in-app notifications for the authenticated user",
   })
+  @ApiQuery({
+    name: "cursor",
+    required: false,
+    description: "Notification id cursor for loading older notifications",
+  })
+  @ApiQuery({
+    name: "limit",
+    required: false,
+    description: "Number of notifications to return",
+    example: 10,
+  })
   @ApiOkResponse({
     description: "Authenticated user's recent notifications",
-    type: UserNotificationResponseDto,
-    isArray: true,
+    type: PaginatedUserNotificationResponseDto,
   })
   @ApiUnauthorizedResponse({
     description: "Bearer token was missing, invalid, expired, or tied to an inactive user",
   })
-  async listNotifications(@CurrentUser() user: AuthenticatedUser) {
+  async listNotifications(
+    @Query() query: ListUserNotificationsQueryDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
     await this.postEventNotificationSweepService.trySweepEligibleEvents();
-    return this.notificationsService.listUserNotifications(user);
+    return this.notificationsService.listUserNotifications(user, query);
   }
 
   @Post(":notificationId/read")
