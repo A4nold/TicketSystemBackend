@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useMemo, useState, useTransition } from "react";
+import { Suspense, useMemo, useState, useTransition } from "react";
 import { z } from "zod";
 
 import { SupportEscalationPanel } from "@/components/support/support-escalation-panel";
@@ -36,7 +36,7 @@ function getErrorText(error: unknown) {
   return "We could not reset your password. Please request a fresh link and try again.";
 }
 
-export default function ResetPasswordPage() {
+function ResetPasswordPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const token = useMemo(() => searchParams.get("token") ?? "", [searchParams]);
@@ -207,5 +207,36 @@ export default function ResetPasswordPage() {
         </div>
       </Panel>
     </div>
+  );
+}
+
+export default function ResetPasswordPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="mx-auto grid w-full max-w-6xl gap-6 lg:grid-cols-[minmax(0,1.05fr)_minmax(22rem,28rem)]">
+          <Panel>
+            <div className="space-y-3">
+              <p className="text-sm font-medium uppercase tracking-[0.28em] text-accent">
+                Choose a new password
+              </p>
+              <h1 className="font-display text-4xl leading-tight sm:text-5xl">
+                Loading your secure reset page.
+              </h1>
+              <p className="max-w-2xl text-base leading-7 text-muted sm:text-lg">
+                We are preparing your reset link details now.
+              </p>
+            </div>
+          </Panel>
+          <Panel>
+            <div className="rounded-[1.2rem] border border-border bg-black/10 px-4 py-3 text-sm text-muted">
+              Loading reset form...
+            </div>
+          </Panel>
+        </div>
+      }
+    >
+      <ResetPasswordPageContent />
+    </Suspense>
   );
 }
