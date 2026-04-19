@@ -220,6 +220,14 @@ export function ScannerValidationPanel({
                 {syncNotice}
               </div>
             ) : null}
+
+            {cameraError || scanError ? (
+              <div className="rounded-[1.2rem] border border-border bg-black/15 px-4 py-4 text-sm leading-6 text-muted">
+                If camera access stays blocked, validation keeps failing, or a guest dispute needs
+                follow-up, route the case to support with the event context and any ticket serial or
+                token reference.
+              </div>
+            ) : null}
           </div>
         </div>
       </div>

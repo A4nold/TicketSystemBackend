@@ -1,5 +1,6 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 
+import { PreEventReminderSweepService } from "./pre-event-reminder-sweep.service";
 import { PostEventNotificationSweepService } from "./post-event-notification-sweep.service";
 
 const DEFAULT_SWEEP_INTERVAL_MS = 5 * 60 * 1000;
@@ -14,6 +15,7 @@ export class PostEventNotificationSchedulerService
   private isRunning = false;
 
   constructor(
+    private readonly preEventReminderSweepService: PreEventReminderSweepService,
     private readonly postEventNotificationSweepService: PostEventNotificationSweepService,
   ) {}
 
@@ -49,6 +51,7 @@ export class PostEventNotificationSchedulerService
     this.isRunning = true;
 
     try {
+      await this.preEventReminderSweepService.trySweepEligibleEvents();
       await this.postEventNotificationSweepService.trySweepEligibleEvents();
     } finally {
       this.isRunning = false;

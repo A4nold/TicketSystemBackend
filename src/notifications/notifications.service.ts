@@ -6,6 +6,7 @@ import {
 import {
   NotificationStatus,
   NotificationType,
+  PushDeviceStatus,
   Prisma,
 } from "@prisma/client";
 
@@ -27,6 +28,10 @@ type CreateUserNotificationInput = Readonly<{
   actionUrl?: string;
   body: string;
   metadata?: Prisma.InputJsonValue;
+  pushBody?: string;
+  pushData?: Prisma.InputJsonValue;
+  pushTitle?: string;
+  sendPush?: boolean;
   title: string;
   type: NotificationType;
   userId: string;
@@ -39,7 +44,7 @@ export class NotificationsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async createUserNotification(input: CreateUserNotificationInput) {
-    return this.prisma.userNotification.create({
+    const notification = await this.prisma.userNotification.create({
       data: {
         actionUrl: input.actionUrl,
         body: input.body,
@@ -49,6 +54,72 @@ export class NotificationsService {
         userId: input.userId,
       },
     });
+
+    if (input.sendPush) {
+      await this.sendPushToUsers([input.userId], {
+        body: input.pushBody ?? input.body,
+        data: {
+          ...(input.actionUrl ? { actionUrl: input.actionUrl } : {}),
+          ...(this.toPushData(input.pushData) ?? {}),
+        },
+        title: input.pushTitle ?? input.title,
+      });
+    }
+
+    return notification;
+  }
+
+  async registerPushDevice(
+    user: AuthenticatedUser,
+    payload: {
+      expoPushToken: string;
+      platform: "IOS" | "ANDROID";
+      deviceName?: string;
+      appVersion?: string;
+    },
+  ) {
+    return this.prisma.pushDevice.upsert({
+      where: {
+        expoPushToken: payload.expoPushToken,
+      },
+      update: {
+        appVersion: payload.appVersion?.trim() || null,
+        deviceName: payload.deviceName?.trim() || null,
+        lastErrorAt: null,
+        lastErrorReason: null,
+        lastRegisteredAt: new Date(),
+        platform: payload.platform,
+        status: PushDeviceStatus.ACTIVE,
+        userId: user.id,
+      },
+      create: {
+        appVersion: payload.appVersion?.trim() || null,
+        deviceName: payload.deviceName?.trim() || null,
+        expoPushToken: payload.expoPushToken,
+        lastRegisteredAt: new Date(),
+        platform: payload.platform,
+        status: PushDeviceStatus.ACTIVE,
+        userId: user.id,
+      },
+    });
+  }
+
+  async unregisterPushDevice(
+    user: AuthenticatedUser,
+    payload: {
+      expoPushToken: string;
+    },
+  ) {
+    await this.prisma.pushDevice.deleteMany({
+      where: {
+        expoPushToken: payload.expoPushToken,
+        userId: user.id,
+      },
+    });
+
+    return {
+      ok: true,
+    };
   }
 
   async listUserNotifications(
@@ -166,6 +237,7 @@ export class NotificationsService {
           recipientEmail: input.recipientEmail,
           serialNumber: input.serialNumber,
         },
+        sendPush: true,
         title: "Ticket waiting in your inbox",
         type: NotificationType.TRANSFER_RECEIVED,
         userId: input.recipientUserId,
@@ -246,6 +318,95 @@ export class NotificationsService {
     }
 
     await this.prisma.$transaction(operations);
+  }
+
+  async notifyTransferExpired(input: {
+    eventTitle: string;
+    recipientUserId: string | null;
+    senderUserId: string;
+    serialNumber: string;
+  }) {
+    await this.createUserNotification({
+      actionUrl: `/wallet/${encodeURIComponent(input.serialNumber)}`,
+      body: `The pending transfer for ${input.eventTitle} expired and the ticket stayed in your wallet.`,
+      metadata: {
+        serialNumber: input.serialNumber,
+      },
+      title: "Transfer expired",
+      type: "TRANSFER_EXPIRED" as NotificationType,
+      userId: input.senderUserId,
+    });
+
+    if (input.recipientUserId) {
+      await this.createUserNotification({
+        actionUrl: "/wallet",
+        body: `The transfer for ${input.eventTitle} expired before it was accepted.`,
+        metadata: {
+          serialNumber: input.serialNumber,
+        },
+        sendPush: true,
+        title: "Transfer expired",
+        type: "TRANSFER_EXPIRED" as NotificationType,
+        userId: input.recipientUserId,
+      });
+    }
+  }
+
+  async notifyOrderPaid(input: {
+    eventTitle: string;
+    orderId: string;
+    ticketCount: number;
+    userId: string;
+  }) {
+    await this.createUserNotification({
+      actionUrl: `/wallet?recentOrderId=${encodeURIComponent(input.orderId)}`,
+      body: `${input.ticketCount} ticket${input.ticketCount === 1 ? "" : "s"} for ${input.eventTitle} ${input.ticketCount === 1 ? "is" : "are"} now in your wallet.`,
+      metadata: {
+        orderId: input.orderId,
+        ticketCount: input.ticketCount,
+      },
+      sendPush: true,
+      title: "Purchase complete",
+      type: "ORDER_PAID" as NotificationType,
+      userId: input.userId,
+    });
+  }
+
+  async notifyTransferReminder(input: {
+    eventTitle: string;
+    recipientUserId: string;
+    serialNumber: string;
+  }) {
+    await this.createUserNotification({
+      actionUrl: `/transfer/accept/${encodeURIComponent(input.serialNumber)}`,
+      body: `A pending transfer for ${input.eventTitle} is still waiting for your review.`,
+      metadata: {
+        serialNumber: input.serialNumber,
+      },
+      sendPush: true,
+      title: "Transfer reminder",
+      type: "TRANSFER_REMINDER" as NotificationType,
+      userId: input.recipientUserId,
+    });
+  }
+
+  async sendEventReminderPush(input: {
+    eventId: string;
+    eventSlug: string;
+    eventTitle: string;
+    startsAt: Date;
+    userIds: string[];
+  }) {
+    await this.sendPushToUsers(input.userIds, {
+      body: `${input.eventTitle} starts soon. Open your wallet to keep entry ready.`,
+      data: {
+        eventId: input.eventId,
+        eventSlug: input.eventSlug,
+        startsAt: input.startsAt.toISOString(),
+        actionUrl: `/wallet?eventSlug=${encodeURIComponent(input.eventSlug)}`,
+      },
+      title: "Event reminder",
+    });
   }
 
   async notifyResaleListed(input: {
@@ -354,6 +515,115 @@ export class NotificationsService {
           },
         }),
       ),
+    );
+  }
+
+  private async sendPushToUsers(
+    userIds: string[],
+    payload: {
+      body: string;
+      data?: Record<string, string>;
+      title: string;
+    },
+  ) {
+    const uniqueUserIds = Array.from(new Set(userIds.filter(Boolean)));
+
+    if (uniqueUserIds.length === 0) {
+      return;
+    }
+
+    const devices = await this.prisma.pushDevice.findMany({
+      where: {
+        status: PushDeviceStatus.ACTIVE,
+        userId: {
+          in: uniqueUserIds,
+        },
+      },
+      select: {
+        expoPushToken: true,
+        id: true,
+      },
+    });
+
+    if (devices.length === 0) {
+      return;
+    }
+
+    const response = await fetch("https://exp.host/--/api/v2/push/send", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(
+        devices.map((device) => ({
+          body: payload.body,
+          data: payload.data,
+          sound: "default",
+          title: payload.title,
+          to: device.expoPushToken,
+        })),
+      ),
+    });
+
+    if (!response.ok) {
+      const body = await response.text();
+      this.logger.error(`Expo push send failed: status=${response.status} body=${body}`);
+      return;
+    }
+
+    const result = (await response.json()) as {
+      data?: Array<{
+        details?: {
+          error?: string;
+        };
+        status?: string;
+      }>;
+    };
+
+    const tickets = result.data ?? [];
+
+    await Promise.all(
+      devices.map(async (device, index) => {
+        const ticket = tickets[index];
+
+        if (ticket?.status === "ok") {
+          await this.prisma.pushDevice.update({
+            where: { id: device.id },
+            data: {
+              lastDeliveredAt: new Date(),
+              lastErrorAt: null,
+              lastErrorReason: null,
+            },
+          });
+          return;
+        }
+
+        const errorReason = ticket?.details?.error ?? "Unknown Expo push delivery error";
+        await this.prisma.pushDevice.update({
+          where: { id: device.id },
+          data: {
+            lastErrorAt: new Date(),
+            lastErrorReason: errorReason,
+            status:
+              errorReason === "DeviceNotRegistered"
+                ? PushDeviceStatus.DISABLED
+                : PushDeviceStatus.ERROR,
+          },
+        });
+      }),
+    );
+  }
+
+  private toPushData(value?: Prisma.InputJsonValue) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      return null;
+    }
+
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, item]) => [
+        key,
+        item == null ? "" : String(item),
+      ]),
     );
   }
 

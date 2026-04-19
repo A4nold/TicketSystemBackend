@@ -6,6 +6,7 @@ import { useMemo, useState, useTransition } from "react";
 import { z } from "zod";
 
 import { useAuth } from "@/components/providers/auth-provider";
+import { SupportEscalationPanel } from "@/components/support/support-escalation-panel";
 import { Panel } from "@/components/ui/panel";
 import { ApiError } from "@/lib/api/client";
 import {
@@ -448,6 +449,16 @@ export function AuthScreen({
                 />
               </label>
 
+              <div className="flex items-center justify-between gap-3 text-sm">
+                <span className="text-muted">Lost access to your wallet?</span>
+                <Link
+                  href="/forgot-password"
+                  className="font-medium text-accent transition hover:text-accent-strong"
+                >
+                  Reset password
+                </Link>
+              </div>
+
               <button
                 type="submit"
                 disabled={isPending}
@@ -474,6 +485,12 @@ export function AuthScreen({
               </Link>
             </p>
           </div>
+
+          <SupportEscalationPanel
+            body="If sign-in still fails after checking your password or using the reset flow, contact support so the team can review account status before your next event."
+            subject="TicketSystem account access help"
+            title="Still having trouble signing in?"
+          />
         </div>
       </Panel>
     </div>

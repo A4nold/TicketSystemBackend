@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 
 import { useAuth } from "@/components/providers/auth-provider";
+import { SupportEscalationPanel } from "@/components/support/support-escalation-panel";
 import { Panel } from "@/components/ui/panel";
 import { ProtectedSurfaceGate } from "@/features/auth/protected-surface-gate";
 import { getOrderById } from "@/lib/orders/orders-client";
@@ -197,114 +198,134 @@ export function CheckoutReturnStatus({
         ) : null}
 
         {!isLoading && !isSuccess && isPending && order ? (
-          <Panel className="border-warning/30 bg-warning/8">
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <p className="text-sm font-medium uppercase tracking-[0.24em] text-warning">
-                  Payment still confirming
-                </p>
-                <h2 className="font-display text-3xl text-foreground">
-                  Your purchase is still being finalized.
-                </h2>
-                <p className="text-sm leading-6 text-foreground/85">
-                  We found order <span className="font-mono">{order.id}</span>, but the backend
-                  has not finalized payment yet. Ticket availability depends on final confirmation.
-                </p>
-              </div>
+          <div className="space-y-4">
+            <Panel className="border-warning/30 bg-warning/8">
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <p className="text-sm font-medium uppercase tracking-[0.24em] text-warning">
+                    Payment still confirming
+                  </p>
+                  <h2 className="font-display text-3xl text-foreground">
+                    Your purchase is still being finalized.
+                  </h2>
+                  <p className="text-sm leading-6 text-foreground/85">
+                    We found order <span className="font-mono">{order.id}</span>, but the backend
+                    has not finalized payment yet. Ticket availability depends on final confirmation.
+                  </p>
+                </div>
 
-              <div className="rounded-[1.35rem] border border-warning/20 bg-black/10 p-4 text-sm leading-6 text-muted">
-                Current payment state: {order.paymentStatus ?? "unknown"}.
-                {" "}
-                Checkout state: {order.checkoutStatus ?? "unknown"}.
-              </div>
+                <div className="rounded-[1.35rem] border border-warning/20 bg-black/10 p-4 text-sm leading-6 text-muted">
+                  Current payment state: {order.paymentStatus ?? "unknown"}.{" "}
+                  Checkout state: {order.checkoutStatus ?? "unknown"}.
+                </div>
 
-              <div className="flex flex-wrap gap-3">
-                <button
-                  type="button"
-                  onClick={() => orderQuery.refetch()}
-                  className="inline-flex rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-surface-soft"
-                >
-                  Refresh payment status
-                </button>
-                <Link
-                  href={attendeeHref}
-                  className="inline-flex rounded-full border border-border bg-white/8 px-5 py-3 text-sm font-semibold text-foreground transition hover:border-accent/50 hover:bg-white/12"
-                >
-                  Back to attendee surface
-                </Link>
+                <div className="flex flex-wrap gap-3">
+                  <button
+                    type="button"
+                    onClick={() => orderQuery.refetch()}
+                    className="inline-flex rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-surface-soft"
+                  >
+                    Refresh payment status
+                  </button>
+                  <Link
+                    href={attendeeHref}
+                    className="inline-flex rounded-full border border-border bg-white/8 px-5 py-3 text-sm font-semibold text-foreground transition hover:border-accent/50 hover:bg-white/12"
+                  >
+                    Back to attendee surface
+                  </Link>
+                </div>
               </div>
-            </div>
-          </Panel>
+            </Panel>
+            <SupportEscalationPanel
+              body={`If payment remains pending and the wallet still does not update, contact support with order ${order.id} before retrying multiple purchases.`}
+              subject={`TicketSystem payment confirmation help for ${order.id}`}
+              title="Need help with this order?"
+            />
+          </div>
         ) : null}
 
         {!isLoading && !isSuccess && !isPending && (isCancelled || mode === "cancel") ? (
-          <Panel className="border-border bg-black/10">
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <p className="text-sm font-medium uppercase tracking-[0.24em] text-accent-warm">
-                  Checkout not completed
-                </p>
-                <h2 className="font-display text-3xl text-foreground">
-                  No completed payment was recorded for this return.
-                </h2>
-                <p className="text-sm leading-6 text-muted">
-                  {order
-                    ? `Order ${order.id} is currently ${order.status.toLowerCase()}.`
-                    : "This return path did not produce a confirmed paid order."}
-                </p>
-              </div>
+          <div className="space-y-4">
+            <Panel className="border-border bg-black/10">
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <p className="text-sm font-medium uppercase tracking-[0.24em] text-accent-warm">
+                    Checkout not completed
+                  </p>
+                  <h2 className="font-display text-3xl text-foreground">
+                    No completed payment was recorded for this return.
+                  </h2>
+                  <p className="text-sm leading-6 text-muted">
+                    {order
+                      ? `Order ${order.id} is currently ${order.status.toLowerCase()}.`
+                      : "This return path did not produce a confirmed paid order."}
+                  </p>
+                </div>
 
-              <div className="flex flex-wrap gap-3">
-                <Link
-                  href="/"
-                  className="inline-flex rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-surface-soft"
-                >
-                  Return to public home
-                </Link>
-                <Link
-                  href={attendeeHref}
-                  className="inline-flex rounded-full border border-border bg-white/8 px-5 py-3 text-sm font-semibold text-foreground transition hover:border-accent/50 hover:bg-white/12"
-                >
-                  Back to attendee surface
-                </Link>
+                <div className="flex flex-wrap gap-3">
+                  <Link
+                    href="/"
+                    className="inline-flex rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-surface-soft"
+                  >
+                    Return to public home
+                  </Link>
+                  <Link
+                    href={attendeeHref}
+                    className="inline-flex rounded-full border border-border bg-white/8 px-5 py-3 text-sm font-semibold text-foreground transition hover:border-accent/50 hover:bg-white/12"
+                  >
+                    Back to attendee surface
+                  </Link>
+                </div>
               </div>
-            </div>
-          </Panel>
+            </Panel>
+            <SupportEscalationPanel
+              body="If you saw a bank or card charge but this return screen did not confirm payment, contact support before trying the same purchase again."
+              subject="TicketSystem checkout return follow-up"
+              title="Charge seen, but nothing in your wallet?"
+            />
+          </div>
         ) : null}
 
         {!isLoading && hasLookupError ? (
-          <Panel className="border-danger/30 bg-danger/10">
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <p className="text-sm font-medium uppercase tracking-[0.24em] text-danger">
-                  Could not confirm checkout result
-                </p>
-                <h2 className="font-display text-3xl text-foreground">
-                  We could not load the latest order state.
-                </h2>
-                <p className="text-sm leading-6 text-foreground/85">
-                  This can happen if the payment result is still settling or the network
-                  request failed. Retry before assuming your tickets were issued.
-                </p>
-              </div>
+          <div className="space-y-4">
+            <Panel className="border-danger/30 bg-danger/10">
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <p className="text-sm font-medium uppercase tracking-[0.24em] text-danger">
+                    Could not confirm checkout result
+                  </p>
+                  <h2 className="font-display text-3xl text-foreground">
+                    We could not load the latest order state.
+                  </h2>
+                  <p className="text-sm leading-6 text-foreground/85">
+                    This can happen if the payment result is still settling or the network
+                    request failed. Retry before assuming your tickets were issued.
+                  </p>
+                </div>
 
-              <div className="flex flex-wrap gap-3">
-                <button
-                  type="button"
-                  onClick={() => orderQuery.refetch()}
-                  className="inline-flex rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-surface-soft"
-                >
-                  Retry order lookup
-                </button>
-                <Link
-                  href={attendeeHref}
-                  className="inline-flex rounded-full border border-danger/30 bg-white/8 px-5 py-3 text-sm font-semibold text-foreground transition hover:border-danger/50 hover:bg-white/12"
-                >
-                  Go to attendee surface
-                </Link>
+                <div className="flex flex-wrap gap-3">
+                  <button
+                    type="button"
+                    onClick={() => orderQuery.refetch()}
+                    className="inline-flex rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-surface-soft"
+                  >
+                    Retry order lookup
+                  </button>
+                  <Link
+                    href={attendeeHref}
+                    className="inline-flex rounded-full border border-danger/30 bg-white/8 px-5 py-3 text-sm font-semibold text-foreground transition hover:border-danger/50 hover:bg-white/12"
+                  >
+                    Go to attendee surface
+                  </Link>
+                </div>
               </div>
-            </div>
-          </Panel>
+            </Panel>
+            <SupportEscalationPanel
+              body="If this confirmation screen still cannot recover the order state, contact support with any Stripe confirmation, order id, or event details you have."
+              subject="TicketSystem checkout confirmation lookup failed"
+              title="Still not seeing the latest order status?"
+            />
+          </div>
         ) : null}
       </div>
     </ProtectedSurfaceGate>

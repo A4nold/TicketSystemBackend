@@ -6,6 +6,7 @@ import {
 import { OrderStatus, Prisma } from "@prisma/client";
 
 import { AuthenticatedUser } from "../auth/types/authenticated-user.type";
+import { NotificationsService } from "../notifications/notifications.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { ConfirmPaymentDto } from "./dto/confirm-payment.dto";
 import { toOrderResponse } from "./mappers/order-response.mapper";
@@ -15,6 +16,7 @@ import { PurchasedTicketIssuanceService } from "./purchased-ticket-issuance.serv
 export class OrderPaymentService {
   constructor(
     private readonly prisma: PrismaService,
+    private readonly notificationsService: NotificationsService,
     private readonly purchasedTicketIssuanceService: PurchasedTicketIssuanceService,
   ) {}
 
@@ -79,6 +81,13 @@ export class OrderPaymentService {
         where: { id: updatedOrder.id },
         include: this.orderInclude(),
       });
+    });
+
+    await this.notificationsService.notifyOrderPaid({
+      eventTitle: paidOrder.event.title,
+      orderId: paidOrder.id,
+      ticketCount: paidOrder.tickets.length,
+      userId: paidOrder.userId,
     });
 
     return toOrderResponse(paidOrder);

@@ -149,15 +149,26 @@ Frontend uses [`.env.example`](/Users/arnoldekechi/RiderProjects/ticketsystem/fr
 
 ```env
 NEXT_PUBLIC_API_BASE_URL=http://localhost:3000
+NEXT_PUBLIC_SUPPORT_EMAIL=notifications@notification.notifyus.uk
+NEXT_PUBLIC_SUPPORT_LABEL=Support team
 ```
 
 Mobile uses:
 
 ```env
 EXPO_PUBLIC_API_BASE_URL=http://localhost:3000
+EXPO_PUBLIC_SUPPORT_EMAIL=notifications@notification.notifyus.uk
+EXPO_PUBLIC_SUPPORT_LABEL=Support team
+EXPO_PUBLIC_EXPO_PROJECT_ID=
 ```
 
-For real-device Expo Go testing against Railway, point `EXPO_PUBLIC_API_BASE_URL` at the backend API service domain that serves `/api/*`, not the frontend/static Railway domain.
+For real-device mobile testing against Railway, point `EXPO_PUBLIC_API_BASE_URL` at the backend API service domain that serves `/api/*`, not the frontend/static Railway domain.
+
+`PUBLIC_APP_URL` is also used for account recovery emails. Set it to the public web origin that should receive password reset links, such as your deployed frontend or your local web app during development.
+
+`NEXT_PUBLIC_SUPPORT_EMAIL` / `EXPO_PUBLIC_SUPPORT_EMAIL` and the optional `*_SUPPORT_LABEL` values drive the visible support and escalation links shown on auth, checkout, wallet, account, and scanner blocker states.
+
+Mobile push registration can also use `EXPO_PUBLIC_EXPO_PROJECT_ID` when you want Expo push tokens to resolve cleanly in EAS and local development-build environments. For `expo-notifications`, use a development build instead of Expo Go.
 
 ### 3. Run the backend
 
@@ -332,11 +343,19 @@ Recommended sequence:
 
 ```bash
 # 1. Check production migration state
+# Use Railway Postgres `DATABASE_PUBLIC_URL` when running from your machine.
 DATABASE_URL="<production public postgres url>" npx prisma migrate status --schema prisma/schema.prisma
 
 # 2. Apply migrations first
 DATABASE_URL="<production public postgres url>" npm run migrate:deploy
 ```
+
+Prisma migration hygiene:
+
+- local development database is now baselined with Prisma migration history
+- production Railway database is also baselined and current
+- when running Prisma CLI from your machine against Railway Postgres, use the public Postgres URL, not Railway's internal `postgres.railway.internal` hostname
+- if a migration is ever applied manually in production, reconcile Prisma history with `npx prisma migrate resolve --applied <migration_name>` before the next deploy
 
 Backend:
 

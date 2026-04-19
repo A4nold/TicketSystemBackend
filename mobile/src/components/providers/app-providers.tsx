@@ -3,6 +3,7 @@ import { type PropsWithChildren, useState } from "react";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { AuthProvider } from "@/components/providers/auth-provider";
+import { PushNotificationsProvider } from "@/components/providers/push-notifications-provider";
 import { WalletSyncProvider } from "@/components/providers/wallet-sync-provider";
 
 export function AppProviders({ children }: PropsWithChildren) {
@@ -21,7 +22,9 @@ export function AppProviders({ children }: PropsWithChildren) {
     <SafeAreaProvider>
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
-          <WalletSyncProvider>{children}</WalletSyncProvider>
+          <PushNotificationsProvider>
+            <WalletSyncProvider>{children}</WalletSyncProvider>
+          </PushNotificationsProvider>
         </AuthProvider>
       </QueryClientProvider>
     </SafeAreaProvider>

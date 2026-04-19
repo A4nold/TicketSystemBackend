@@ -6,6 +6,7 @@ import {
 import { OrderStatus, PaymentProvider, Prisma } from "@prisma/client";
 import Stripe from "stripe";
 
+import { NotificationsService } from "../notifications/notifications.service";
 import { type FeePolicy } from "../orders/fee-policy";
 import { PrismaService } from "../prisma/prisma.service";
 
@@ -43,7 +44,10 @@ type StripeCheckoutState = {
 
 @Injectable()
 export class PaymentsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notificationsService: NotificationsService,
+  ) {}
 
   async createCheckoutSession(order: CheckoutOrder) {
     const stripe = this.getStripeClient();
@@ -325,7 +329,7 @@ export class PaymentsService {
 
     const paidAt = new Date();
 
-    await this.prisma.$transaction(async (tx) => {
+    const paidOrder = await this.prisma.$transaction(async (tx) => {
       const updatedOrder = await tx.order.update({
         where: { id: orderId },
         data: {
@@ -352,7 +356,7 @@ export class PaymentsService {
       });
 
       if (updatedOrder.tickets.length > 0) {
-        return;
+        return updatedOrder;
       }
 
       const eventCode = this.toEventCode(updatedOrder.event.slug);
@@ -402,6 +406,32 @@ export class PaymentsService {
           });
         }
       }
+      return tx.order.findUniqueOrThrow({
+        where: { id: updatedOrder.id },
+        include: {
+          event: true,
+          items: {
+            include: {
+              ticketType: true,
+            },
+            orderBy: {
+              createdAt: "asc",
+            },
+          },
+          tickets: {
+            orderBy: {
+              createdAt: "asc",
+            },
+          },
+        },
+      });
+    });
+
+    await this.notificationsService.notifyOrderPaid({
+      eventTitle: paidOrder.event.title,
+      orderId: paidOrder.id,
+      ticketCount: paidOrder.tickets.length,
+      userId: paidOrder.userId,
     });
   }
 

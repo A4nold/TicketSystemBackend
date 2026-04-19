@@ -5,6 +5,7 @@ import { useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { useAuth } from "@/components/providers/auth-provider";
+import { SupportEscalationPanel } from "@/components/support/support-escalation-panel";
 import { Panel } from "@/components/ui/panel";
 import {
   listOwnedTickets,
@@ -221,30 +222,37 @@ export function OwnedTicketList({ eventSlug, onTicketsLoaded }: OwnedTicketListP
 
   if (ticketQuery.isError) {
     return (
-      <Panel className="border-warning/30 bg-warning/8">
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <p className="text-sm font-medium uppercase tracking-[0.24em] text-warning">
-              Could not load owned tickets
-            </p>
-            <h2 className="font-display text-3xl text-foreground">
-              Your ticket wallet needs another try.
-            </h2>
-            <p className="text-sm leading-6 text-foreground/85">
-              We could not confirm the latest ownership list right now. Retry before
-              assuming tickets are missing.
-            </p>
-          </div>
+      <div className="space-y-4">
+        <Panel className="border-warning/30 bg-warning/8">
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <p className="text-sm font-medium uppercase tracking-[0.24em] text-warning">
+                Could not load owned tickets
+              </p>
+              <h2 className="font-display text-3xl text-foreground">
+                Your ticket wallet needs another try.
+              </h2>
+              <p className="text-sm leading-6 text-foreground/85">
+                We could not confirm the latest ownership list right now. Retry before
+                assuming tickets are missing.
+              </p>
+            </div>
 
-          <button
-            type="button"
-            onClick={() => ticketQuery.refetch()}
-            className="inline-flex rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-surface-soft"
-          >
-            Refresh wallet
-          </button>
-        </div>
-      </Panel>
+            <button
+              type="button"
+              onClick={() => ticketQuery.refetch()}
+              className="inline-flex rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-surface-soft"
+            >
+              Refresh wallet
+            </button>
+          </div>
+        </Panel>
+        <SupportEscalationPanel
+          body="If a paid ticket or accepted transfer still does not appear after refreshing, contact support with the event name and any order or ticket reference you have."
+          subject="TicketSystem wallet lookup issue"
+          title="Still not seeing the latest wallet state?"
+        />
+      </div>
     );
   }
 

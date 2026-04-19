@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useMemo, useState, useTransition } from "react";
 
+import { SupportEscalationPanel } from "@/components/support/support-escalation-panel";
 import { Panel } from "@/components/ui/panel";
 import { ProtectedSurfaceGate } from "@/features/auth/protected-surface-gate";
 import { ApiError } from "@/lib/api/client";
@@ -292,6 +293,14 @@ export function CheckoutStartReview({
                 <p className="rounded-[1.25rem] border border-danger/30 bg-danger/10 px-4 py-3 text-sm leading-6 text-danger">
                   {errorMessage}
                 </p>
+              ) : null}
+
+              {errorMessage ? (
+                <SupportEscalationPanel
+                  body="If checkout still will not start after retrying, contact support before attempting repeated payments. Include the event name and ticket type you were trying to buy."
+                  subject={`TicketSystem checkout start issue for ${event.title}`}
+                  title="Still not getting into checkout?"
+                />
               ) : null}
             </div>
           </Panel>

@@ -14,6 +14,7 @@ import {
 
 import { useAuth } from "@/components/providers/auth-provider";
 import { useWalletSync } from "@/components/providers/wallet-sync-provider";
+import { SupportCard } from "@/components/support/support-card";
 import { ActionButton, Card, Screen } from "@/components/ui";
 import { getTicketStatusMeta, groupTicketsByEvent } from "@/features/wallet/wallet-model";
 import { formatDateTime } from "@/lib/formatters";
@@ -216,13 +217,20 @@ export function WalletHomeScreen() {
         ) : null}
 
         {walletQuery.isError ? (
-          <Card tone="warning">
-            <Text style={styles.sectionTitle}>Wallet needs another try</Text>
-            <Text style={styles.copy}>
-              We couldn't load your latest ticket status. Please try again.
-            </Text>
-            <ActionButton onPress={() => void walletQuery.refetch()} title="Retry wallet" />
-          </Card>
+          <>
+            <Card tone="warning">
+              <Text style={styles.sectionTitle}>Wallet needs another try</Text>
+              <Text style={styles.copy}>
+                We couldn't load your latest ticket status. Please try again.
+              </Text>
+              <ActionButton onPress={() => void walletQuery.refetch()} title="Retry wallet" />
+            </Card>
+            <SupportCard
+              body="If a paid ticket or accepted transfer still does not appear after refreshing, contact support with the event name and any order or ticket reference you have."
+              subject="TicketSystem wallet lookup issue"
+              title="Still not seeing the latest wallet state?"
+            />
+          </>
         ) : null}
 
         {!walletQuery.isLoading && !walletQuery.isError && !primaryTicket ? (

@@ -12,6 +12,11 @@ import {
 import { CurrentUser } from "./decorators/current-user.decorator";
 import { AuthResponseDto, AuthUserResponseDto } from "./dto/auth-response.dto";
 import { LoginDto } from "./dto/login.dto";
+import {
+  ForgotPasswordDto,
+  PasswordResetResponseDto,
+  ResetPasswordDto,
+} from "./dto/password-reset.dto";
 import { RegisterDto } from "./dto/register.dto";
 import { JwtAuthGuard } from "./guards/jwt-auth.guard";
 import { AuthenticatedUser } from "./types/authenticated-user.type";
@@ -50,6 +55,33 @@ export class AuthController {
   })
   login(@Body() payload: LoginDto) {
     return this.authService.login(payload);
+  }
+
+  @Post("forgot-password")
+  @ApiOperation({
+    summary: "Request a password reset link",
+  })
+  @ApiOkResponse({
+    description: "Password reset request accepted",
+    type: PasswordResetResponseDto,
+  })
+  forgotPassword(@Body() payload: ForgotPasswordDto) {
+    return this.authService.requestPasswordReset(payload);
+  }
+
+  @Post("reset-password")
+  @ApiOperation({
+    summary: "Reset password using a valid reset token",
+  })
+  @ApiOkResponse({
+    description: "Password has been reset successfully",
+    type: PasswordResetResponseDto,
+  })
+  @ApiBadRequestResponse({
+    description: "Reset token is invalid, expired, or the new password is invalid",
+  })
+  resetPassword(@Body() payload: ResetPasswordDto) {
+    return this.authService.resetPassword(payload);
   }
 
   @Get("me")

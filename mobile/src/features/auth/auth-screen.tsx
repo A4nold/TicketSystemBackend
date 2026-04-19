@@ -13,6 +13,7 @@ import {
 } from "react-native";
 
 import { useAuth } from "@/components/providers/auth-provider";
+import { SupportCard } from "@/components/support/support-card";
 import { ActionButton, Card, Screen } from "@/components/ui";
 import { palette } from "@/styles/theme";
 
@@ -263,6 +264,12 @@ export function AuthScreen({ defaultMode = "login" }: { defaultMode?: AuthMode }
 
             {activeError ? <Text style={styles.error}>{activeError}</Text> : null}
 
+            {mode === "login" ? (
+              <Link href="/(auth)/forgot-password" style={styles.supportLink}>
+                Reset password
+              </Link>
+            ) : null}
+
             <ActionButton
               loading={isAuthenticating}
               onPress={() => void (mode === "register" ? submitRegister() : submitLogin())}
@@ -285,6 +292,12 @@ export function AuthScreen({ defaultMode = "login" }: { defaultMode?: AuthMode }
               Back to discovery
             </Link>
           )}
+
+          <SupportCard
+            body="If sign-in still fails after checking your password or using the reset flow, contact support so the team can review account status before your next event."
+            subject="TicketSystem account access help"
+            title="Still having trouble signing in?"
+          />
         </ScrollView>
       </KeyboardAvoidingView>
     </Screen>
@@ -387,5 +400,11 @@ const styles = StyleSheet.create({
   modeSwitch: {
     flexDirection: "row",
     gap: 10,
+  },
+  supportLink: {
+    color: palette.accentDeep,
+    fontSize: 14,
+    fontWeight: "700",
+    textAlign: "right",
   },
 });

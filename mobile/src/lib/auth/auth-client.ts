@@ -15,6 +15,19 @@ export type LoginPayload = {
   password: string;
 };
 
+export type ForgotPasswordPayload = {
+  email: string;
+};
+
+export type ResetPasswordPayload = {
+  password: string;
+  token: string;
+};
+
+export type PasswordResetResponse = {
+  message: string;
+};
+
 export async function registerAttendee(payload: RegisterPayload) {
   return apiFetch<AuthResponse>("/api/auth/register", {
     body: JSON.stringify(payload),
@@ -27,6 +40,26 @@ export async function registerAttendee(payload: RegisterPayload) {
 
 export async function loginAttendee(payload: LoginPayload) {
   return apiFetch<AuthResponse>("/api/auth/login", {
+    body: JSON.stringify(payload),
+    headers: {
+      "Content-Type": "application/json",
+    },
+    method: "POST",
+  });
+}
+
+export async function requestPasswordReset(payload: ForgotPasswordPayload) {
+  return apiFetch<PasswordResetResponse>("/api/auth/forgot-password", {
+    body: JSON.stringify(payload),
+    headers: {
+      "Content-Type": "application/json",
+    },
+    method: "POST",
+  });
+}
+
+export async function resetPassword(payload: ResetPasswordPayload) {
+  return apiFetch<PasswordResetResponse>("/api/auth/reset-password", {
     body: JSON.stringify(payload),
     headers: {
       "Content-Type": "application/json",

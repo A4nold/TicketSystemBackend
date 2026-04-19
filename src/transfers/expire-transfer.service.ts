@@ -2,11 +2,15 @@ import { Injectable } from "@nestjs/common";
 import { TicketStatus, TransferStatus } from "@prisma/client";
 
 import { AuthenticatedUser } from "../auth/types/authenticated-user.type";
+import { NotificationsService } from "../notifications/notifications.service";
 import { PrismaService } from "../prisma/prisma.service";
 
 @Injectable()
 export class ExpireTransferService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notificationsService: NotificationsService,
+  ) {}
 
   async expireOverdueTransfersForUser(user: AuthenticatedUser) {
     const overdueTransfers = await this.prisma.transferRequest.findMany({
@@ -22,7 +26,15 @@ export class ExpireTransferService {
         ],
       },
       include: {
-        ticket: true,
+        ticket: {
+          include: {
+            event: {
+              select: {
+                title: true,
+              },
+            },
+          },
+        },
       },
     });
 
@@ -45,7 +57,15 @@ export class ExpireTransferService {
         },
       },
       include: {
-        ticket: true,
+        ticket: {
+          include: {
+            event: {
+              select: {
+                title: true,
+              },
+            },
+          },
+        },
       },
     });
 
@@ -59,8 +79,14 @@ export class ExpireTransferService {
 
   private async expireTransferRecord(transfer: {
     id: string;
+    recipientUserId: string | null;
+    senderUserId: string;
     ticket: {
+      event: {
+        title: string;
+      };
       id: string;
+      serialNumber: string;
       status: TicketStatus;
     };
   }) {
@@ -80,6 +106,13 @@ export class ExpireTransferService {
           },
         });
       }
+    });
+
+    await this.notificationsService.notifyTransferExpired({
+      eventTitle: transfer.ticket.event.title,
+      recipientUserId: transfer.recipientUserId,
+      senderUserId: transfer.senderUserId,
+      serialNumber: transfer.ticket.serialNumber,
     });
   }
 }

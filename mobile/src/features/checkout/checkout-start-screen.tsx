@@ -12,6 +12,7 @@ import {
 } from "react-native";
 
 import { useAuth } from "@/components/providers/auth-provider";
+import { SupportCard } from "@/components/support/support-card";
 import { ActionButton, Card, Screen } from "@/components/ui";
 import { getPublicEventBySlug } from "@/lib/events/public-events-client";
 import { createCheckoutOrder, getCheckoutQuote } from "@/lib/orders/orders-client";
@@ -67,6 +68,36 @@ export function CheckoutStartScreen() {
     enabled: Boolean(eventSlug),
     queryFn: () => getPublicEventBySlug(eventSlug),
     queryKey: ["checkout-start-event", eventSlug],
+  });
+  const event = eventQuery.data ?? null;
+  const selectedTicketType =
+    event?.ticketTypes.find((candidate) => candidate.id === ticketTypeId) ??
+    event?.ticketTypes[0] ??
+    null;
+  const quoteQuery = useQuery({
+    enabled: Boolean(session?.accessToken && event && selectedTicketType),
+    queryFn: () =>
+      getCheckoutQuote(
+        {
+          eventSlug: event!.slug,
+          items: [
+            {
+              quantity,
+              ticketTypeId: selectedTicketType!.id,
+            },
+          ],
+          paymentProvider: "STRIPE",
+        },
+        session!.accessToken,
+      ),
+    queryKey: [
+      "mobile-checkout-quote",
+      event?.slug,
+      selectedTicketType?.id,
+      quantity,
+      session?.accessToken,
+    ],
+    retry: 1,
   });
 
   if (!session) {
@@ -142,28 +173,6 @@ export function CheckoutStartScreen() {
   }
 
   const activeSession = session;
-  const event = eventQuery.data;
-  const selectedTicketType =
-    event.ticketTypes.find((candidate) => candidate.id === ticketTypeId) ?? event.ticketTypes[0] ?? null;
-  const quoteQuery = useQuery({
-    enabled: Boolean(activeSession?.accessToken && selectedTicketType),
-    queryFn: () =>
-      getCheckoutQuote(
-        {
-          eventSlug: event.slug,
-          items: [
-            {
-              quantity,
-              ticketTypeId: selectedTicketType!.id,
-            },
-          ],
-          paymentProvider: "STRIPE",
-        },
-        activeSession.accessToken,
-      ),
-    queryKey: ["mobile-checkout-quote", event.slug, selectedTicketType?.id, quantity, activeSession?.accessToken],
-    retry: 1,
-  });
 
   if (!selectedTicketType) {
     return (
@@ -178,7 +187,7 @@ export function CheckoutStartScreen() {
           <Link
             href={{
               pathname: "/(public)/events/[slug]",
-              params: { slug: event.slug },
+              params: { slug: event!.slug },
             }}
             style={styles.secondaryLink}
           >
@@ -189,7 +198,9 @@ export function CheckoutStartScreen() {
     );
   }
 
-  const subtotal = selectedTicketType.priceValue * quantity;
+  const resolvedEvent = event!;
+  const resolvedTicketType = selectedTicketType;
+  const subtotal = resolvedTicketType.priceValue * quantity;
 
   async function beginPayment() {
     setErrorMessage(null);
@@ -199,12 +210,12 @@ export function CheckoutStartScreen() {
       const order = await createCheckoutOrder(
         {
           cancelReturnUrl: ExpoLinking.createURL("/checkout/cancel"),
-          eventSlug: event.slug,
+          eventSlug: resolvedEvent.slug,
           idempotencyKey,
           items: [
             {
               quantity,
-              ticketTypeId: selectedTicketType.id,
+              ticketTypeId: resolvedTicketType.id,
             },
           ],
           paymentProvider: "STRIPE",
@@ -241,9 +252,9 @@ export function CheckoutStartScreen() {
         <Card padded={false} tone="accent">
           <View style={styles.heroShell}>
             <Text style={styles.heroEyebrow}>Checkout start</Text>
-            <Text style={styles.heroTitle}>{event.title}</Text>
-            <Text style={styles.heroCopy}>{event.scheduleLabel}</Text>
-            <Text style={styles.heroMeta}>{event.venueLabel}</Text>
+            <Text style={styles.heroTitle}>{resolvedEvent.title}</Text>
+            <Text style={styles.heroCopy}>{resolvedEvent.scheduleLabel}</Text>
+            <Text style={styles.heroMeta}>{resolvedEvent.venueLabel}</Text>
           </View>
         </Card>
 
@@ -252,8 +263,8 @@ export function CheckoutStartScreen() {
           <View style={styles.summaryGrid}>
             <View style={styles.summaryBlock}>
               <Text style={styles.summaryLabel}>Ticket type</Text>
-              <Text style={styles.summaryValue}>{selectedTicketType.name}</Text>
-              <Text style={styles.copy}>{selectedTicketType.priceLabel} each</Text>
+              <Text style={styles.summaryValue}>{resolvedTicketType.name}</Text>
+              <Text style={styles.copy}>{resolvedTicketType.priceLabel} each</Text>
             </View>
             <View style={styles.summaryBlock}>
               <Text style={styles.summaryLabel}>Quantity</Text>
@@ -261,8 +272,8 @@ export function CheckoutStartScreen() {
                 {quantity} ticket{quantity === 1 ? "" : "s"}
               </Text>
               <Text style={styles.copy}>
-                {selectedTicketType.maxPerOrder
-                  ? `Limit ${selectedTicketType.maxPerOrder} per order`
+                {resolvedTicketType.maxPerOrder
+                  ? `Limit ${resolvedTicketType.maxPerOrder} per order`
                   : "This selection can continue into checkout now."}
               </Text>
             </View>
@@ -273,7 +284,7 @@ export function CheckoutStartScreen() {
           <Text style={styles.sectionTitle}>Pricing summary</Text>
           <View style={styles.pricingRow}>
             <Text style={styles.copy}>
-              {selectedTicketType.name} x {quantity}
+              {resolvedTicketType.name} x {quantity}
             </Text>
             <Text style={styles.pricingValue}>
               {quoteQuery.data ? formatMoney(Number(quoteQuery.data.subtotalAmount)) : formatMoney(subtotal)}
@@ -314,13 +325,20 @@ export function CheckoutStartScreen() {
           <Link
             href={{
               pathname: "/(public)/events/[slug]",
-              params: { slug: event.slug },
+              params: { slug: resolvedEvent.slug },
             }}
             style={styles.secondaryLink}
           >
             Back to event details
           </Link>
           {errorMessage ? <Text style={styles.error}>{errorMessage}</Text> : null}
+          {errorMessage ? (
+            <SupportCard
+              body={`If checkout still will not start after retrying, contact support before attempting repeated payments. Include ${resolvedEvent.title} and ${resolvedTicketType.name} in the request.`}
+              subject={`TicketSystem checkout start issue for ${resolvedEvent.title}`}
+              title="Still not getting into checkout?"
+            />
+          ) : null}
         </Card>
       </ScrollView>
     </Screen>

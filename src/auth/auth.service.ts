@@ -1,18 +1,23 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   UnauthorizedException,
 } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { StaffRole } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import { createHash, randomBytes } from "crypto";
 
 import { PrismaService } from "../prisma/prisma.service";
 import { LoginDto } from "./dto/login.dto";
+import { ForgotPasswordDto, ResetPasswordDto } from "./dto/password-reset.dto";
 import { RegisterDto } from "./dto/register.dto";
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
@@ -105,6 +110,105 @@ export class AuthService {
     return this.toAuthUser(user);
   }
 
+  async requestPasswordReset(payload: ForgotPasswordDto) {
+    const normalizedEmail = this.normalizeEmail(payload.email);
+    const user = await this.prisma.user.findUnique({
+      where: { email: normalizedEmail },
+      select: {
+        id: true,
+        email: true,
+        status: true,
+      },
+    });
+
+    if (!user || user.status !== "ACTIVE") {
+      return {
+        message: "If an account exists for that email, a password reset link has been sent.",
+      };
+    }
+
+    const rawToken = randomBytes(32).toString("hex");
+    const tokenHash = this.hashResetToken(rawToken);
+    const expiresAt = new Date(Date.now() + 1000 * 60 * 30);
+
+    await this.prisma.passwordResetToken.create({
+      data: {
+        userId: user.id,
+        tokenHash,
+        expiresAt,
+      },
+    });
+
+    await this.sendPasswordResetEmail({
+      email: user.email,
+      expiresAt,
+      resetUrl: this.buildPasswordResetUrl(rawToken),
+    });
+
+    return {
+      message: "If an account exists for that email, a password reset link has been sent.",
+    };
+  }
+
+  async resetPassword(payload: ResetPasswordDto) {
+    const tokenHash = this.hashResetToken(payload.token);
+    const resetToken = await this.prisma.passwordResetToken.findUnique({
+      where: {
+        tokenHash,
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            status: true,
+          },
+        },
+      },
+    });
+
+    if (
+      !resetToken ||
+      resetToken.usedAt ||
+      resetToken.expiresAt.getTime() < Date.now() ||
+      resetToken.user.status !== "ACTIVE"
+    ) {
+      throw new BadRequestException("This password reset link is invalid or has expired.");
+    }
+
+    const passwordHash = await bcrypt.hash(payload.password, 10);
+
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: resetToken.userId },
+        data: {
+          passwordHash,
+        },
+      }),
+      this.prisma.passwordResetToken.update({
+        where: { id: resetToken.id },
+        data: {
+          usedAt: new Date(),
+        },
+      }),
+      this.prisma.passwordResetToken.updateMany({
+        where: {
+          userId: resetToken.userId,
+          usedAt: null,
+          id: {
+            not: resetToken.id,
+          },
+        },
+        data: {
+          usedAt: new Date(),
+        },
+      }),
+    ]);
+
+    return {
+      message: "Your password has been reset successfully.",
+    };
+  }
+
   async validateJwtUser(userId: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
@@ -166,6 +270,75 @@ export class AuthService {
 
   private normalizeEmail(email: string) {
     return email.trim().toLowerCase();
+  }
+
+  private buildPasswordResetUrl(token: string) {
+    const publicAppUrl =
+      process.env.PUBLIC_APP_URL?.trim() ||
+      process.env.FRONTEND_APP_URL?.trim() ||
+      "http://localhost:3001";
+    const baseUrl = publicAppUrl.replace(/\/$/, "");
+
+    return `${baseUrl}/reset-password?token=${encodeURIComponent(token)}`;
+  }
+
+  private hashResetToken(token: string) {
+    return createHash("sha256").update(token).digest("hex");
+  }
+
+  private async sendPasswordResetEmail(input: {
+    email: string;
+    expiresAt: Date;
+    resetUrl: string;
+  }) {
+    const resendApiKey = process.env.RESEND_API_KEY;
+    const fromEmail =
+      process.env.NOTIFICATIONS_FROM_EMAIL ?? "Ticket System <no-reply@ticketsystem.local>";
+    const subject = "Reset your TicketSystem password";
+    const text = [
+      "We received a request to reset your TicketSystem password.",
+      `Reset your password: ${input.resetUrl}`,
+      `This link expires at: ${input.expiresAt.toISOString()}`,
+      "If you did not request this change, you can ignore this email.",
+    ].join("\n");
+    const html = [
+      "<p>We received a request to reset your TicketSystem password.</p>",
+      `<p><a href="${input.resetUrl}">Reset your password</a></p>`,
+      `<p>This link expires at <strong>${input.expiresAt.toISOString()}</strong>.</p>`,
+      "<p>If you did not request this change, you can ignore this email.</p>",
+    ].join("");
+
+    if (!resendApiKey) {
+      this.logger.log(
+        `Password reset email preview -> to=${input.email} subject="${subject}" resetUrl=${input.resetUrl}`,
+      );
+      return { delivered: false, provider: "log-only" as const };
+    }
+
+    const response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${resendApiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from: fromEmail,
+        to: [input.email],
+        subject,
+        text,
+        html,
+      }),
+    });
+
+    if (!response.ok) {
+      const body = await response.text();
+      this.logger.error(
+        `Password reset email failed: status=${response.status} body=${body}`,
+      );
+      return { delivered: false, provider: "resend" as const };
+    }
+
+    return { delivered: true, provider: "resend" as const };
   }
 
   private authUserSelect() {

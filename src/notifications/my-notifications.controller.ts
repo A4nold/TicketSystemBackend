@@ -1,4 +1,5 @@
 import {
+  Body,
   Controller,
   Get,
   Param,
@@ -22,6 +23,7 @@ import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { AuthenticatedUser } from "../auth/types/authenticated-user.type";
 import { ListUserNotificationsQueryDto } from "./dto/list-user-notifications-query.dto";
 import { PaginatedUserNotificationResponseDto } from "./dto/paginated-user-notification-response.dto";
+import { RegisterPushDeviceDto, UnregisterPushDeviceDto } from "./dto/register-push-device.dto";
 import { PostEventNotificationSweepService } from "./post-event-notification-sweep.service";
 import { NotificationsService } from "./notifications.service";
 import { UserNotificationResponseDto } from "./dto/user-notification-response.dto";
@@ -86,5 +88,27 @@ export class MyNotificationsController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.notificationsService.markNotificationAsRead(notificationId, user);
+  }
+
+  @Post("push-devices")
+  @ApiOperation({
+    summary: "Register a mobile push device for the authenticated user",
+  })
+  registerPushDevice(
+    @Body() payload: RegisterPushDeviceDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.notificationsService.registerPushDevice(user, payload);
+  }
+
+  @Post("push-devices/unregister")
+  @ApiOperation({
+    summary: "Unregister a mobile push device for the authenticated user",
+  })
+  unregisterPushDevice(
+    @Body() payload: UnregisterPushDeviceDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.notificationsService.unregisterPushDevice(user, payload);
   }
 }

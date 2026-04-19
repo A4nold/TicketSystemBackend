@@ -87,15 +87,10 @@ export class RemindTransferService {
     }
 
     if (pendingTransfer.recipientUserId) {
-      await this.notificationsService.createUserNotification({
-        actionUrl: `/transfer/accept/${encodeURIComponent(serialNumber)}`,
-        body: `The sender has reminded you about the pending transfer for ${ticket.event.title}.`,
-        metadata: {
-          serialNumber,
-        },
-        title: "Transfer reminder",
-        type: "TRANSFER_RECEIVED",
-        userId: pendingTransfer.recipientUserId,
+      await this.notificationsService.notifyTransferReminder({
+        eventTitle: ticket.event.title,
+        recipientUserId: pendingTransfer.recipientUserId,
+        serialNumber,
       });
     }
 

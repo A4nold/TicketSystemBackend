@@ -16,6 +16,7 @@ import {
 } from "react-native";
 
 import { useAuth } from "@/components/providers/auth-provider";
+import { SupportCard } from "@/components/support/support-card";
 import { ActionButton, Card, Screen } from "@/components/ui";
 import { canAccessScannerEvents, hasScannerSurfaceAccess } from "@/features/auth/scanner-access";
 import {
@@ -738,6 +739,14 @@ export function ScannerScreen() {
             </View>
           )}
         </SectionCard>
+
+        {scanError || (permission && !permission.granted) || latestOutcome?.outcome === "BLOCKED" ? (
+          <SupportCard
+            body="If camera access stays blocked, validation keeps failing, or a guest dispute needs follow-up, route the case to support with the event name and any ticket serial or token reference."
+            subject={`TicketSystem scanner help${selectedEvent ? ` for ${selectedEvent.title}` : ""}`}
+            title="Need help resolving a scan issue?"
+          />
+        ) : null}
       </ScrollView>
     </Screen>
   );

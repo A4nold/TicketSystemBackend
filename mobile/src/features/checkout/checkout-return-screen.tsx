@@ -3,6 +3,7 @@ import { Link, useLocalSearchParams } from "expo-router";
 import { Platform, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { useAuth } from "@/components/providers/auth-provider";
+import { SupportCard } from "@/components/support/support-card";
 import { ActionButton, Card, Screen } from "@/components/ui";
 import { getOrderById } from "@/lib/orders/orders-client";
 import { formatDateTime } from "@/lib/formatters";
@@ -54,15 +55,22 @@ export function CheckoutReturnScreen({ mode }: { mode: "cancel" | "success" }) {
         ) : null}
 
         {!session ? (
-          <Card tone="warning">
-            <Text style={styles.sectionTitle}>Sign in required</Text>
-            <Text style={styles.copy}>
-              Sign in again to reconnect this checkout result with your attendee wallet.
-            </Text>
-            <Link href="/(auth)/login" style={styles.primaryLink}>
-              Go to sign in
-            </Link>
-          </Card>
+          <>
+            <Card tone="warning">
+              <Text style={styles.sectionTitle}>Sign in required</Text>
+              <Text style={styles.copy}>
+                Sign in again to reconnect this checkout result with your attendee wallet.
+              </Text>
+              <Link href="/(auth)/login" style={styles.primaryLink}>
+                Go to sign in
+              </Link>
+            </Card>
+            <SupportCard
+              body="If you cannot reconnect this checkout result after signing in again, contact support with any order or payment reference you have."
+              subject="TicketSystem checkout return sign-in help"
+              title="Still not seeing this purchase in the app?"
+            />
+          </>
         ) : null}
 
         {!orderQuery.isLoading && session && isSuccess && order ? (
@@ -141,49 +149,63 @@ export function CheckoutReturnScreen({ mode }: { mode: "cancel" | "success" }) {
         ) : null}
 
         {!orderQuery.isLoading && session && !isSuccess && isPending && order ? (
-          <Card tone="warning" padded={false}>
-            <View style={styles.warningShell}>
-              <Text style={styles.heroEyebrow}>Still confirming</Text>
-              <Text style={styles.sectionTitle}>Payment is still being finalized.</Text>
-              <Text style={styles.copy}>
-                We found order {order.id}, but the backend is still checking the latest payment state.
-              </Text>
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Order total</Text>
-                <Text style={styles.summaryValue}>{orderTotalLabel}</Text>
+          <>
+            <Card tone="warning" padded={false}>
+              <View style={styles.warningShell}>
+                <Text style={styles.heroEyebrow}>Still confirming</Text>
+                <Text style={styles.sectionTitle}>Payment is still being finalized.</Text>
+                <Text style={styles.copy}>
+                  We found order {order.id}, but the backend is still checking the latest payment state.
+                </Text>
+                <View style={styles.summaryRow}>
+                  <Text style={styles.summaryLabel}>Order total</Text>
+                  <Text style={styles.summaryValue}>{orderTotalLabel}</Text>
+                </View>
+                <View style={styles.summaryRow}>
+                  <Text style={styles.summaryLabel}>Checkout state</Text>
+                  <Text style={styles.summaryValue}>{order.checkoutStatus ?? "unknown"}</Text>
+                </View>
+                <View style={styles.ctaStack}>
+                  <ActionButton onPress={() => void orderQuery.refetch()} title="Refresh payment status" />
+                  <Link href="/(tabs)/wallet" style={styles.secondaryLink}>
+                    Back to wallet
+                  </Link>
+                </View>
               </View>
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Checkout state</Text>
-                <Text style={styles.summaryValue}>{order.checkoutStatus ?? "unknown"}</Text>
-              </View>
-              <View style={styles.ctaStack}>
-                <ActionButton onPress={() => void orderQuery.refetch()} title="Refresh payment status" />
-                <Link href="/(tabs)/wallet" style={styles.secondaryLink}>
-                  Back to wallet
-                </Link>
-              </View>
-            </View>
-          </Card>
+            </Card>
+            <SupportCard
+              body={`If payment remains pending and the wallet still does not update, contact support with order ${order.id} before retrying multiple purchases.`}
+              subject={`TicketSystem payment confirmation help for ${order.id}`}
+              title="Need help with this order?"
+            />
+          </>
         ) : null}
 
         {!orderQuery.isLoading && session && !isSuccess && (isCancelled || mode === "cancel" || !order) ? (
-          <Card padded={false}>
-            <View style={styles.cancelShell}>
-              <Text style={styles.heroEyebrow}>Checkout not completed</Text>
-              <Text style={styles.sectionTitle}>No charge was confirmed in the app.</Text>
-              <Text style={styles.copy}>
-                You can reopen discovery to choose a different event or return to wallet without losing your current account session.
-              </Text>
-              <View style={styles.ctaStack}>
-                <Link href="/(public)" style={styles.primaryLink}>
-                  Back to discovery
-                </Link>
-                <Link href="/(tabs)/wallet" style={styles.secondaryLink}>
-                  Return to wallet
-                </Link>
+          <>
+            <Card padded={false}>
+              <View style={styles.cancelShell}>
+                <Text style={styles.heroEyebrow}>Checkout not completed</Text>
+                <Text style={styles.sectionTitle}>No charge was confirmed in the app.</Text>
+                <Text style={styles.copy}>
+                  You can reopen discovery to choose a different event or return to wallet without losing your current account session.
+                </Text>
+                <View style={styles.ctaStack}>
+                  <Link href="/(public)" style={styles.primaryLink}>
+                    Back to discovery
+                  </Link>
+                  <Link href="/(tabs)/wallet" style={styles.secondaryLink}>
+                    Return to wallet
+                  </Link>
+                </View>
               </View>
-            </View>
-          </Card>
+            </Card>
+            <SupportCard
+              body="If you saw a bank or card charge but this screen did not confirm payment, contact support before trying the same purchase again."
+              subject="TicketSystem checkout return follow-up"
+              title="Charge seen, but nothing in your wallet?"
+            />
+          </>
         ) : null}
 
         {!orderQuery.isLoading && session && order ? (

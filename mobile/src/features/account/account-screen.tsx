@@ -2,6 +2,8 @@ import { useRouter } from "expo-router";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { useAuth } from "@/components/providers/auth-provider";
+import { usePushNotifications } from "@/components/providers/push-notifications-provider";
+import { SupportCard } from "@/components/support/support-card";
 import { canManageOrganizerEvents, hasOrganizerSurfaceAccess } from "@/features/auth/organizer-access";
 import { canAccessScannerEvents, hasScannerSurfaceAccess } from "@/features/auth/scanner-access";
 import { ActionButton, Card, Screen } from "@/components/ui";
@@ -14,6 +16,15 @@ export function AccountScreen() {
   const canManageEvents = canManageOrganizerEvents(session?.user);
   const hasScannerAccess = hasScannerSurfaceAccess(session?.user);
   const canScanEvents = canAccessScannerEvents(session?.user);
+  const {
+    canRequestPermissions,
+    isEnabled,
+    isRegistering,
+    lastError: pushError,
+    permissionStatus,
+    registerForPushNotifications,
+    unregisterFromPushNotifications,
+  } = usePushNotifications();
 
   return (
     <Screen
@@ -118,15 +129,58 @@ export function AccountScreen() {
             </Text>
             <ActionButton
               onPress={() => {
-                void signOut().then(() => {
-                  router.replace("/(auth)/login");
-                });
+                void unregisterFromPushNotifications().then(() =>
+                  signOut().then(() => {
+                    router.replace("/(auth)/login");
+                  }),
+                );
               }}
               title="Sign out"
               variant="secondary"
             />
           </View>
         </Card>
+
+        <Card padded={false}>
+          <View style={styles.sectionShell}>
+            <Text style={styles.sectionTitle}>Push notifications</Text>
+            <Text style={styles.value}>
+              {permissionStatus === "unsupported"
+                ? "Physical device required"
+                : isEnabled
+                  ? "Enabled on this device"
+                  : permissionStatus === "granted"
+                    ? "Permission granted, registration pending"
+                    : "Not enabled yet"}
+            </Text>
+            <Text style={styles.copy}>
+              Purchase confirmations, incoming transfers, transfer reminders, and event reminders
+              can appear here even when the app is closed.
+            </Text>
+            {pushError ? <Text style={styles.error}>{pushError}</Text> : null}
+            {permissionStatus !== "unsupported" ? (
+              <ActionButton
+                loading={isRegistering}
+                onPress={() => {
+                  void registerForPushNotifications();
+                }}
+                title={
+                  isEnabled
+                    ? "Refresh notification registration"
+                    : canRequestPermissions
+                      ? "Enable push notifications"
+                      : "Finish notification setup"
+                }
+              />
+            ) : null}
+          </View>
+        </Card>
+
+        <SupportCard
+          body="Use this path if recovery, wallet delivery, or scanner access still fails after retrying in-app. Include your account email and the event or ticket reference involved."
+          subject="TicketSystem account support"
+          title="Need help with this account or event access?"
+        />
       </ScrollView>
     </Screen>
   );
@@ -142,6 +196,11 @@ const styles = StyleSheet.create({
     color: palette.muted,
     fontSize: 15,
     lineHeight: 22,
+  },
+  error: {
+    color: palette.danger,
+    fontSize: 14,
+    lineHeight: 20,
   },
   heroCopy: {
     color: palette.white,
