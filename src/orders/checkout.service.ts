@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   NotFoundException,
 } from "@nestjs/common";
 import { OrderStatus, PaymentProvider, Prisma } from "@prisma/client";
@@ -17,12 +18,18 @@ import { toOrderResponse } from "./mappers/order-response.mapper";
 
 @Injectable()
 export class CheckoutService {
+  private readonly logger = new Logger(CheckoutService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly paymentsService: PaymentsService,
   ) {}
 
   async createCheckout(payload: CreateCheckoutDto, user: AuthenticatedUser) {
+    this.logger.log(
+      `checkout.create.started userId=${user.id} eventSlug=${payload.eventSlug} items=${payload.items.length} provider=${payload.paymentProvider ?? PaymentProvider.STRIPE} idempotencyKey=${payload.idempotencyKey ?? "none"}`,
+    );
+
     if (payload.idempotencyKey) {
       const existingOrder = await this.prisma.order.findFirst({
         where: {
@@ -33,11 +40,24 @@ export class CheckoutService {
       });
 
       if (existingOrder) {
+        this.logger.log(
+          `checkout.create.reused orderId=${existingOrder.id} userId=${user.id} eventId=${existingOrder.eventId} idempotencyKey=${payload.idempotencyKey}`,
+        );
         return toOrderResponse(existingOrder);
       }
     }
 
-    const quote = await this.prepareCheckoutQuote(payload);
+    let quote: Awaited<ReturnType<typeof this.prepareCheckoutQuote>>;
+
+    try {
+      quote = await this.prepareCheckoutQuote(payload);
+    } catch (error) {
+      this.logger.warn(
+        `checkout.quote.failed userId=${user.id} eventSlug=${payload.eventSlug} reason="${error instanceof Error ? error.message : "Unknown error"}"`,
+      );
+      throw error;
+    }
+
     const { event, feePolicy, requestedItems, ticketTypes, totals } = quote;
     const order = await this.prisma.order.create({
       data: {
@@ -68,6 +88,9 @@ export class CheckoutService {
       },
       include: this.orderInclude(),
     });
+    this.logger.log(
+      `checkout.create.order_created orderId=${order.id} userId=${user.id} eventId=${event.id} subtotal=${totals.subtotal.toFixed(2)} fee=${totals.fee.toFixed(2)} total=${totals.total.toFixed(2)} currency=${totals.currency}`,
+    );
     let checkoutSessionId = order.checkoutSessionId;
     let checkoutUrl: string | null = null;
     let paymentStatus: string | null = null;
@@ -78,43 +101,54 @@ export class CheckoutService {
       order.paymentProvider === PaymentProvider.STRIPE &&
       process.env.STRIPE_SECRET_KEY
     ) {
-      const session = await this.paymentsService.createCheckoutSession({
-        cancelReturnUrl: payload.cancelReturnUrl,
-        feeAmount: order.feeAmount,
-        feePolicy,
-        id: order.id,
-        currency: order.currency,
-        totalAmount: order.totalAmount,
-        userId: order.userId,
-        successReturnUrl: payload.successReturnUrl,
-        event: {
-          title: order.event.title,
-          slug: order.event.slug,
-        },
-        items: order.items.map((item) => ({
-          quantity: item.quantity,
-          unitPrice: item.unitPrice,
-          ticketType: {
-            name: item.ticketType.name,
-            description: item.ticketType.description,
-            currency: item.ticketType.currency,
+      try {
+        const session = await this.paymentsService.createCheckoutSession({
+          cancelReturnUrl: payload.cancelReturnUrl,
+          feeAmount: order.feeAmount,
+          feePolicy,
+          id: order.id,
+          currency: order.currency,
+          totalAmount: order.totalAmount,
+          userId: order.userId,
+          successReturnUrl: payload.successReturnUrl,
+          event: {
+            title: order.event.title,
+            slug: order.event.slug,
           },
-        })),
-      });
+          items: order.items.map((item) => ({
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+            ticketType: {
+              name: item.ticketType.name,
+              description: item.ticketType.description,
+              currency: item.ticketType.currency,
+            },
+          })),
+        });
 
-      checkoutSessionId = session.checkoutSessionId;
-      checkoutUrl = session.checkoutUrl ?? null;
-      paymentStatus = session.paymentStatus ?? null;
-      checkoutStatus = session.checkoutStatus ?? null;
-      isAwaitingPaymentConfirmation =
-        session.isAwaitingPaymentConfirmation ?? true;
+        checkoutSessionId = session.checkoutSessionId;
+        checkoutUrl = session.checkoutUrl ?? null;
+        paymentStatus = session.paymentStatus ?? null;
+        checkoutStatus = session.checkoutStatus ?? null;
+        isAwaitingPaymentConfirmation =
+          session.isAwaitingPaymentConfirmation ?? true;
 
-      await this.prisma.order.update({
-        where: { id: order.id },
-        data: {
-          checkoutSessionId,
-        },
-      });
+        await this.prisma.order.update({
+          where: { id: order.id },
+          data: {
+            checkoutSessionId,
+          },
+        });
+
+        this.logger.log(
+          `checkout.create.session_created orderId=${order.id} checkoutSessionId=${checkoutSessionId} paymentStatus=${paymentStatus ?? "unknown"} checkoutStatus=${checkoutStatus ?? "unknown"} awaitingConfirmation=${isAwaitingPaymentConfirmation}`,
+        );
+      } catch (error) {
+        this.logger.error(
+          `checkout.create.session_failed orderId=${order.id} userId=${user.id} provider=${order.paymentProvider} reason="${error instanceof Error ? error.message : "Unknown error"}"`,
+        );
+        throw error;
+      }
     }
 
     return toOrderResponse({
@@ -129,40 +163,51 @@ export class CheckoutService {
   }
 
   async quoteCheckout(payload: CreateCheckoutDto) {
-    const quote = await this.prepareCheckoutQuote(payload);
+    try {
+      const quote = await this.prepareCheckoutQuote(payload);
 
-    return {
-      currency: quote.totals.currency,
-      event: {
-        id: quote.event.id,
-        slug: quote.event.slug,
-        startsAt: quote.event.startsAt,
-        title: quote.event.title,
-      },
-      feeAmount: quote.totals.fee.toFixed(2),
-      feePolicy: {
-        displayName: quote.feePolicy.displayName,
-        model: quote.feePolicy.model,
-        responsibility: quote.feePolicy.responsibility,
-        percentRate: quote.feePolicy.percentRate.toString(),
-        fixedAmount: quote.feePolicy.fixedAmount.toFixed(2),
-        fixedFeeApplication: quote.feePolicy.fixedFeeApplication,
-      },
-      items: quote.requestedItems.map((item) => {
-        const ticketType = quote.ticketTypes.find((candidate) => candidate.id === item.ticketTypeId)!;
+      this.logger.log(
+        `checkout.quote.completed eventSlug=${payload.eventSlug} items=${quote.requestedItems.length} total=${quote.totals.total.toFixed(2)} currency=${quote.totals.currency}`,
+      );
 
-        return {
-          currency: ticketType.currency,
-          quantity: item.quantity,
-          ticketTypeId: ticketType.id,
-          ticketTypeName: ticketType.name,
-          totalPrice: ticketType.price.mul(item.quantity).toFixed(2),
-          unitPrice: ticketType.price.toFixed(2),
-        };
-      }),
-      subtotalAmount: quote.totals.subtotal.toFixed(2),
-      totalAmount: quote.totals.total.toFixed(2),
-    };
+      return {
+        currency: quote.totals.currency,
+        event: {
+          id: quote.event.id,
+          slug: quote.event.slug,
+          startsAt: quote.event.startsAt,
+          title: quote.event.title,
+        },
+        feeAmount: quote.totals.fee.toFixed(2),
+        feePolicy: {
+          displayName: quote.feePolicy.displayName,
+          model: quote.feePolicy.model,
+          responsibility: quote.feePolicy.responsibility,
+          percentRate: quote.feePolicy.percentRate.toString(),
+          fixedAmount: quote.feePolicy.fixedAmount.toFixed(2),
+          fixedFeeApplication: quote.feePolicy.fixedFeeApplication,
+        },
+        items: quote.requestedItems.map((item) => {
+          const ticketType = quote.ticketTypes.find((candidate) => candidate.id === item.ticketTypeId)!;
+
+          return {
+            currency: ticketType.currency,
+            quantity: item.quantity,
+            ticketTypeId: ticketType.id,
+            ticketTypeName: ticketType.name,
+            totalPrice: ticketType.price.mul(item.quantity).toFixed(2),
+            unitPrice: ticketType.price.toFixed(2),
+          };
+        }),
+        subtotalAmount: quote.totals.subtotal.toFixed(2),
+        totalAmount: quote.totals.total.toFixed(2),
+      };
+    } catch (error) {
+      this.logger.warn(
+        `checkout.quote.failed eventSlug=${payload.eventSlug} reason="${error instanceof Error ? error.message : "Unknown error"}"`,
+      );
+      throw error;
+    }
   }
 
   private assertEventPurchasable(event: {

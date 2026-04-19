@@ -4,6 +4,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { AuthProvider } from "@/components/providers/auth-provider";
 import { PushNotificationsProvider } from "@/components/providers/push-notifications-provider";
+import { RuntimeMonitoringProvider } from "@/components/providers/runtime-monitoring-provider";
 import { WalletSyncProvider } from "@/components/providers/wallet-sync-provider";
 
 export function AppProviders({ children }: PropsWithChildren) {
@@ -21,11 +22,13 @@ export function AppProviders({ children }: PropsWithChildren) {
   return (
     <SafeAreaProvider>
       <QueryClientProvider client={queryClient}>
-        <AuthProvider>
-          <PushNotificationsProvider>
-            <WalletSyncProvider>{children}</WalletSyncProvider>
-          </PushNotificationsProvider>
-        </AuthProvider>
+        <RuntimeMonitoringProvider>
+          <AuthProvider>
+            <PushNotificationsProvider>
+              <WalletSyncProvider>{children}</WalletSyncProvider>
+            </PushNotificationsProvider>
+          </AuthProvider>
+        </RuntimeMonitoringProvider>
       </QueryClientProvider>
     </SafeAreaProvider>
   );

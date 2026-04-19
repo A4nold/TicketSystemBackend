@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   NotFoundException,
 } from "@nestjs/common";
 import { Prisma, ScanMode, ScanOutcome, TicketStatus } from "@prisma/client";
@@ -16,6 +17,8 @@ import { ValidateScanDto } from "./dto/validate-scan.dto";
 
 @Injectable()
 export class ScannerService {
+  private readonly logger = new Logger(ScannerService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly qrTokensService: QrTokensService,
@@ -24,8 +27,11 @@ export class ScannerService {
   async getManifest(
     eventId: string,
     _user: AuthenticatedUser,
-    _membership: AuthenticatedScannerMembership,
+    membership: AuthenticatedScannerMembership,
   ) {
+    this.logger.log(
+      `scanner.manifest.started eventId=${eventId} membershipId=${membership.id}`,
+    );
     const event = await this.prisma.event.findUnique({
       where: { id: eventId },
       include: {
@@ -41,6 +47,7 @@ export class ScannerService {
     });
 
     if (!event) {
+      this.logger.warn(`scanner.manifest.not_found eventId=${eventId} membershipId=${membership.id}`);
       throw new NotFoundException(`Event with id "${eventId}" was not found.`);
     }
 
@@ -50,7 +57,7 @@ export class ScannerService {
         ...event.tickets.map((ticket) => ticket.ownershipRevision),
       );
 
-    return {
+    const manifest = {
       eventId: event.id,
       eventSlug: event.slug,
       eventTitle: event.title,
@@ -64,6 +71,12 @@ export class ScannerService {
         ownerEmail: ticket.currentOwner.email,
       })),
     };
+
+    this.logger.log(
+      `scanner.manifest.completed eventId=${event.id} membershipId=${membership.id} manifestVersion=${manifestVersion} tickets=${manifest.tickets.length}`,
+    );
+
+    return manifest;
   }
 
   async validateTicket(
@@ -72,16 +85,40 @@ export class ScannerService {
     user: AuthenticatedUser,
     membership: AuthenticatedScannerMembership,
   ) {
+    this.logger.log(
+      `scanner.validate.started eventId=${eventId} userId=${user.id} membershipId=${membership.id} mode=${payload.mode ?? ScanMode.ONLINE} scanSessionId=${payload.scanSessionId ?? "new"} hasQrPayload=${payload.qrPayload ? "yes" : "no"} hasQrTokenId=${payload.qrTokenId ? "yes" : "no"}`,
+    );
     const event = await this.prisma.event.findUnique({
       where: { id: eventId },
     });
 
     if (!event) {
+      this.logger.warn(
+        `scanner.validate.event_not_found eventId=${eventId} userId=${user.id} membershipId=${membership.id}`,
+      );
       throw new NotFoundException(`Event with id "${eventId}" was not found.`);
     }
 
-    await this.assertScannerReferences(eventId, payload);
-    const scannedPayload = this.resolveScannedPayload(payload, eventId);
+    try {
+      await this.assertScannerReferences(eventId, payload);
+    } catch (error) {
+      this.logger.warn(
+        `scanner.validate.invalid_references eventId=${eventId} userId=${user.id} membershipId=${membership.id} reason="${error instanceof Error ? error.message : "Unknown error"}"`,
+      );
+      throw error;
+    }
+
+    let scannedPayload: ReturnType<typeof this.resolveScannedPayload>;
+
+    try {
+      scannedPayload = this.resolveScannedPayload(payload, eventId);
+    } catch (error) {
+      this.logger.warn(
+        `scanner.validate.invalid_payload eventId=${eventId} userId=${user.id} membershipId=${membership.id} reason="${error instanceof Error ? error.message : "Unknown error"}"`,
+      );
+      throw error;
+    }
+
     const scanSessionId = await this.resolveScanSessionId(eventId, {
       scanSessionId: payload.scanSessionId,
       deviceFingerprint: payload.deviceFingerprint,
@@ -91,7 +128,7 @@ export class ScannerService {
       mode: payload.mode,
     });
 
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       const ticket = await tx.ticket.findFirst({
         where: {
           eventId,
@@ -278,6 +315,12 @@ export class ScannerService {
         scannedAt,
       };
     });
+
+    this.logger.log(
+      `scanner.validate.completed eventId=${eventId} userId=${user.id} membershipId=${membership.id} scanSessionId=${result.scanSessionId ?? scanSessionId} outcome=${result.outcome} reasonCode=${result.reasonCode} ticketId=${result.ticketId ?? "none"} serialNumber=${result.serialNumber ?? "none"} mode=${payload.mode ?? ScanMode.ONLINE}`,
+    );
+
+    return result;
   }
 
   private resolveScannedPayload(payload: ValidateScanDto, eventId: string) {
@@ -316,15 +359,28 @@ export class ScannerService {
     user: AuthenticatedUser,
     membership: AuthenticatedScannerMembership,
   ) {
+    this.logger.log(
+      `scanner.sync.started eventId=${eventId} userId=${user.id} membershipId=${membership.id} attempts=${payload.attempts.length} mode=${payload.mode ?? ScanMode.OFFLINE_SYNC} scanSessionId=${payload.scanSessionId ?? "new"}`,
+    );
     const event = await this.prisma.event.findUnique({
       where: { id: eventId },
     });
 
     if (!event) {
+      this.logger.warn(
+        `scanner.sync.event_not_found eventId=${eventId} userId=${user.id} membershipId=${membership.id}`,
+      );
       throw new NotFoundException(`Event with id "${eventId}" was not found.`);
     }
 
-    await this.assertScannerReferences(eventId, payload);
+    try {
+      await this.assertScannerReferences(eventId, payload);
+    } catch (error) {
+      this.logger.warn(
+        `scanner.sync.invalid_references eventId=${eventId} userId=${user.id} membershipId=${membership.id} reason="${error instanceof Error ? error.message : "Unknown error"}"`,
+      );
+      throw error;
+    }
     const scanSessionId = await this.resolveScanSessionId(eventId, {
       scanSessionId: payload.scanSessionId,
       deviceFingerprint: payload.deviceFingerprint,
@@ -351,6 +407,10 @@ export class ScannerService {
       knownTickets.map((ticket) => [ticket.qrTokenId, ticket.id]),
     );
 
+    const unmatchedAttempts = payload.attempts.filter(
+      (attempt) => !ticketByQr.has(attempt.qrTokenId),
+    ).length;
+
     await this.prisma.scanAttempt.createMany({
       data: payload.attempts.map((attempt) => ({
         eventId,
@@ -370,6 +430,10 @@ export class ScannerService {
         syncedAt: new Date(),
       })),
     });
+
+    this.logger.log(
+      `scanner.sync.completed eventId=${eventId} userId=${user.id} membershipId=${membership.id} scanSessionId=${scanSessionId} accepted=${payload.attempts.length} unmatched=${unmatchedAttempts}`,
+    );
 
     return {
       eventId,
@@ -407,6 +471,9 @@ export class ScannerService {
       }));
 
     if (existingSession) {
+      this.logger.log(
+        `scanner.session.reused eventId=${eventId} scanSessionId=${existingSession.id} deviceFingerprint=${payload.deviceFingerprint ?? "none"}`,
+      );
       return existingSession.id;
     }
 
@@ -423,6 +490,10 @@ export class ScannerService {
           payload.mode === ScanMode.OFFLINE_SYNC ? new Date() : undefined,
       },
     });
+
+    this.logger.log(
+      `scanner.session.created eventId=${eventId} scanSessionId=${scanSession.id} deviceFingerprint=${payload.deviceFingerprint ?? "none"} deviceLabel=${payload.deviceLabel ?? "unknown"} mode=${payload.mode ?? ScanMode.ONLINE}`,
+    );
 
     return scanSession.id;
   }

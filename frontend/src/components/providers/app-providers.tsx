@@ -7,6 +7,7 @@ import {
 import { useState } from "react";
 
 import { AuthProvider } from "@/components/providers/auth-provider";
+import { RuntimeMonitoringProvider } from "@/components/providers/runtime-monitoring-provider";
 
 type AppProvidersProps = Readonly<{
   children: React.ReactNode;
@@ -32,7 +33,9 @@ export function AppProviders({ children }: AppProvidersProps) {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <AuthProvider>{children}</AuthProvider>
+      <RuntimeMonitoringProvider>
+        <AuthProvider>{children}</AuthProvider>
+      </RuntimeMonitoringProvider>
     </QueryClientProvider>
   );
 }

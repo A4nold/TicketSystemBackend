@@ -9,6 +9,22 @@ import { AppModule } from "./app.module";
 import { GlobalHttpExceptionFilter } from "./common/filters/http-exception.filter";
 
 async function bootstrap() {
+  const bootstrapLogger = new Logger("Bootstrap");
+
+  process.on("unhandledRejection", (reason) => {
+    const message =
+      reason instanceof Error ? reason.message : "Unhandled promise rejection";
+    const stack = reason instanceof Error ? reason.stack : undefined;
+    bootstrapLogger.error(`runtime.backend.unhandled_rejection message="${message}"`, stack);
+  });
+
+  process.on("uncaughtException", (error) => {
+    bootstrapLogger.error(
+      `runtime.backend.uncaught_exception message="${error.message}"`,
+      error.stack,
+    );
+  });
+
   const app = await NestFactory.create(AppModule, {
     rawBody: true,
   });
@@ -64,8 +80,8 @@ async function bootstrap() {
 
   await app.listen(port);
 
-  Logger.log(`API running on http://localhost:${port}/api`, "Bootstrap");
-  Logger.log(`Swagger docs on http://localhost:${port}/docs`, "Bootstrap");
+  bootstrapLogger.log(`API running on http://localhost:${port}/api`);
+  bootstrapLogger.log(`Swagger docs on http://localhost:${port}/docs`);
 }
 
 bootstrap();

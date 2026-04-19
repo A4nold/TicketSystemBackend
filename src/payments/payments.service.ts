@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   NotImplementedException,
 } from "@nestjs/common";
 import { OrderStatus, PaymentProvider, Prisma } from "@prisma/client";
@@ -44,12 +45,17 @@ type StripeCheckoutState = {
 
 @Injectable()
 export class PaymentsService {
+  private readonly logger = new Logger(PaymentsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly notificationsService: NotificationsService,
   ) {}
 
   async createCheckoutSession(order: CheckoutOrder) {
+    this.logger.log(
+      `payments.stripe.checkout_session.started orderId=${order.id} userId=${order.userId} total=${order.totalAmount.toFixed(2)} currency=${order.currency}`,
+    );
     const stripe = this.getStripeClient();
     const frontendUrl = process.env.FRONTEND_APP_URL;
 
@@ -100,19 +106,32 @@ export class PaymentsService {
       });
     }
 
-    const session = await stripe.checkout.sessions.create({
-      mode: "payment",
-      success_url: successUrl,
-      cancel_url: cancelUrl,
-      customer_creation: "if_required",
-      client_reference_id: order.id,
-      line_items: lineItems,
-      metadata: {
-        orderId: order.id,
-        eventSlug: order.event.slug,
-        userId: order.userId,
-      },
-    });
+    let session: any;
+
+    try {
+      session = await stripe.checkout.sessions.create({
+        mode: "payment",
+        success_url: successUrl,
+        cancel_url: cancelUrl,
+        customer_creation: "if_required",
+        client_reference_id: order.id,
+        line_items: lineItems,
+        metadata: {
+          orderId: order.id,
+          eventSlug: order.event.slug,
+          userId: order.userId,
+        },
+      });
+    } catch (error) {
+      this.logger.error(
+        `payments.stripe.checkout_session.failed orderId=${order.id} userId=${order.userId} reason="${error instanceof Error ? error.message : "Unknown error"}"`,
+      );
+      throw error;
+    }
+
+    this.logger.log(
+      `payments.stripe.checkout_session.completed orderId=${order.id} checkoutSessionId=${session.id} paymentStatus=${session.payment_status ?? "unknown"} checkoutStatus=${session.status ?? "unknown"}`,
+    );
 
     return {
       checkoutSessionId: session.id,
@@ -184,8 +203,15 @@ export class PaymentsService {
     try {
       event = stripe.webhooks.constructEvent(rawBody, signature, webhookSecret);
     } catch (error) {
+      this.logger.warn(
+        `payments.stripe.webhook.invalid_signature reason="${error instanceof Error ? error.message : "Unknown error"}"`,
+      );
       throw new BadRequestException("Invalid Stripe webhook signature.");
     }
+
+    this.logger.log(
+      `payments.stripe.webhook.received eventId=${event.id} type=${event.type}`,
+    );
 
     const existing = await this.prisma.webhookEvent.findUnique({
       where: {
@@ -194,6 +220,9 @@ export class PaymentsService {
     });
 
     if (existing?.processedAt) {
+      this.logger.log(
+        `payments.stripe.webhook.duplicate eventId=${event.id} type=${event.type}`,
+      );
       return { received: true, duplicate: true };
     }
 
@@ -222,11 +251,17 @@ export class PaymentsService {
       switch (event.type) {
         case "checkout.session.completed": {
           const session = event.data.object as any;
+          this.logger.log(
+            `payments.stripe.webhook.checkout_completed eventId=${event.id} checkoutSessionId=${session.id} orderId=${session.client_reference_id ?? session.metadata?.orderId ?? "unknown"}`,
+          );
           await this.markOrderPaidFromStripeSession(session);
           break;
         }
         case "checkout.session.expired": {
           const session = event.data.object as any;
+          this.logger.log(
+            `payments.stripe.webhook.checkout_expired eventId=${event.id} checkoutSessionId=${session.id} orderId=${session.client_reference_id ?? session.metadata?.orderId ?? "unknown"}`,
+          );
           await this.markOrderCancelledFromStripeSession(session);
           break;
         }
@@ -244,6 +279,9 @@ export class PaymentsService {
         },
       });
     } catch (error) {
+      this.logger.error(
+        `payments.stripe.webhook.failed eventId=${event.id} type=${event.type} reason="${error instanceof Error ? error.message : "Unknown error"}"`,
+      );
       await this.prisma.webhookEvent.update({
         where: {
           providerEventId: event.id,
@@ -290,6 +328,10 @@ export class PaymentsService {
 
     const checkoutState = await this.getStripeCheckoutState(order.checkoutSessionId);
 
+    this.logger.log(
+      `payments.stripe.reconcile.checked orderId=${order.id} checkoutSessionId=${order.checkoutSessionId} orderStatus=${order.status} paymentStatus=${checkoutState.paymentStatus ?? "unknown"} checkoutStatus=${checkoutState.checkoutStatus ?? "unknown"}`,
+    );
+
     if (order.status === OrderStatus.PENDING) {
       if (checkoutState.paymentStatus === "paid") {
         const stripe = this.getStripeClient();
@@ -310,6 +352,9 @@ export class PaymentsService {
       session.client_reference_id ?? session.metadata?.orderId ?? null;
 
     if (!orderId) {
+      this.logger.warn(
+        `payments.stripe.mark_paid.missing_order_reference checkoutSessionId=${session.id}`,
+      );
       throw new BadRequestException(
         "Stripe checkout session did not include an order reference.",
       );
@@ -320,10 +365,16 @@ export class PaymentsService {
     });
 
     if (!order) {
+      this.logger.warn(
+        `payments.stripe.mark_paid.order_not_found orderId=${orderId} checkoutSessionId=${session.id}`,
+      );
       throw new BadRequestException(`Order "${orderId}" was not found.`);
     }
 
     if (order.status === OrderStatus.PAID) {
+      this.logger.log(
+        `payments.stripe.mark_paid.already_paid orderId=${order.id} checkoutSessionId=${session.id}`,
+      );
       return;
     }
 
@@ -433,6 +484,10 @@ export class PaymentsService {
       ticketCount: paidOrder.tickets.length,
       userId: paidOrder.userId,
     });
+
+    this.logger.log(
+      `payments.stripe.mark_paid.completed orderId=${paidOrder.id} checkoutSessionId=${session.id} tickets=${paidOrder.tickets.length} paymentIntent=${typeof session.payment_intent === "string" ? session.payment_intent : "none"}`,
+    );
   }
 
   private async markOrderCancelledFromStripeSession(session: any) {
@@ -440,6 +495,9 @@ export class PaymentsService {
       session.client_reference_id ?? session.metadata?.orderId ?? null;
 
     if (!orderId) {
+      this.logger.warn(
+        `payments.stripe.mark_cancelled.missing_order_reference checkoutSessionId=${session.id}`,
+      );
       return;
     }
 
@@ -448,6 +506,9 @@ export class PaymentsService {
     });
 
     if (!order || order.status !== OrderStatus.PENDING) {
+      this.logger.log(
+        `payments.stripe.mark_cancelled.skipped orderId=${orderId} checkoutSessionId=${session.id} status=${order?.status ?? "missing"}`,
+      );
       return;
     }
 
@@ -459,6 +520,10 @@ export class PaymentsService {
         checkoutSessionId: session.id,
       },
     });
+
+    this.logger.log(
+      `payments.stripe.mark_cancelled.completed orderId=${orderId} checkoutSessionId=${session.id}`,
+    );
   }
 
   private async resolveRelatedEventId(event: any) {

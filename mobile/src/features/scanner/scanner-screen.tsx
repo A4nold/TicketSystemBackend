@@ -29,6 +29,11 @@ import {
   toScannerAttemptRecord,
   type ScannerAttemptRecord,
 } from "@/features/scanner/scanner-model";
+import {
+  loadPersistedScannerState,
+  persistScannerState,
+  type PersistedScannerEventState,
+} from "@/features/scanner/scanner-storage";
 import { ApiError } from "@/lib/api/client";
 import { formatDateTime } from "@/lib/formatters";
 import {
@@ -46,6 +51,8 @@ if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental
 }
 
 const CAMERA_SCAN_COOLDOWN_MS = 2500;
+const MANIFEST_STALE_MINUTES = 15;
+const MAX_RECENT_ATTEMPTS = 8;
 
 function animateLayout() {
   LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -57,6 +64,20 @@ function getErrorText(error: unknown, fallback: string) {
   }
 
   return fallback;
+}
+
+function getManifestAgeMinutes(generatedAt: string | null | undefined) {
+  if (!generatedAt) {
+    return null;
+  }
+
+  const generatedTime = new Date(generatedAt).getTime();
+
+  if (Number.isNaN(generatedTime)) {
+    return null;
+  }
+
+  return Math.max(0, Math.round((Date.now() - generatedTime) / 60000));
 }
 
 function SectionCard({
@@ -106,17 +127,22 @@ export function ScannerScreen() {
   const [scanInput, setScanInput] = useState("");
   const [scanRevision, setScanRevision] = useState("");
   const [scanSessionId, setScanSessionId] = useState<string | null>(null);
+  const [laneLabel, setLaneLabel] = useState("Front Gate");
   const [scanError, setScanError] = useState<string | null>(null);
   const [syncNotice, setSyncNotice] = useState<string | null>(null);
+  const [recoveryNotice, setRecoveryNotice] = useState<string | null>(null);
   const [forceDegradedMode, setForceDegradedMode] = useState(false);
   const [cameraEnabled, setCameraEnabled] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isSyncPending, setIsSyncPending] = useState(false);
   const [latestOutcome, setLatestOutcome] = useState<ScannerAttemptRecord | null>(null);
   const [recentAttempts, setRecentAttempts] = useState<ScannerAttemptRecord[]>([]);
+  const [eventStates, setEventStates] = useState<Record<string, PersistedScannerEventState>>({});
+  const [didHydrateScannerState, setDidHydrateScannerState] = useState(false);
   const [expandedSections, setExpandedSections] = useState({
     camera: true,
     event: true,
+    readiness: true,
     recent: true,
   });
   const lastCameraScanRef = useRef<{
@@ -125,6 +151,7 @@ export function ScannerScreen() {
   } | null>(null);
   const activeCameraSubmissionRef = useRef(false);
   const syncNoticeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const restoredEventIdsRef = useRef<Set<string>>(new Set());
 
   const hasSurfaceAccess = hasScannerSurfaceAccess(session?.user);
   const scannerEventIds = getScannerAccessibleEventIds(session?.user.memberships ?? []);
@@ -165,6 +192,64 @@ export function ScannerScreen() {
     !isSyncPending;
   const cameraCanScan =
     cameraSetupReady && cameraEnabled && !isSaving;
+  const resolvedDeviceLabel = laneLabel.trim() || "Scanner Mobile";
+  const manifestAgeMinutes = getManifestAgeMinutes(manifestQuery.data?.generatedAt);
+  const manifestSeemsStale =
+    manifestAgeMinutes !== null && manifestAgeMinutes > MANIFEST_STALE_MINUTES;
+  const readinessItems = [
+    {
+      detail: selectedEvent
+        ? `${selectedEvent.title}${selectedEvent.venueName ? ` · ${selectedEvent.venueName}` : ""}`
+        : "Pick an event before doors open.",
+      label: "Event selected",
+      tone: selectedEvent ? "ready" : "warning",
+      value: selectedEvent ? "Ready" : "Needed",
+    },
+    {
+      detail: manifestQuery.data
+        ? manifestSeemsStale
+          ? `Prepared ${manifestAgeMinutes} min ago. Refresh before peak entry if event setup changed.`
+          : `Prepared ${manifestAgeMinutes ?? 0} min ago and ready for degraded recovery.`
+        : "Load the current manifest before relying on degraded mode or manual fallback.",
+      label: "Manifest",
+      tone: manifestQuery.data ? (manifestSeemsStale ? "warning" : "ready") : "warning",
+      value: manifestQuery.data
+        ? manifestSeemsStale
+          ? "Refresh soon"
+          : `v${manifestQuery.data.manifestVersion}`
+        : "Missing",
+    },
+    {
+      detail: permission?.granted
+        ? isPhysicalDevice
+          ? "Camera access is available on this device."
+          : "Simulator access is fine for UI checks, but not live scanning."
+        : permission?.canAskAgain
+          ? "Allow camera access now or plan to use manual entry."
+          : "Camera is blocked in iOS settings. Manual entry is your fallback until it is restored.",
+      label: "Camera permission",
+      tone: permission?.granted && isPhysicalDevice ? "ready" : "warning",
+      value: permission?.granted ? (isPhysicalDevice ? "Granted" : "Simulator only") : "Attention",
+    },
+    {
+      detail: degradedMode
+        ? pendingSyncAttempts.length > 0
+          ? `${pendingSyncAttempts.length} queued attempt${pendingSyncAttempts.length === 1 ? "" : "s"} waiting for sync.`
+          : "Using the prepared manifest with queued sync once service returns."
+        : "Live validation is active and duplicate protection runs immediately.",
+      label: "Validation mode",
+      tone: degradedMode ? "warning" : "ready",
+      value: degradedMode ? "Degraded" : "Live",
+    },
+    {
+      detail: scanSessionId
+        ? `Session ${scanSessionId.slice(-6)} is already active for this lane.`
+        : "A scan session will start automatically with the first validation.",
+      label: "Lane session",
+      tone: scanSessionId ? "ready" : "default",
+      value: scanSessionId ? "Active" : "Standby",
+    },
+  ] as const;
   const manifestSummary = manifestQuery.data
     ? `Manifest v${manifestQuery.data.manifestVersion} prepared ${formatDateTime(
         manifestQuery.data.generatedAt,
@@ -190,12 +275,30 @@ export function ScannerScreen() {
   }
 
   useEffect(() => {
-    if (!manifestQuery.data) {
+    if (!session?.user.id) {
+      setEventStates({});
+      setDidHydrateScannerState(false);
+      restoredEventIdsRef.current = new Set();
       return;
     }
 
-    setSelectedEventId((current) => current ?? manifestQuery.data?.eventId ?? null);
-  }, [manifestQuery.data?.eventId]);
+    let active = true;
+
+    void loadPersistedScannerState(session.user.id).then((storedState) => {
+      if (!active) {
+        return;
+      }
+
+      setEventStates(storedState.eventStates);
+      setLaneLabel(storedState.laneLabel);
+      setSelectedEventId((current) => current ?? storedState.selectedEventId ?? null);
+      setDidHydrateScannerState(true);
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [session?.user.id]);
 
   useEffect(() => {
     setCameraEnabled(false);
@@ -203,12 +306,82 @@ export function ScannerScreen() {
     setScanInput("");
     setScanRevision("");
     setLatestOutcome(null);
-    setRecentAttempts([]);
-    setScanSessionId(null);
     setTransientSyncNotice(null);
     lastCameraScanRef.current = null;
     activeCameraSubmissionRef.current = false;
-  }, [selectedEvent?.id]);
+
+    if (!selectedEvent?.id) {
+      setRecentAttempts([]);
+      setScanSessionId(null);
+      return;
+    }
+
+    const restoredState = eventStates[selectedEvent.id];
+    setRecentAttempts(restoredState?.recentAttempts ?? []);
+    setScanSessionId(restoredState?.scanSessionId ?? null);
+
+    if (
+      restoredState?.recentAttempts.some((attempt) => attempt.syncState === "PENDING_SYNC") &&
+      !restoredEventIdsRef.current.has(selectedEvent.id)
+    ) {
+      const pendingCount = restoredState.recentAttempts.filter(
+        (attempt) => attempt.syncState === "PENDING_SYNC",
+      ).length;
+      setRecoveryNotice(
+        `Recovered ${pendingCount} queued attempt${pendingCount === 1 ? "" : "s"} for this lane. Sync them before clearing the queue.`,
+      );
+      restoredEventIdsRef.current.add(selectedEvent.id);
+    } else {
+      setRecoveryNotice(null);
+    }
+  }, [eventStates, selectedEvent?.id]);
+
+  useEffect(() => {
+    if (!didHydrateScannerState || !selectedEvent?.id) {
+      return;
+    }
+
+    setEventStates((current) => {
+      const nextEntry: PersistedScannerEventState = {
+        recentAttempts,
+        scanSessionId,
+      };
+      const previousEntry = current[selectedEvent.id];
+
+      if (
+        previousEntry?.scanSessionId === nextEntry.scanSessionId &&
+        JSON.stringify(previousEntry?.recentAttempts ?? []) ===
+          JSON.stringify(nextEntry.recentAttempts)
+      ) {
+        return current;
+      }
+
+      return {
+        ...current,
+        [selectedEvent.id]: nextEntry,
+      };
+    });
+  }, [didHydrateScannerState, recentAttempts, scanSessionId, selectedEvent?.id]);
+
+  useEffect(() => {
+    if (!didHydrateScannerState || !session?.user.id) {
+      return;
+    }
+
+    void persistScannerState(session.user.id, {
+      eventStates,
+      laneLabel,
+      selectedEventId: selectedEvent?.id ?? selectedEventId,
+      version: 1,
+    });
+  }, [
+    didHydrateScannerState,
+    eventStates,
+    laneLabel,
+    selectedEvent?.id,
+    selectedEventId,
+    session?.user.id,
+  ]);
 
   useEffect(() => {
     return () => {
@@ -246,7 +419,9 @@ export function ScannerScreen() {
         scanSessionId,
       );
       setLatestOutcome(degradedAttempt);
-      setRecentAttempts((current) => [degradedAttempt, ...current].slice(0, 8));
+      setRecentAttempts((current) =>
+        [degradedAttempt, ...current].slice(0, MAX_RECENT_ATTEMPTS),
+      );
       setScanInput(trimmedInput);
       return;
     }
@@ -258,14 +433,14 @@ export function ScannerScreen() {
         trimmedInput.startsWith("eyJ")
           ? {
               deviceFingerprint: "scanner-mobile",
-              deviceLabel: "Scanner Mobile",
+              deviceLabel: resolvedDeviceLabel,
               mode: "ONLINE" as const,
               qrPayload: trimmedInput,
               scanSessionId: scanSessionId ?? undefined,
             }
           : {
               deviceFingerprint: "scanner-mobile",
-              deviceLabel: "Scanner Mobile",
+              deviceLabel: resolvedDeviceLabel,
               mode: "ONLINE" as const,
               qrTokenId: trimmedInput,
               scanSessionId: scanSessionId ?? undefined,
@@ -276,7 +451,7 @@ export function ScannerScreen() {
       const attempt = toScannerAttemptRecord(result);
       setLatestOutcome(attempt);
       setScanSessionId(result.scanSessionId ?? scanSessionId);
-      setRecentAttempts((current) => [attempt, ...current].slice(0, 8));
+      setRecentAttempts((current) => [attempt, ...current].slice(0, MAX_RECENT_ATTEMPTS));
       setScanInput(trimmedInput);
     } catch (error) {
       setScanError(
@@ -307,7 +482,7 @@ export function ScannerScreen() {
         {
           attempts: pendingSyncAttempts.map(toSyncAttempt),
           deviceFingerprint: "scanner-mobile",
-          deviceLabel: "Scanner Mobile",
+          deviceLabel: resolvedDeviceLabel,
           mode: "OFFLINE_SYNC",
           scanSessionId: scanSessionId ?? undefined,
         },
@@ -322,6 +497,7 @@ export function ScannerScreen() {
             : attempt,
         ),
       );
+      setRecoveryNotice(null);
       setTransientSyncNotice(
         `${result.acceptedCount} queued attempt${result.acceptedCount === 1 ? "" : "s"} synced.`,
       );
@@ -336,6 +512,40 @@ export function ScannerScreen() {
     } finally {
       setIsSyncPending(false);
     }
+  }
+
+  async function clearQueuedAttempts() {
+    const nextAttempts = recentAttempts.filter(
+      (attempt) => !(attempt.source === "DEGRADED" && attempt.syncState === "PENDING_SYNC"),
+    );
+
+    setRecentAttempts(nextAttempts);
+    setRecoveryNotice(null);
+
+    if (!session?.user.id) {
+      return;
+    }
+
+    const nextEventStates = {
+      ...eventStates,
+      ...(selectedEvent?.id
+        ? {
+            [selectedEvent.id]: {
+              recentAttempts: nextAttempts,
+              scanSessionId,
+            },
+          }
+        : {}),
+    };
+
+    setEventStates(nextEventStates);
+
+    await persistScannerState(session.user.id, {
+      eventStates: nextEventStates,
+      laneLabel,
+      selectedEventId: selectedEvent?.id ?? selectedEventId,
+      version: 1,
+    });
   }
 
   function handleCameraBarcode(scannedData: string) {
@@ -368,7 +578,7 @@ export function ScannerScreen() {
     });
   }
 
-  function toggleSection(section: "camera" | "event" | "recent") {
+  function toggleSection(section: "camera" | "event" | "readiness" | "recent") {
     animateLayout();
     setExpandedSections((current) => ({
       ...current,
@@ -432,6 +642,60 @@ export function ScannerScreen() {
             </View>
           </View>
         </Card>
+
+        <SectionCard
+          expanded={expandedSections.readiness}
+          onToggle={() => toggleSection("readiness")}
+          subtitle="Confirm the lane, device, manifest, and scan mode before doors open."
+          title="Door readiness"
+        >
+          <View style={styles.readinessGrid}>
+            {readinessItems.map((item) => (
+              <View key={item.label} style={styles.readinessCard}>
+                <View style={styles.readinessHeader}>
+                  <Text style={styles.readinessLabel}>{item.label}</Text>
+                  <View
+                    style={[
+                      styles.readinessPill,
+                      item.tone === "ready"
+                        ? styles.readinessPillReady
+                        : item.tone === "warning"
+                          ? styles.readinessPillWarning
+                          : styles.readinessPillDefault,
+                    ]}
+                  >
+                    <Text style={styles.readinessPillText}>{item.value}</Text>
+                  </View>
+                </View>
+                <Text style={styles.copy}>{item.detail}</Text>
+              </View>
+            ))}
+          </View>
+
+          <TextInput
+            autoCapitalize="words"
+            onChangeText={setLaneLabel}
+            placeholder="Lane label, for example Front Gate"
+            placeholderTextColor={palette.muted}
+            style={styles.input}
+            value={laneLabel}
+          />
+
+          <Card tone="accent">
+            <Text style={styles.sectionTitle}>Before doors open</Text>
+            <Text style={styles.copy}>
+              Pick the event, refresh the manifest, confirm camera permission, and label the lane on
+              this device so every scan session can be traced clearly later.
+            </Text>
+          </Card>
+
+          {recoveryNotice ? (
+            <Card tone="warning">
+              <Text style={styles.sectionTitle}>Recovered local queue</Text>
+              <Text style={styles.copy}>{recoveryNotice}</Text>
+            </Card>
+          ) : null}
+        </SectionCard>
 
         <SectionCard
           expanded={expandedSections.event}
@@ -530,12 +794,33 @@ export function ScannerScreen() {
             </Card>
           ) : null}
 
+          {!hasPreparedManifest && pendingSyncAttempts.length > 0 ? (
+            <Card tone="warning">
+              <Text style={styles.sectionTitle}>Queue needs recovery</Text>
+              <Text style={styles.copy}>
+                This lane still has queued attempts, but the manifest is not loaded yet. Refresh the
+                manifest before trusting degraded results or syncing any recovered queue.
+              </Text>
+            </Card>
+          ) : null}
+
           {pendingSyncAttempts.length > 0 && !degradedMode ? (
-            <ActionButton
-              loading={isSyncPending}
-              onPress={() => void syncQueuedAttempts()}
-              title="Sync queued attempts"
-            />
+            <View style={styles.buttonRow}>
+              <View style={styles.buttonFill}>
+                <ActionButton
+                  loading={isSyncPending}
+                  onPress={() => void syncQueuedAttempts()}
+                  title="Sync queued attempts"
+                />
+              </View>
+              <View style={styles.buttonFill}>
+                <ActionButton
+                  onPress={() => void clearQueuedAttempts()}
+                  title="Clear local queue"
+                  variant="secondary"
+                />
+              </View>
+            </View>
           ) : null}
 
           {syncNotice ? (
@@ -643,11 +928,33 @@ export function ScannerScreen() {
           <TextInput
             keyboardType="numeric"
             onChangeText={setScanRevision}
-            placeholder="Ownership revision, if available"
+            placeholder="Ownership revision, if the guest has it"
             placeholderTextColor={palette.muted}
             style={styles.input}
             value={scanRevision}
           />
+
+          <Card tone="accent">
+            <Text style={styles.sectionTitle}>Manual fallback</Text>
+            <Text style={styles.copy}>
+              Use manual entry when the camera cannot focus, when a guest presents a copied token, or
+              when the lane needs a second attempt without reopening the camera.
+            </Text>
+            <Text style={styles.infoMeta}>
+              Paste the QR token or signed payload first. Add the ownership revision only when it is
+              available from the guest or another trusted staff device.
+            </Text>
+          </Card>
+
+          {degradedMode && !hasPreparedManifest ? (
+            <Card tone="warning">
+              <Text style={styles.sectionTitle}>No manifest, no safe degraded validation</Text>
+              <Text style={styles.copy}>
+                Manual entry is still visible for investigation, but do not treat any degraded result
+                as trustworthy until the manifest is loaded for this event.
+              </Text>
+            </Card>
+          ) : null}
 
           <ActionButton
             disabled={!canSubmitValidation}
@@ -704,6 +1011,21 @@ export function ScannerScreen() {
                 </View>
               ) : null}
             </View>
+          </Card>
+
+          <Card tone={latestOutcome?.outcome === "BLOCKED" || latestOutcome?.outcome === "INVALID" ? "warning" : "default"}>
+            <Text style={styles.sectionTitle}>Escalation playbook</Text>
+            <Text style={styles.copy}>
+              {latestOutcome?.outcome === "BLOCKED"
+                ? "Keep the guest aside, do not admit yet, and confirm the serial, ticket holder identity, and latest ownership state with an organizer or supervisor."
+                : latestOutcome?.outcome === "ALREADY_USED"
+                  ? "Treat this as a potential duplicate or prior entry. Do not rescan repeatedly. Verify the guest with a supervisor before any exception is made."
+                  : latestOutcome?.outcome === "INVALID"
+                    ? "Ask for the newest wallet ticket or purchase confirmation, then retry carefully. If the code still fails, route the guest to support instead of holding the lane."
+                    : degradedMode
+                      ? "If service is weak, keep the lane moving with caution, queue the attempt, and sync as soon as connectivity returns."
+                      : "If a lane stalls, switch to manual entry, keep the next guests moving, and escalate only the disputed case rather than stopping the whole line."}
+            </Text>
           </Card>
         </SectionCard>
 
@@ -816,6 +1138,13 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     height: 320,
     overflow: "hidden",
+  },
+  buttonFill: {
+    flex: 1,
+  },
+  buttonRow: {
+    flexDirection: "row",
+    gap: 10,
   },
   content: {
     gap: 18,
@@ -999,6 +1328,56 @@ const styles = StyleSheet.create({
     color: palette.ink,
     fontSize: 24,
     fontWeight: "800",
+  },
+  readinessCard: {
+    backgroundColor: palette.backgroundMuted,
+    borderColor: palette.divider,
+    borderRadius: 20,
+    borderWidth: 1,
+    gap: 8,
+    padding: 16,
+  },
+  readinessGrid: {
+    gap: 12,
+  },
+  readinessHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 12,
+    justifyContent: "space-between",
+  },
+  readinessLabel: {
+    color: palette.ink,
+    flex: 1,
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  readinessPill: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  readinessPillDefault: {
+    backgroundColor: palette.card,
+    borderColor: palette.divider,
+    borderWidth: 1,
+  },
+  readinessPillReady: {
+    backgroundColor: "#dff3e7",
+    borderColor: "#b7dfc6",
+    borderWidth: 1,
+  },
+  readinessPillText: {
+    color: palette.ink,
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+  },
+  readinessPillWarning: {
+    backgroundColor: "#f7e5d0",
+    borderColor: "#e7c399",
+    borderWidth: 1,
   },
   sectionChevron: {
     color: palette.muted,

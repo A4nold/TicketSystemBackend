@@ -13,6 +13,7 @@ import { HealthModule } from "./health/health.module";
 import { OrdersModule } from "./orders/orders.module";
 import { PaymentsModule } from "./payments/payments.module";
 import { NotificationsModule } from "./notifications/notifications.module";
+import { MonitoringModule } from "./monitoring/monitoring.module";
 import { PrismaModule } from "./prisma/prisma.module";
 import { QrTokensModule } from "./qr/qr-tokens.module";
 import { ResaleModule } from "./resale/resale.module";
@@ -26,6 +27,7 @@ import { TransfersModule } from "./transfers/transfers.module";
     AuthModule,
     PrismaModule,
     NotificationsModule,
+    MonitoringModule,
     QrTokensModule,
     PaymentsModule,
     HealthModule,
