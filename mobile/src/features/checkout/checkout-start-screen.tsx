@@ -14,7 +14,7 @@ import {
 import { useAuth } from "@/components/providers/auth-provider";
 import { ActionButton, Card, Screen } from "@/components/ui";
 import { getPublicEventBySlug } from "@/lib/events/public-events-client";
-import { createCheckoutOrder } from "@/lib/orders/orders-client";
+import { createCheckoutOrder, getCheckoutQuote } from "@/lib/orders/orders-client";
 import { palette } from "@/styles/theme";
 
 function createIdempotencyKey() {
@@ -31,6 +31,22 @@ function formatMoney(value: number) {
     maximumFractionDigits: 2,
     style: "currency",
   }).format(value);
+}
+
+function describeFeePolicy(policy: {
+  fixedAmount: string;
+  fixedFeeApplication: "PER_ORDER" | "PER_TICKET";
+  percentRate: string;
+  responsibility: "BUYER" | "ORGANIZER";
+}) {
+  const percentLabel = `${(Number(policy.percentRate) * 100).toFixed(2)}%`;
+  const fixedLabel = `+ EUR ${Number(policy.fixedAmount).toFixed(2)} ${
+    policy.fixedFeeApplication === "PER_TICKET" ? "per ticket" : "per order"
+  }`;
+
+  return policy.responsibility === "BUYER"
+    ? `${percentLabel} ${fixedLabel}, paid at checkout`
+    : `${percentLabel} ${fixedLabel}, absorbed by the organizer`;
 }
 
 export function CheckoutStartScreen() {
@@ -129,6 +145,25 @@ export function CheckoutStartScreen() {
   const event = eventQuery.data;
   const selectedTicketType =
     event.ticketTypes.find((candidate) => candidate.id === ticketTypeId) ?? event.ticketTypes[0] ?? null;
+  const quoteQuery = useQuery({
+    enabled: Boolean(activeSession?.accessToken && selectedTicketType),
+    queryFn: () =>
+      getCheckoutQuote(
+        {
+          eventSlug: event.slug,
+          items: [
+            {
+              quantity,
+              ticketTypeId: selectedTicketType!.id,
+            },
+          ],
+          paymentProvider: "STRIPE",
+        },
+        activeSession.accessToken,
+      ),
+    queryKey: ["mobile-checkout-quote", event.slug, selectedTicketType?.id, quantity, activeSession?.accessToken],
+    retry: 1,
+  });
 
   if (!selectedTicketType) {
     return (
@@ -155,8 +190,6 @@ export function CheckoutStartScreen() {
   }
 
   const subtotal = selectedTicketType.priceValue * quantity;
-  const fee = subtotal * 0.1;
-  const total = subtotal + fee;
 
   async function beginPayment() {
     setErrorMessage(null);
@@ -242,16 +275,37 @@ export function CheckoutStartScreen() {
             <Text style={styles.copy}>
               {selectedTicketType.name} x {quantity}
             </Text>
-            <Text style={styles.pricingValue}>{formatMoney(subtotal)}</Text>
+            <Text style={styles.pricingValue}>
+              {quoteQuery.data ? formatMoney(Number(quoteQuery.data.subtotalAmount)) : formatMoney(subtotal)}
+            </Text>
           </View>
-          <View style={styles.pricingRow}>
-            <Text style={styles.copy}>Estimated service fee</Text>
-            <Text style={styles.pricingValue}>{formatMoney(fee)}</Text>
-          </View>
-          <View style={[styles.pricingRow, styles.pricingTotal]}>
-            <Text style={styles.totalLabel}>Estimated total</Text>
-            <Text style={styles.totalValue}>{formatMoney(total)}</Text>
-          </View>
+          {quoteQuery.isLoading ? (
+            <Text style={styles.copy}>Calculating the exact backend quote now.</Text>
+          ) : null}
+          {quoteQuery.data ? (
+            <>
+              <View style={styles.pricingRow}>
+                <Text style={styles.copy}>{quoteQuery.data.feePolicy.displayName}</Text>
+                <Text style={styles.pricingValue}>{formatMoney(Number(quoteQuery.data.feeAmount))}</Text>
+              </View>
+              <View style={[styles.pricingRow, styles.pricingTotal]}>
+                <Text style={styles.totalLabel}>Total</Text>
+                <Text style={styles.totalValue}>{formatMoney(Number(quoteQuery.data.totalAmount))}</Text>
+              </View>
+              <Text style={styles.copy}>
+                {quoteQuery.data.feePolicy.responsibility === "BUYER"
+                  ? `${quoteQuery.data.feePolicy.displayName} is included in your checkout total.`
+                  : `${quoteQuery.data.feePolicy.displayName} is absorbed by the organizer for this order.`}
+              </Text>
+              <Text style={styles.policyNote}>{describeFeePolicy(quoteQuery.data.feePolicy)}</Text>
+            </>
+          ) : null}
+          {quoteQuery.isError ? (
+            <Text style={styles.error}>
+              Exact pricing could not be confirmed right now. You can still continue and let
+              checkout attempt the latest calculation.
+            </Text>
+          ) : null}
           <ActionButton
             loading={isSubmitting}
             onPress={() => void beginPayment()}
@@ -335,6 +389,11 @@ const styles = StyleSheet.create({
     color: palette.ink,
     fontSize: 15,
     fontWeight: "700",
+  },
+  policyNote: {
+    color: palette.mutedSoft,
+    fontSize: 13,
+    lineHeight: 19,
   },
   primaryLink: {
     color: palette.accentDeep,

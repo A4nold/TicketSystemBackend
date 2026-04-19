@@ -20,8 +20,10 @@ import { ActionButton, Card, Screen } from "@/components/ui";
 import { canAccessScannerEvents, hasScannerSurfaceAccess } from "@/features/auth/scanner-access";
 import {
   buildDegradedAttempt,
+  getOutcomeDecisionLabel,
   getOutcomeExplanation,
   getOutcomeHeading,
+  getOutcomeOperatorInstruction,
   getOutcomeTone,
   toScannerAttemptRecord,
   type ScannerAttemptRecord,
@@ -146,18 +148,22 @@ export function ScannerScreen() {
     (attempt) => attempt.source === "DEGRADED" && attempt.syncState === "PENDING_SYNC",
   );
   const outcomeTone = getOutcomeTone(latestOutcome);
+  const decisionLabel = getOutcomeDecisionLabel(latestOutcome);
+  const operatorInstruction = getOutcomeOperatorInstruction(latestOutcome);
   const isPhysicalDevice = Device.isDevice;
   const hasPreparedManifest = Boolean(manifestQuery.data);
   const manifestIsRefreshing = manifestQuery.isFetching && !manifestQuery.isLoading;
   const scannerReady = Boolean(selectedEvent && session?.accessToken);
   const canQueueDegradedAttempt = !degradedMode || hasPreparedManifest;
   const canSubmitValidation = scannerReady && canQueueDegradedAttempt && !isSaving;
-  const cameraCanScan =
+  const cameraSetupReady =
     Boolean(permission?.granted) &&
     isPhysicalDevice &&
-    cameraEnabled &&
-    canSubmitValidation &&
+    scannerReady &&
+    canQueueDegradedAttempt &&
     !isSyncPending;
+  const cameraCanScan =
+    cameraSetupReady && cameraEnabled && !isSaving;
   const manifestSummary = manifestQuery.data
     ? `Manifest v${manifestQuery.data.manifestVersion} prepared ${formatDateTime(
         manifestQuery.data.generatedAt,
@@ -579,16 +585,20 @@ export function ScannerScreen() {
                       ? "Use the back camera to scan QR codes at the door."
                       : !isPhysicalDevice
                         ? "Manual entry stays available in the simulator. Use a physical device for live scanning."
+                      : !scannerReady
+                        ? "Choose an event before opening the camera."
                       : degradedMode && !hasPreparedManifest
                         ? "Camera scanning will resume once the event manifest has been prepared."
+                        : isSyncPending
+                          ? "Queued attempts are syncing now. Camera scanning will resume in a moment."
                         : isSaving
                           ? "The scanner is processing the latest result."
-                          : "Pick an event and prepare the scanner before opening the camera."}
+                          : "The scanner is ready. Turn on the camera when your lane is set."}
                   </Text>
                 </View>
                 <Switch
                   onValueChange={setCameraEnabled}
-                  disabled={!permission?.granted || !isPhysicalDevice || (!cameraCanScan && !cameraEnabled)}
+                  disabled={!permission?.granted || !isPhysicalDevice || !cameraSetupReady}
                   trackColor={{ false: "#d9c7b4", true: "#d0b08f" }}
                   thumbColor={cameraEnabled ? palette.accentDeep : "#ffffff"}
                   value={cameraEnabled}
@@ -653,15 +663,44 @@ export function ScannerScreen() {
 
           <Card tone={outcomeTone} padded={false}>
             <View style={styles.outcomeShell}>
-              <Text style={styles.outcomeEyebrow}>
-                {latestOutcome?.source === "DEGRADED" ? "Degraded result" : "Latest result"}
-              </Text>
+              <View style={styles.outcomeHeader}>
+                <Text style={styles.outcomeEyebrow}>
+                  {latestOutcome?.source === "DEGRADED" ? "Degraded result" : "Latest result"}
+                </Text>
+                <View style={styles.outcomeDecisionPill}>
+                  <Text style={styles.outcomeDecisionPillText}>{decisionLabel}</Text>
+                </View>
+              </View>
               <Text style={styles.outcomeTitle}>{getOutcomeHeading(latestOutcome)}</Text>
+              <Text style={styles.outcomeLead}>{operatorInstruction}</Text>
               <Text style={styles.copy}>{getOutcomeExplanation(latestOutcome)}</Text>
               {latestOutcome ? (
-                <Text style={styles.infoMeta}>
-                  {latestOutcome.serialNumber ?? "No serial"} · {formatDateTime(latestOutcome.scannedAt)}
-                </Text>
+                <View style={styles.outcomeMetaGrid}>
+                  <View style={styles.outcomeMetaCard}>
+                    <Text style={styles.outcomeMetaLabel}>Serial</Text>
+                    <Text style={styles.outcomeMetaValue}>
+                      {latestOutcome.serialNumber ?? "Unavailable"}
+                    </Text>
+                  </View>
+                  <View style={styles.outcomeMetaCard}>
+                    <Text style={styles.outcomeMetaLabel}>Scanned</Text>
+                    <Text style={styles.outcomeMetaValue}>
+                      {formatDateTime(latestOutcome.scannedAt)}
+                    </Text>
+                  </View>
+                  <View style={styles.outcomeMetaCard}>
+                    <Text style={styles.outcomeMetaLabel}>Source</Text>
+                    <Text style={styles.outcomeMetaValue}>
+                      {latestOutcome.source === "DEGRADED" ? "Prepared manifest" : "Live validation"}
+                    </Text>
+                  </View>
+                  <View style={styles.outcomeMetaCard}>
+                    <Text style={styles.outcomeMetaLabel}>Ticket state</Text>
+                    <Text style={styles.outcomeMetaValue}>
+                      {latestOutcome.currentStatus ?? "Unknown"}
+                    </Text>
+                  </View>
+                </View>
               ) : null}
             </View>
           </Card>
@@ -682,11 +721,14 @@ export function ScannerScreen() {
                     <Text style={styles.statusPillText}>{attempt.outcome}</Text>
                   </View>
                 </View>
+                <Text style={styles.attemptLead}>{getOutcomeOperatorInstruction(attempt)}</Text>
                 <Text style={styles.copy}>{getOutcomeExplanation(attempt)}</Text>
-                <Text style={styles.infoMeta}>
-                  {attempt.serialNumber ?? attempt.ticketId ?? "Unknown ticket"} ·{" "}
-                  {formatDateTime(attempt.scannedAt)}
-                </Text>
+                <View style={styles.attemptMetaRow}>
+                  <Text style={styles.infoMeta}>
+                    {attempt.serialNumber ?? attempt.ticketId ?? "Unknown ticket"}
+                  </Text>
+                  <Text style={styles.infoMeta}>{formatDateTime(attempt.scannedAt)}</Text>
+                </View>
               </View>
             ))
           ) : (
@@ -711,6 +753,18 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   attemptHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 12,
+    justifyContent: "space-between",
+  },
+  attemptLead: {
+    color: palette.ink,
+    fontSize: 15,
+    fontWeight: "700",
+    lineHeight: 21,
+  },
+  attemptMetaRow: {
     alignItems: "center",
     flexDirection: "row",
     gap: 12,
@@ -872,6 +926,61 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     letterSpacing: 1.2,
     textTransform: "uppercase",
+  },
+  outcomeDecisionPill: {
+    backgroundColor: "rgba(255,255,255,0.74)",
+    borderColor: "rgba(0,0,0,0.08)",
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  outcomeDecisionPillText: {
+    color: palette.ink,
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 0.9,
+    textTransform: "uppercase",
+  },
+  outcomeHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 12,
+    justifyContent: "space-between",
+  },
+  outcomeLead: {
+    color: palette.ink,
+    fontSize: 17,
+    fontWeight: "800",
+    lineHeight: 23,
+  },
+  outcomeMetaCard: {
+    backgroundColor: "rgba(255,255,255,0.44)",
+    borderColor: "rgba(0,0,0,0.05)",
+    borderRadius: 16,
+    borderWidth: 1,
+    flexBasis: "48%",
+    gap: 4,
+    minWidth: 140,
+    padding: 12,
+  },
+  outcomeMetaGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+  },
+  outcomeMetaLabel: {
+    color: palette.mutedSoft,
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+  },
+  outcomeMetaValue: {
+    color: palette.ink,
+    fontSize: 14,
+    fontWeight: "700",
+    lineHeight: 20,
   },
   outcomeShell: {
     gap: 12,

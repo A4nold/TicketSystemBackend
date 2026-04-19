@@ -14,12 +14,49 @@ export type WalletNotification = {
   type: string;
 };
 
+type PaginatedWalletNotificationsResponse = {
+  items: WalletNotification[];
+  nextCursor: string | null;
+};
+
 export async function listWalletNotifications(accessToken: string) {
-  return apiFetch<WalletNotification[]>("/api/me/notifications", {
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
+  const response = await apiFetch<WalletNotification[] | PaginatedWalletNotificationsResponse>(
+    "/api/me/notifications",
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
     },
-  });
+  );
+
+  if (Array.isArray(response)) {
+    return response;
+  }
+
+  return response.items ?? [];
+}
+
+export async function listWalletNotificationsPage(accessToken: string) {
+  const response = await apiFetch<WalletNotification[] | PaginatedWalletNotificationsResponse>(
+    "/api/me/notifications",
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    },
+  );
+
+  if (Array.isArray(response)) {
+    return {
+      items: response,
+      nextCursor: null,
+    };
+  }
+
+  return {
+    items: response.items ?? [],
+    nextCursor: response.nextCursor ?? null,
+  };
 }
 
 export async function markWalletNotificationAsRead(

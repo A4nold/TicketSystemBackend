@@ -55,6 +55,26 @@ export class IssuedTicketResponseDto {
   issuedAt!: Date | null;
 }
 
+export class OrderFeePolicyDto {
+  @ApiProperty({ example: "Service fee" })
+  displayName!: string;
+
+  @ApiProperty({ example: "BLENDED" })
+  model!: "BLENDED";
+
+  @ApiProperty({ example: "BUYER" })
+  responsibility!: "BUYER" | "ORGANIZER";
+
+  @ApiProperty({ example: "0.0695" })
+  percentRate!: string;
+
+  @ApiProperty({ example: "0.69" })
+  fixedAmount!: string;
+
+  @ApiProperty({ example: "PER_TICKET" })
+  fixedFeeApplication!: "PER_ORDER" | "PER_TICKET";
+}
+
 export class OrderResponseDto {
   @ApiProperty()
   id!: string;
@@ -73,6 +93,9 @@ export class OrderResponseDto {
 
   @ApiProperty()
   totalAmount!: string;
+
+  @ApiProperty({ type: OrderFeePolicyDto })
+  feePolicy!: OrderFeePolicyDto;
 
   @ApiProperty({ enum: PaymentProvider })
   paymentProvider!: PaymentProvider;

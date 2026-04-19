@@ -1,5 +1,6 @@
 "use client";
 
+import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useMemo, useState, useTransition } from "react";
 
@@ -7,7 +8,7 @@ import { Panel } from "@/components/ui/panel";
 import { ProtectedSurfaceGate } from "@/features/auth/protected-surface-gate";
 import { ApiError } from "@/lib/api/client";
 import { useAuth } from "@/components/providers/auth-provider";
-import { createCheckoutOrder } from "@/lib/orders/orders-client";
+import { createCheckoutOrder, getCheckoutQuote } from "@/lib/orders/orders-client";
 
 type CheckoutStartReviewProps = Readonly<{
   event: {
@@ -45,6 +46,30 @@ function getErrorText(error: unknown) {
   return "Checkout could not start right now. Please try again.";
 }
 
+function formatMoney(value: string, currency: string) {
+  return new Intl.NumberFormat("en-IE", {
+    currency,
+    maximumFractionDigits: 2,
+    style: "currency",
+  }).format(Number(value));
+}
+
+function describeFeePolicy(policy: {
+  fixedAmount: string;
+  fixedFeeApplication: "PER_ORDER" | "PER_TICKET";
+  percentRate: string;
+  responsibility: "BUYER" | "ORGANIZER";
+}) {
+  const percentLabel = `${(Number(policy.percentRate) * 100).toFixed(2)}%`;
+  const fixedLabel = `+ EUR ${Number(policy.fixedAmount).toFixed(2)} ${
+    policy.fixedFeeApplication === "PER_TICKET" ? "per ticket" : "per order"
+  }`;
+
+  return policy.responsibility === "BUYER"
+    ? `${percentLabel} ${fixedLabel}, paid at checkout`
+    : `${percentLabel} ${fixedLabel}, absorbed by the organizer`;
+}
+
 export function CheckoutStartReview({
   event,
   nextPath,
@@ -68,22 +93,31 @@ export function CheckoutStartReview({
       style: "currency",
     }).format(selection.priceValue * selection.quantity);
   }, [selection.priceValue, selection.quantity]);
-
-  const estimatedFeeLabel = useMemo(() => {
-    return new Intl.NumberFormat("en-IE", {
-      currency: "EUR",
-      maximumFractionDigits: 2,
-      style: "currency",
-    }).format(selection.priceValue * selection.quantity * 0.1);
-  }, [selection.priceValue, selection.quantity]);
-
-  const totalLabel = useMemo(() => {
-    return new Intl.NumberFormat("en-IE", {
-      currency: "EUR",
-      maximumFractionDigits: 2,
-      style: "currency",
-    }).format(selection.priceValue * selection.quantity * 1.1);
-  }, [selection.priceValue, selection.quantity]);
+  const quoteQuery = useQuery({
+    enabled: Boolean(session?.accessToken),
+    queryFn: () =>
+      getCheckoutQuote(
+        {
+          eventSlug: event.slug,
+          items: [
+            {
+              quantity: selection.quantity,
+              ticketTypeId: selection.ticketTypeId,
+            },
+          ],
+          paymentProvider: "STRIPE",
+        },
+        session!.accessToken,
+      ),
+    queryKey: [
+      "checkout-quote",
+      event.slug,
+      selection.quantity,
+      selection.ticketTypeId,
+      session?.accessToken,
+    ],
+    retry: 1,
+  });
 
   function beginPayment() {
     if (!session) {
@@ -194,18 +228,46 @@ export function CheckoutStartReview({
                     <span>
                       {selection.name} x {selection.quantity}
                     </span>
-                    <span>{subtotalLabel}</span>
-                  </div>
-                  <div className="flex items-center justify-between gap-4 text-sm text-muted">
-                    <span>Estimated service fee</span>
-                    <span>{estimatedFeeLabel}</span>
-                  </div>
-                  <div className="flex items-center justify-between gap-4 border-t border-border pt-3">
-                    <span className="text-sm font-semibold uppercase tracking-[0.18em] text-foreground">
-                      Estimated total
+                    <span>
+                      {quoteQuery.data?.subtotalAmount
+                        ? formatMoney(quoteQuery.data.subtotalAmount, quoteQuery.data.currency)
+                        : subtotalLabel}
                     </span>
-                    <span className="font-display text-3xl text-foreground">{totalLabel}</span>
                   </div>
+                  {quoteQuery.isLoading ? (
+                    <p className="border-t border-border pt-3 text-sm leading-6 text-muted">
+                      Calculating the exact backend quote now.
+                    </p>
+                  ) : null}
+                  {quoteQuery.data ? (
+                    <>
+                      <div className="flex items-center justify-between gap-4 text-sm text-muted">
+                        <span>{quoteQuery.data.feePolicy.displayName}</span>
+                        <span>{formatMoney(quoteQuery.data.feeAmount, quoteQuery.data.currency)}</span>
+                      </div>
+                      <div className="flex items-center justify-between gap-4 border-t border-border pt-3">
+                        <span className="text-sm font-semibold uppercase tracking-[0.18em] text-foreground">
+                          Total
+                        </span>
+                        <span className="font-display text-3xl text-foreground">
+                          {formatMoney(quoteQuery.data.totalAmount, quoteQuery.data.currency)}
+                        </span>
+                      </div>
+                      <p className="text-sm leading-6 text-muted">
+                        {quoteQuery.data.feePolicy.responsibility === "BUYER"
+                          ? `${quoteQuery.data.feePolicy.displayName} is included in your checkout total.`
+                          : `${quoteQuery.data.feePolicy.displayName} is absorbed by the organizer for this order.`}
+                      </p>
+                      <p className="text-xs leading-5 text-muted">
+                        {describeFeePolicy(quoteQuery.data.feePolicy)}
+                      </p>
+                    </>
+                  ) : null}
+                  {quoteQuery.isError ? (
+                    <p className="border-t border-border pt-3 text-sm leading-6 text-danger">
+                      Exact pricing could not be confirmed right now. You can retry or continue to let checkout attempt the latest calculation.
+                    </p>
+                  ) : null}
                 </div>
               </div>
 

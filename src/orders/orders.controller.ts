@@ -20,6 +20,7 @@ import { CreateCheckoutDto } from "./dto/create-checkout.dto";
 import { OrderResponseDto } from "./dto/order-response.dto";
 import { OrderQueryService } from "./order-query.service";
 import { OrdersService } from "./orders.service";
+import { CheckoutQuoteResponseDto } from "./dto/quote-response.dto";
 
 @ApiTags("orders")
 @ApiBearerAuth("bearer")
@@ -91,6 +92,26 @@ export class OrdersController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.ordersService.createCheckout(payload, user);
+  }
+
+  @Post("quote")
+  @ApiOperation({
+    summary: "Quote a checkout order",
+    description:
+      "Validates event sales windows, ticket-type availability, quantity limits, and returns the exact backend-calculated pricing without creating an order.",
+  })
+  @ApiCreatedResponse({
+    description: "Checkout quote calculated",
+    type: CheckoutQuoteResponseDto,
+  })
+  @ApiBadRequestResponse({
+    description: "Quote calculation failed because the event, ticket type, or requested quantities were invalid",
+  })
+  quoteCheckout(
+    @Body() payload: CreateCheckoutDto,
+    @CurrentUser() _user: AuthenticatedUser,
+  ) {
+    return this.ordersService.quoteCheckout(payload);
   }
 
   @Post(":orderId/confirm-payment")

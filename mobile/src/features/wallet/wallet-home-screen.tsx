@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import {
   LayoutAnimation,
@@ -17,6 +17,7 @@ import { useWalletSync } from "@/components/providers/wallet-sync-provider";
 import { ActionButton, Card, Screen } from "@/components/ui";
 import { getTicketStatusMeta, groupTicketsByEvent } from "@/features/wallet/wallet-model";
 import { formatDateTime } from "@/lib/formatters";
+import { getOrderById } from "@/lib/orders/orders-client";
 import type { OwnedTicketSummary } from "@/lib/tickets/tickets-client";
 import { listOwnedTickets } from "@/lib/tickets/tickets-client";
 import { palette } from "@/styles/theme";
@@ -69,6 +70,7 @@ function WalletSection({
 
 export function WalletHomeScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ recentOrderId?: string }>();
   const { session } = useAuth();
   const { clearTicketStatusOverride, getTicketStatusOverride } = useWalletSync();
   const [isPriorityExpanded, setIsPriorityExpanded] = useState(true);
@@ -77,6 +79,16 @@ export function WalletHomeScreen() {
     enabled: Boolean(session?.accessToken),
     queryFn: () => listOwnedTickets(session!.accessToken, { sort: "asc" }),
     queryKey: ["owned-tickets", session?.accessToken],
+  });
+  const recentOrderId =
+    typeof params.recentOrderId === "string" && params.recentOrderId.trim()
+      ? params.recentOrderId
+      : undefined;
+  const recentOrderQuery = useQuery({
+    enabled: Boolean(session?.accessToken && recentOrderId),
+    queryFn: () => getOrderById(recentOrderId!, session!.accessToken),
+    queryKey: ["wallet-recent-order", recentOrderId, session?.accessToken],
+    retry: 1,
   });
 
   const ticketsWithOverrides: OwnedTicketSummary[] = useMemo(
@@ -158,6 +170,43 @@ export function WalletHomeScreen() {
             </View>
           </View>
         </Card>
+
+        {recentOrderQuery.data ? (
+          <Card tone="success">
+            <Text style={styles.sectionTitle}>Recent purchase</Text>
+            <Text style={styles.copy}>
+              {recentOrderQuery.data.event.title} is now linked to your wallet.
+              {recentOrderQuery.data.tickets.length > 0
+                ? ` ${recentOrderQuery.data.tickets.length} ticket${recentOrderQuery.data.tickets.length === 1 ? "" : "s"} arrived successfully.`
+                : " Payment is confirmed and ticket issuance is still finalizing."}
+            </Text>
+            <View style={styles.purchaseMetaRow}>
+              <Text style={styles.purchaseMetaLabel}>Order</Text>
+              <Text style={styles.purchaseMetaValue}>{recentOrderQuery.data.id}</Text>
+            </View>
+            <View style={styles.purchaseMetaRow}>
+              <Text style={styles.purchaseMetaLabel}>Total</Text>
+              <Text style={styles.purchaseMetaValue}>
+                {new Intl.NumberFormat("en-IE", {
+                  currency: recentOrderQuery.data.currency,
+                  style: "currency",
+                }).format(Number(recentOrderQuery.data.totalAmount))}
+              </Text>
+            </View>
+            {recentOrderQuery.data.tickets[0] ? (
+              <ActionButton
+                onPress={() => openTicket(recentOrderQuery.data!.tickets[0]!.serialNumber)}
+                title="Open first new ticket"
+              />
+            ) : (
+              <ActionButton
+                onPress={() => void recentOrderQuery.refetch()}
+                title="Refresh purchase state"
+                variant="secondary"
+              />
+            )}
+          </Card>
+        ) : null}
 
         {walletQuery.isLoading ? (
           <Card>
@@ -425,6 +474,25 @@ const styles = StyleSheet.create({
   },
   primaryTicketShell: {
     gap: 16,
+  },
+  purchaseMetaLabel: {
+    color: palette.mutedSoft,
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 1.1,
+    textTransform: "uppercase",
+  },
+  purchaseMetaRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  purchaseMetaValue: {
+    color: palette.ink,
+    fontSize: 14,
+    fontWeight: "700",
+    maxWidth: "60%",
+    textAlign: "right",
   },
   primaryTicketTop: {
     gap: 12,

@@ -133,6 +133,57 @@ export function getOutcomeHeading(attempt: ScannerAttemptRecord | null) {
   }
 }
 
+export function getOutcomeOperatorInstruction(attempt: ScannerAttemptRecord | null) {
+  if (!attempt) {
+    return "Point the camera at a ticket QR or enter a token manually.";
+  }
+
+  if (attempt.source === "DEGRADED") {
+    switch (attempt.outcome) {
+      case "VALID":
+        return "Admit with caution and sync this lane as soon as service returns.";
+      case "ALREADY_USED":
+        return "Do not admit again unless a supervisor confirms an exception.";
+      case "BLOCKED":
+        return "Hold the guest and verify with an organizer or supervisor.";
+      case "INVALID":
+        return "Ask for the latest ticket or route this guest to support.";
+    }
+  }
+
+  switch (attempt.outcome) {
+    case "VALID":
+      return "Admit guest now.";
+    case "ALREADY_USED":
+      return "Do not admit again.";
+    case "BLOCKED":
+      return "Hold entry and escalate to the event team.";
+    case "INVALID":
+      return "Do not admit. Ask the guest to present a valid ticket.";
+  }
+}
+
+export function getOutcomeDecisionLabel(attempt: ScannerAttemptRecord | null) {
+  if (!attempt) {
+    return "Waiting";
+  }
+
+  if (attempt.source === "DEGRADED" && attempt.outcome === "VALID") {
+    return "Admit with caution";
+  }
+
+  switch (attempt.outcome) {
+    case "VALID":
+      return "Admit";
+    case "ALREADY_USED":
+      return "Already used";
+    case "BLOCKED":
+      return "Hold";
+    case "INVALID":
+      return "Deny";
+  }
+}
+
 export function getOutcomeExplanation(attempt: ScannerAttemptRecord | null) {
   if (!attempt) {
     return "Scan a ticket to see the latest validation outcome here.";

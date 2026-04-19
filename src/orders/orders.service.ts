@@ -26,6 +26,10 @@ export class OrdersService {
     return this.checkoutService.createCheckout(payload, user);
   }
 
+  async quoteCheckout(payload: CreateCheckoutDto) {
+    return this.checkoutService.quoteCheckout(payload);
+  }
+
   async confirmPayment(
     orderId: string,
     payload: ConfirmPaymentDto,

@@ -12,6 +12,7 @@ import {
   CheckoutLineItemDto,
   CreateCheckoutDto,
 } from "./dto/create-checkout.dto";
+import { calculateFeeTotals, resolveFeePolicy, type FeePolicy } from "./fee-policy";
 import { toOrderResponse } from "./mappers/order-response.mapper";
 
 @Injectable()
@@ -36,42 +37,8 @@ export class CheckoutService {
       }
     }
 
-    const event = await this.prisma.event.findUnique({
-      where: { slug: payload.eventSlug },
-      include: {
-        ticketTypes: {
-          where: {
-            isActive: true,
-          },
-          orderBy: {
-            sortOrder: "asc",
-          },
-        },
-      },
-    });
-
-    if (!event) {
-      throw new NotFoundException(
-        `Event with slug "${payload.eventSlug}" was not found.`,
-      );
-    }
-
-    this.assertEventPurchasable(event);
-
-    const requestedItems = this.normalizeItems(payload.items);
-    const ticketTypes = event.ticketTypes.filter((ticketType) =>
-      requestedItems.some((item) => item.ticketTypeId === ticketType.id),
-    );
-
-    if (ticketTypes.length !== requestedItems.length) {
-      throw new BadRequestException(
-        "One or more requested ticket types do not belong to this event or are inactive.",
-      );
-    }
-
-    await this.assertTicketTypeAvailability(ticketTypes, requestedItems);
-
-    const totals = this.calculateOrderTotals(ticketTypes, requestedItems);
+    const quote = await this.prepareCheckoutQuote(payload);
+    const { event, feePolicy, requestedItems, ticketTypes, totals } = quote;
     const order = await this.prisma.order.create({
       data: {
         userId: user.id,
@@ -113,6 +80,8 @@ export class CheckoutService {
     ) {
       const session = await this.paymentsService.createCheckoutSession({
         cancelReturnUrl: payload.cancelReturnUrl,
+        feeAmount: order.feeAmount,
+        feePolicy,
         id: order.id,
         currency: order.currency,
         totalAmount: order.totalAmount,
@@ -152,10 +121,48 @@ export class CheckoutService {
       ...order,
       checkoutSessionId,
       checkoutUrl,
+      feePolicy,
       paymentStatus,
       checkoutStatus,
       isAwaitingPaymentConfirmation,
     });
+  }
+
+  async quoteCheckout(payload: CreateCheckoutDto) {
+    const quote = await this.prepareCheckoutQuote(payload);
+
+    return {
+      currency: quote.totals.currency,
+      event: {
+        id: quote.event.id,
+        slug: quote.event.slug,
+        startsAt: quote.event.startsAt,
+        title: quote.event.title,
+      },
+      feeAmount: quote.totals.fee.toFixed(2),
+      feePolicy: {
+        displayName: quote.feePolicy.displayName,
+        model: quote.feePolicy.model,
+        responsibility: quote.feePolicy.responsibility,
+        percentRate: quote.feePolicy.percentRate.toString(),
+        fixedAmount: quote.feePolicy.fixedAmount.toFixed(2),
+        fixedFeeApplication: quote.feePolicy.fixedFeeApplication,
+      },
+      items: quote.requestedItems.map((item) => {
+        const ticketType = quote.ticketTypes.find((candidate) => candidate.id === item.ticketTypeId)!;
+
+        return {
+          currency: ticketType.currency,
+          quantity: item.quantity,
+          ticketTypeId: ticketType.id,
+          ticketTypeName: ticketType.name,
+          totalPrice: ticketType.price.mul(item.quantity).toFixed(2),
+          unitPrice: ticketType.price.toFixed(2),
+        };
+      }),
+      subtotalAmount: quote.totals.subtotal.toFixed(2),
+      totalAmount: quote.totals.total.toFixed(2),
+    };
   }
 
   private assertEventPurchasable(event: {
@@ -295,6 +302,7 @@ export class CheckoutService {
       currency: string;
     }>,
     requestedItems: CheckoutLineItemDto[],
+    feePolicy: FeePolicy,
   ) {
     const subtotal = requestedItems.reduce((runningTotal, item) => {
       const ticketType = ticketTypes.find(
@@ -304,8 +312,6 @@ export class CheckoutService {
       return runningTotal.add(ticketType.price.mul(item.quantity));
     }, new Prisma.Decimal(0));
 
-    const fee = subtotal.mul(new Prisma.Decimal("0.10")).toDecimalPlaces(2);
-    const total = subtotal.add(fee);
     const currencies = new Set(ticketTypes.map((ticketType) => ticketType.currency));
 
     if (currencies.size !== 1) {
@@ -314,11 +320,68 @@ export class CheckoutService {
       );
     }
 
+    const itemCount = requestedItems.reduce((runningTotal, item) => runningTotal + item.quantity, 0);
+    const appliedFees = calculateFeeTotals({
+      currency: ticketTypes[0]!.currency,
+      itemCount,
+      policy: feePolicy,
+      subtotal,
+    });
+
     return {
       subtotal,
-      fee,
-      total,
-      currency: ticketTypes[0]!.currency,
+      fee: appliedFees.platformFee,
+      total: appliedFees.total,
+      currency: appliedFees.currency,
+      organizerFee: appliedFees.organizerFee,
+    };
+  }
+
+  private async prepareCheckoutQuote(payload: CreateCheckoutDto) {
+    const event = await this.prisma.event.findUnique({
+      where: { slug: payload.eventSlug },
+      include: {
+        ticketTypes: {
+          where: {
+            isActive: true,
+          },
+          orderBy: {
+            sortOrder: "asc",
+          },
+        },
+      },
+    });
+
+    if (!event) {
+      throw new NotFoundException(
+        `Event with slug "${payload.eventSlug}" was not found.`,
+      );
+    }
+
+    this.assertEventPurchasable(event);
+
+    const requestedItems = this.normalizeItems(payload.items);
+    const ticketTypes = event.ticketTypes.filter((ticketType) =>
+      requestedItems.some((item) => item.ticketTypeId === ticketType.id),
+    );
+
+    if (ticketTypes.length !== requestedItems.length) {
+      throw new BadRequestException(
+        "One or more requested ticket types do not belong to this event or are inactive.",
+      );
+    }
+
+    await this.assertTicketTypeAvailability(ticketTypes, requestedItems);
+
+    const feePolicy = resolveFeePolicy();
+    const totals = this.calculateOrderTotals(ticketTypes, requestedItems, feePolicy);
+
+    return {
+      event,
+      feePolicy,
+      requestedItems,
+      ticketTypes,
+      totals,
     };
   }
 

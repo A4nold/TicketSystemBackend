@@ -136,6 +136,11 @@ STRIPE_SECRET_KEY=
 STRIPE_WEBHOOK_SECRET=
 RESEND_API_KEY=
 NOTIFICATIONS_FROM_EMAIL=
+CHECKOUT_FEE_DISPLAY_NAME=Service fee
+CHECKOUT_FEE_PERCENT_RATE=0.0695
+CHECKOUT_FEE_FIXED_AMOUNT=0.69
+CHECKOUT_FEE_FIXED_APPLICATION=PER_TICKET
+CHECKOUT_FEE_RESPONSIBILITY=BUYER
 POST_EVENT_NOTIFICATION_SWEEP_INTERVAL_MS=300000
 PORT=3000
 ```
@@ -185,7 +190,14 @@ npm run start
 
 Set `EXPO_PUBLIC_API_BASE_URL` before launching if your backend is not on `http://localhost:3000`.
 
-For a real device via Expo Go, tunnel mode is usually the most reliable:
+For a real device via Expo Go on the same Wi-Fi, LAN mode is the default and usually the best first option:
+
+```bash
+cd mobile
+npm run start
+```
+
+If LAN is not reachable from the device, fall back to tunnel mode:
 
 ```bash
 cd mobile
@@ -193,6 +205,44 @@ npx expo start --tunnel
 ```
 
 If mobile checkout is started from the app, Stripe can now return into the app via the `ticketsystem://` scheme on success or cancel. Web checkout continues to return to `FRONTEND_APP_URL`.
+
+## Checkout Fee Policy
+
+Checkout pricing is now backend-owned. Web and mobile request a dedicated checkout quote before payment starts, and Stripe checkout is created from the same backend fee calculation used to create the order.
+
+Current behavior:
+
+- subtotal is calculated from the selected ticket price and quantity
+- a blended platform fee is applied using a percentage plus a fixed amount
+- fee responsibility can be assigned to the buyer or absorbed by the organizer
+- web and mobile display the quoted backend totals instead of calculating fees locally
+- Stripe checkout includes the buyer-paid fee when responsibility is set to `BUYER`
+
+Current default policy:
+
+- display name: `Service fee`
+- model: `BLENDED`
+- percent rate: `6.95%`
+- fixed amount: `EUR 0.69`
+- fixed application: `PER_TICKET`
+- responsibility: `BUYER`
+
+Fee policy env vars:
+
+```env
+CHECKOUT_FEE_DISPLAY_NAME=Service fee
+CHECKOUT_FEE_PERCENT_RATE=0.0695
+CHECKOUT_FEE_FIXED_AMOUNT=0.69
+CHECKOUT_FEE_FIXED_APPLICATION=PER_TICKET
+CHECKOUT_FEE_RESPONSIBILITY=BUYER
+```
+
+Notes:
+
+- `CHECKOUT_FEE_PERCENT_RATE` is stored as a decimal fraction, so `0.0695` means `6.95%`
+- `CHECKOUT_FEE_FIXED_APPLICATION` supports `PER_TICKET` and `PER_ORDER`
+- `CHECKOUT_FEE_RESPONSIBILITY` supports `BUYER` and `ORGANIZER`
+- code defaults live in [src/orders/fee-policy.ts](/Users/arnoldekechi/RiderProjects/ticketsystem/src/orders/fee-policy.ts:1), but environment variables should be the preferred way to change behavior per environment
 
 ## Database and Seeds
 

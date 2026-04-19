@@ -6,10 +6,13 @@ import {
 import { OrderStatus, PaymentProvider, Prisma } from "@prisma/client";
 import Stripe from "stripe";
 
+import { type FeePolicy } from "../orders/fee-policy";
 import { PrismaService } from "../prisma/prisma.service";
 
 type CheckoutOrder = {
   cancelReturnUrl?: string;
+  feeAmount: Prisma.Decimal;
+  feePolicy: FeePolicy;
   id: string;
   currency: string;
   totalAmount: Prisma.Decimal;
@@ -64,6 +67,34 @@ export class PaymentsService {
       providedUrl: order.cancelReturnUrl,
       sessionPlaceholder: false,
     });
+    const lineItems = order.items.map((item) => ({
+      quantity: item.quantity,
+      price_data: {
+        currency: item.ticketType.currency.toLowerCase(),
+        product_data: {
+          name: `${order.event.title} · ${item.ticketType.name}`,
+          description: item.ticketType.description ?? undefined,
+        },
+        unit_amount: Math.round(Number(item.unitPrice) * 100),
+      },
+    }));
+
+    if (
+      order.feePolicy.responsibility === "BUYER" &&
+      order.feeAmount.greaterThan(new Prisma.Decimal(0))
+    ) {
+      lineItems.push({
+        quantity: 1,
+        price_data: {
+          currency: order.currency.toLowerCase(),
+          product_data: {
+            name: order.feePolicy.displayName,
+            description: this.describeFeePolicy(order.feePolicy),
+          },
+          unit_amount: Math.round(Number(order.feeAmount) * 100),
+        },
+      });
+    }
 
     const session = await stripe.checkout.sessions.create({
       mode: "payment",
@@ -71,17 +102,7 @@ export class PaymentsService {
       cancel_url: cancelUrl,
       customer_creation: "if_required",
       client_reference_id: order.id,
-      line_items: order.items.map((item) => ({
-        quantity: item.quantity,
-        price_data: {
-          currency: item.ticketType.currency.toLowerCase(),
-          product_data: {
-            name: `${order.event.title} · ${item.ticketType.name}`,
-            description: item.ticketType.description ?? undefined,
-          },
-          unit_amount: Math.round(Number(item.unitPrice) * 100),
-        },
-      })),
+      line_items: lineItems,
       metadata: {
         orderId: order.id,
         eventSlug: order.event.slug,
@@ -97,6 +118,15 @@ export class PaymentsService {
       isAwaitingPaymentConfirmation:
         session.payment_status !== "paid" && session.status !== "expired",
     };
+  }
+
+  private describeFeePolicy(policy: FeePolicy) {
+    const percentLabel = policy.percentRate.mul(100).toDecimalPlaces(2).toString();
+    const fixedLabel = policy.fixedAmount.toDecimalPlaces(2).toString();
+    const fixedScopeLabel =
+      policy.fixedFeeApplication === "PER_TICKET" ? "per ticket" : "per order";
+
+    return `${percentLabel}% + ${fixedLabel} ${fixedScopeLabel}`;
   }
 
   private buildCheckoutReturnUrl({

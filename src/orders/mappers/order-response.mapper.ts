@@ -1,5 +1,7 @@
 import { OrderStatus, PaymentProvider, Prisma, TicketStatus } from "@prisma/client";
 
+import { type FeePolicy } from "../fee-policy";
+
 type OrderResponseSource = {
   id: string;
   status: OrderStatus;
@@ -7,6 +9,7 @@ type OrderResponseSource = {
   subtotalAmount: Prisma.Decimal;
   feeAmount: Prisma.Decimal;
   totalAmount: Prisma.Decimal;
+  feePolicy?: FeePolicy;
   paymentProvider: PaymentProvider;
   paymentReference: string | null;
   checkoutSessionId: string | null;
@@ -77,6 +80,14 @@ export function toOrderResponse(
     subtotalAmount: order.subtotalAmount.toFixed(2),
     feeAmount: order.feeAmount.toFixed(2),
     totalAmount: order.totalAmount.toFixed(2),
+    feePolicy: {
+      displayName: order.feePolicy?.displayName ?? "Service fee",
+      model: order.feePolicy?.model ?? "BLENDED",
+      responsibility: order.feePolicy?.responsibility ?? "BUYER",
+      percentRate: order.feePolicy?.percentRate.toString() ?? "0.0695",
+      fixedAmount: order.feePolicy?.fixedAmount.toFixed(2) ?? "0.69",
+      fixedFeeApplication: order.feePolicy?.fixedFeeApplication ?? "PER_TICKET",
+    },
     paymentProvider: order.paymentProvider,
     paymentReference: order.paymentReference,
     checkoutSessionId,

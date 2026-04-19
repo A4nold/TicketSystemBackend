@@ -12,6 +12,35 @@ export type CreateCheckoutPayload = {
   idempotencyKey?: string;
 };
 
+export type CheckoutQuoteResponse = {
+  currency: string;
+  event: {
+    id: string;
+    slug: string;
+    startsAt: string;
+    title: string;
+  };
+  feeAmount: string;
+  feePolicy: {
+    displayName: string;
+    fixedAmount: string;
+    fixedFeeApplication: "PER_ORDER" | "PER_TICKET";
+    model: "BLENDED";
+    percentRate: string;
+    responsibility: "BUYER" | "ORGANIZER";
+  };
+  items: Array<{
+    currency: string;
+    quantity: number;
+    ticketTypeId: string;
+    ticketTypeName: string;
+    totalPrice: string;
+    unitPrice: string;
+  }>;
+  subtotalAmount: string;
+  totalAmount: string;
+};
+
 export type CheckoutOrderResponse = {
   checkoutSessionId: string | null;
   checkoutStatus: string | null;
@@ -24,6 +53,14 @@ export type CheckoutOrderResponse = {
     title: string;
   };
   feeAmount: string;
+  feePolicy: {
+    displayName: string;
+    fixedAmount: string;
+    fixedFeeApplication: "PER_ORDER" | "PER_TICKET";
+    model: "BLENDED";
+    percentRate: string;
+    responsibility: "BUYER" | "ORGANIZER";
+  };
   id: string;
   isAwaitingPaymentConfirmation: boolean;
   items: Array<{
@@ -52,6 +89,23 @@ export type CheckoutOrderResponse = {
 };
 
 export type OrderResponse = CheckoutOrderResponse;
+
+export async function getCheckoutQuote(
+  payload: CreateCheckoutPayload,
+  accessToken: string,
+) {
+  return apiFetch<CheckoutQuoteResponse>(
+    "/api/orders/quote",
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    },
+  );
+}
 
 export async function createCheckoutOrder(
   payload: CreateCheckoutPayload,
