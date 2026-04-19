@@ -20,7 +20,7 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.anonymous.ticketsystem-mobile"
+      "bundleIdentifier": "com.event.ticketsystem-mobile"
     },
     "android": {
       "adaptiveIcon": {
