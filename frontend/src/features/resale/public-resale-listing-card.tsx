@@ -108,14 +108,14 @@ export function PublicResaleListingCard({
               type="button"
               onClick={beginPurchase}
               disabled={isPending}
-              className="inline-flex rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-surface-soft disabled:cursor-not-allowed disabled:opacity-65"
+              className="inline-flex rounded-full bg-accent px-5 py-3 text-sm font-semibold text-white transition hover:bg-accent-strong disabled:cursor-not-allowed disabled:opacity-65"
             >
               {isPending ? "Buying resale..." : "Buy resale ticket"}
             </button>
           ) : (
             <Link
               href={`/auth?mode=login&next=${encodeURIComponent(pathname || `/marketplace/${listing.event.slug}`)}`}
-              className="inline-flex rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-surface-soft"
+              className="inline-flex rounded-full bg-accent px-5 py-3 text-sm font-semibold text-white transition hover:bg-accent-strong"
             >
               Sign in to buy
             </Link>
@@ -123,7 +123,7 @@ export function PublicResaleListingCard({
 
           <Link
             href={`/events/${listing.event.slug}`}
-            className="inline-flex rounded-full border border-border bg-white/8 px-5 py-3 text-sm font-semibold text-foreground transition hover:border-accent/50 hover:bg-white/12"
+            className="inline-flex rounded-full border border-border bg-surface-elevated px-5 py-3 text-sm font-semibold text-foreground transition hover:border-accent/50 hover:bg-surface-soft"
           >
             View event
           </Link>

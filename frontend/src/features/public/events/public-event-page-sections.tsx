@@ -27,8 +27,8 @@ export function PublicEventHero({ event }: { event: PublicEventDetail }) {
   const authNext = `/tickets?eventSlug=${encodeURIComponent(event.slug)}`;
 
   return (
-    <section className="relative overflow-hidden rounded-[2rem] border border-border bg-[linear-gradient(135deg,rgba(54,216,202,0.12),rgba(255,125,93,0.12),rgba(8,17,31,0.84))] px-6 py-8 shadow-[0_24px_90px_rgba(2,8,20,0.28)] sm:px-8 sm:py-10">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(54,216,202,0.18),transparent_28%),radial-gradient(circle_at_bottom_left,rgba(255,125,93,0.18),transparent_32%)]" />
+    <section className="relative overflow-hidden rounded-[2rem] border border-border bg-[linear-gradient(135deg,rgba(255,255,255,0.98),rgba(223,240,242,0.76),rgba(255,236,230,0.82))] px-6 py-8 shadow-[0_24px_70px_rgba(16,32,51,0.14)] sm:px-8 sm:py-10">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(15,143,134,0.14),transparent_28%),radial-gradient(circle_at_bottom_left,rgba(217,95,67,0.16),transparent_32%)]" />
       <div className="relative grid gap-8 lg:grid-cols-[minmax(0,1.3fr)_minmax(18rem,0.82fr)]">
         <div className="space-y-5">
           <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em]">
@@ -47,25 +47,25 @@ export function PublicEventHero({ event }: { event: PublicEventDetail }) {
             <h1 className="max-w-4xl font-display text-4xl leading-tight sm:text-5xl lg:text-6xl">
               {event.title}
             </h1>
-            <p className="max-w-2xl text-base leading-7 text-slate-200 sm:text-lg">
+            <p className="max-w-2xl text-base leading-7 text-muted sm:text-lg">
               {event.description ?? "Event details and ticket access are available below."}
             </p>
           </div>
 
           <dl className="grid gap-3 sm:grid-cols-3">
-            <div className="rounded-[1.3rem] border border-white/12 bg-black/15 p-4">
+            <div className="rounded-[1.3rem] border border-border bg-black/15 p-4">
               <dt className="text-xs uppercase tracking-[0.18em] text-muted">When</dt>
               <dd className="mt-2 text-sm leading-6 text-foreground">
                 {formatEventWindow(event)}
               </dd>
             </div>
-            <div className="rounded-[1.3rem] border border-white/12 bg-black/15 p-4">
+            <div className="rounded-[1.3rem] border border-border bg-black/15 p-4">
               <dt className="text-xs uppercase tracking-[0.18em] text-muted">Where</dt>
               <dd className="mt-2 text-sm leading-6 text-foreground">
                 {event.venueLabel}
               </dd>
             </div>
-            <div className="rounded-[1.3rem] border border-white/12 bg-black/15 p-4">
+            <div className="rounded-[1.3rem] border border-border bg-black/15 p-4">
               <dt className="text-xs uppercase tracking-[0.18em] text-muted">Entry</dt>
               <dd className="mt-2 text-sm leading-6 text-foreground">
                 {getStartingPriceLabel(event)}
@@ -74,7 +74,7 @@ export function PublicEventHero({ event }: { event: PublicEventDetail }) {
           </dl>
         </div>
 
-        <div className="flex flex-col justify-between gap-5 rounded-[1.75rem] border border-white/12 bg-black/18 p-6 backdrop-blur">
+        <div className="flex flex-col justify-between gap-5 rounded-[1.75rem] border border-border bg-black/18 p-6 backdrop-blur">
           <div className="space-y-3">
             <p className="text-sm font-medium uppercase tracking-[0.24em] text-accent-warm">
               Purchase path
@@ -92,14 +92,14 @@ export function PublicEventHero({ event }: { event: PublicEventDetail }) {
           <div className="space-y-3">
             <a
               href="#ticket-options"
-              className="inline-flex w-full items-center justify-center rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-surface-soft"
+              className="inline-flex w-full items-center justify-center rounded-full bg-accent px-5 py-3 text-sm font-semibold text-white transition hover:bg-accent-strong"
             >
               Review ticket options
             </a>
             <div className="flex flex-col gap-3 sm:flex-row">
               <Link
                 href={`/auth?mode=register&eventSlug=${encodeURIComponent(event.slug)}&next=${encodeURIComponent(authNext)}`}
-                className="inline-flex flex-1 items-center justify-center rounded-full border border-border bg-white/8 px-5 py-3 text-sm font-semibold text-foreground transition hover:border-accent/50 hover:bg-white/12"
+                className="inline-flex flex-1 items-center justify-center rounded-full border border-border bg-surface-elevated px-5 py-3 text-sm font-semibold text-foreground transition hover:border-accent/50 hover:bg-surface-soft"
               >
                 Create account
               </Link>
@@ -246,7 +246,7 @@ export function PublicEventResaleSection({
           </div>
           <Link
             href={`/marketplace/${event.slug}`}
-            className="inline-flex rounded-full border border-border bg-white/8 px-5 py-3 text-sm font-semibold text-foreground transition hover:border-accent/50 hover:bg-white/12"
+            className="inline-flex rounded-full border border-border bg-surface-elevated px-5 py-3 text-sm font-semibold text-foreground transition hover:border-accent/50 hover:bg-surface-soft"
           >
             Open resale marketplace
           </Link>
@@ -288,7 +288,7 @@ export function PublicEventFooter({ slug }: { slug: string }) {
           </Link>
           <Link
             href="/marketplace"
-            className="inline-flex rounded-full border border-border bg-white px-5 py-3 text-sm font-medium text-slate-950 transition hover:bg-surface-soft"
+            className="inline-flex rounded-full border border-border bg-accent px-5 py-3 text-sm font-medium text-white transition hover:bg-accent-strong"
           >
             View marketplace
           </Link>

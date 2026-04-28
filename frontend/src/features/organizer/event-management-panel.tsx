@@ -590,7 +590,7 @@ export function EventManagementPanel({ refreshKey = 0 }: EventManagementPanelPro
                 className={`rounded-full border px-4 py-2 text-sm font-semibold transition ${
                   effectiveSelectedEventId === event.id
                     ? "border-accent-warm/60 bg-accent-warm/15 text-foreground"
-                    : "border-border bg-white/8 text-muted hover:border-accent-warm/40 hover:bg-white/12"
+                    : "border-border bg-surface-elevated text-muted hover:border-accent-warm/40 hover:bg-surface-soft"
                 }`}
               >
                 {event.title}
@@ -765,7 +765,7 @@ export function EventManagementPanel({ refreshKey = 0 }: EventManagementPanelPro
                 </label>
               </div>
 
-              <button type="button" onClick={submitEventUpdate} disabled={isPending} className="inline-flex rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-surface-soft disabled:cursor-not-allowed disabled:opacity-65">
+              <button type="button" onClick={submitEventUpdate} disabled={isPending} className="inline-flex rounded-full bg-accent px-5 py-3 text-sm font-semibold text-white transition hover:bg-accent-strong disabled:cursor-not-allowed disabled:opacity-65">
                 {isPending ? "Saving event..." : "Save event details"}
               </button>
             </div>
@@ -794,7 +794,7 @@ export function EventManagementPanel({ refreshKey = 0 }: EventManagementPanelPro
                   </select>
                 </label>
                 <div className="flex items-end">
-                  <button type="button" onClick={submitStaffInvite} disabled={isPending} className="inline-flex rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-surface-soft disabled:cursor-not-allowed disabled:opacity-65">
+                  <button type="button" onClick={submitStaffInvite} disabled={isPending} className="inline-flex rounded-full bg-accent px-5 py-3 text-sm font-semibold text-white transition hover:bg-accent-strong disabled:cursor-not-allowed disabled:opacity-65">
                     {isPending ? "Sending invite..." : "Invite staff"}
                   </button>
                 </div>
@@ -829,7 +829,7 @@ export function EventManagementPanel({ refreshKey = 0 }: EventManagementPanelPro
                             <select
                               value={membership.role}
                               onChange={(event) => changeStaffRole(membership.id, event.target.value as "ADMIN" | "SCANNER")}
-                              className="rounded-full border border-border bg-white/8 px-4 py-2 text-sm text-foreground outline-hidden transition hover:border-accent-warm/40"
+                              className="rounded-full border border-border bg-surface-elevated px-4 py-2 text-sm text-foreground outline-hidden transition hover:border-accent-warm/40"
                             >
                               <option value="ADMIN">Admin</option>
                               <option value="SCANNER">Scanner</option>
@@ -843,7 +843,7 @@ export function EventManagementPanel({ refreshKey = 0 }: EventManagementPanelPro
                             </button>
                           </div>
                         ) : (
-                          <span className="rounded-full border border-border bg-white/8 px-4 py-2 text-sm font-semibold text-muted">
+                          <span className="rounded-full border border-border bg-surface-elevated px-4 py-2 text-sm font-semibold text-muted">
                             Owner protected
                           </span>
                         )}
@@ -1087,7 +1087,7 @@ export function EventManagementPanel({ refreshKey = 0 }: EventManagementPanelPro
                       className={`rounded-full border px-4 py-2 text-sm font-semibold transition ${
                         effectiveSelectedTicketTypeId === ticketType.id
                           ? "border-accent-warm/60 bg-accent-warm/15 text-foreground"
-                          : "border-border bg-white/8 text-muted hover:border-accent-warm/40 hover:bg-white/12"
+                          : "border-border bg-surface-elevated text-muted hover:border-accent-warm/40 hover:bg-surface-soft"
                       }`}
                     >
                       {ticketType.name}
@@ -1102,7 +1102,7 @@ export function EventManagementPanel({ refreshKey = 0 }: EventManagementPanelPro
                         form: blankTicketTypeForm(),
                       });
                     }}
-                    className="rounded-full border border-dashed border-border px-4 py-2 text-sm font-semibold text-muted transition hover:border-accent-warm/40 hover:bg-white/12"
+                    className="rounded-full border border-dashed border-border px-4 py-2 text-sm font-semibold text-muted transition hover:border-accent-warm/40 hover:bg-surface-soft"
                   >
                     New ticket type
                   </button>
@@ -1164,7 +1164,7 @@ export function EventManagementPanel({ refreshKey = 0 }: EventManagementPanelPro
                 </div>
               ) : null}
 
-              <button type="button" onClick={submitTicketType} disabled={isPending} className="inline-flex rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-surface-soft disabled:cursor-not-allowed disabled:opacity-65">
+              <button type="button" onClick={submitTicketType} disabled={isPending} className="inline-flex rounded-full bg-accent px-5 py-3 text-sm font-semibold text-white transition hover:bg-accent-strong disabled:cursor-not-allowed disabled:opacity-65">
                 {isPending
                   ? effectiveSelectedTicketTypeId
                     ? "Saving ticket type..."

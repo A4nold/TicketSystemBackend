@@ -241,7 +241,7 @@ export function OwnedTicketList({ eventSlug, onTicketsLoaded }: OwnedTicketListP
             <button
               type="button"
               onClick={() => ticketQuery.refetch()}
-              className="inline-flex rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-surface-soft"
+              className="inline-flex rounded-full bg-accent px-5 py-3 text-sm font-semibold text-white transition hover:bg-accent-strong"
             >
               Refresh wallet
             </button>
@@ -274,14 +274,14 @@ export function OwnedTicketList({ eventSlug, onTicketsLoaded }: OwnedTicketListP
           <div className="flex flex-wrap gap-3">
             <Link
               href={eventSlug ? `/events/${eventSlug}` : "/"}
-              className="inline-flex rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-surface-soft"
+              className="inline-flex rounded-full bg-accent px-5 py-3 text-sm font-semibold text-white transition hover:bg-accent-strong"
             >
               Browse event access
             </Link>
             <button
               type="button"
               onClick={() => ticketQuery.refetch()}
-              className="inline-flex rounded-full border border-border bg-white/8 px-5 py-3 text-sm font-semibold text-foreground transition hover:border-accent/50 hover:bg-white/12"
+              className="inline-flex rounded-full border border-border bg-surface-elevated px-5 py-3 text-sm font-semibold text-foreground transition hover:border-accent/50 hover:bg-surface-soft"
             >
               Refresh wallet
             </button>
@@ -311,7 +311,7 @@ export function OwnedTicketList({ eventSlug, onTicketsLoaded }: OwnedTicketListP
           <button
             type="button"
             onClick={() => ticketQuery.refetch()}
-            className="inline-flex rounded-full border border-border bg-white/8 px-5 py-3 text-sm font-semibold text-foreground transition hover:border-accent/50 hover:bg-white/12"
+            className="inline-flex rounded-full border border-border bg-surface-elevated px-5 py-3 text-sm font-semibold text-foreground transition hover:border-accent/50 hover:bg-surface-soft"
           >
             Refresh wallet
           </button>
@@ -334,7 +334,7 @@ export function OwnedTicketList({ eventSlug, onTicketsLoaded }: OwnedTicketListP
 
               <Link
                 href={`/events/${group.event.slug}`}
-                className="inline-flex rounded-full border border-border bg-white/8 px-4 py-2 text-sm font-semibold text-foreground transition hover:border-accent/50 hover:bg-white/12"
+                className="inline-flex rounded-full border border-border bg-surface-elevated px-4 py-2 text-sm font-semibold text-foreground transition hover:border-accent/50 hover:bg-surface-soft"
               >
                 View event
               </Link>

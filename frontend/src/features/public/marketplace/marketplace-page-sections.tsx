@@ -8,7 +8,7 @@ import {
 
 export function MarketplacePageHero() {
   return (
-    <Panel className="overflow-hidden bg-[linear-gradient(135deg,rgba(255,125,93,0.15),rgba(54,216,202,0.1),rgba(8,17,31,0.84))]">
+    <Panel className="overflow-hidden bg-[linear-gradient(135deg,rgba(255,255,255,0.98),rgba(223,240,242,0.76),rgba(255,236,230,0.82))]">
       <div className="space-y-4">
         <p className="text-sm font-medium uppercase tracking-[0.28em] text-accent-warm">
           Marketplace entry
@@ -17,7 +17,7 @@ export function MarketplacePageHero() {
           <h1 className="max-w-4xl font-display text-4xl leading-tight sm:text-5xl">
             Explore events where resale can live inside the same trusted ticket flow.
           </h1>
-          <p className="max-w-2xl text-base leading-7 text-slate-200 sm:text-lg">
+          <p className="max-w-2xl text-base leading-7 text-muted sm:text-lg">
             Browse event-scoped resale inventory where organizers have enabled controlled secondary-market activity.
           </p>
         </div>
@@ -58,7 +58,7 @@ export function MarketplaceEmptyState() {
       <div>
         <Link
           href="/events"
-          className="inline-flex rounded-full border border-border bg-white px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-surface-soft"
+          className="inline-flex rounded-full border border-border bg-accent px-5 py-3 text-sm font-semibold text-white transition hover:bg-accent-strong"
         >
           Browse all events
         </Link>

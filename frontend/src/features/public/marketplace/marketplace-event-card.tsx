@@ -31,7 +31,7 @@ export function MarketplaceEventCard({
   return (
     <Link
       href={event.href}
-      className={`group rounded-[1.6rem] border border-border bg-white/5 transition hover:border-accent/50 hover:bg-white/8 ${
+      className={`group rounded-[1.6rem] border border-border bg-surface/70 transition hover:border-accent/50 hover:bg-surface-elevated ${
         featured ? "p-6 md:p-7" : "p-5"
       }`}
     >

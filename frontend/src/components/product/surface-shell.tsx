@@ -83,8 +83,8 @@ export function SurfaceShell({
                       className={cn(
                         "rounded-full border px-4 py-2 text-sm transition",
                         isActive
-                          ? "border-transparent bg-white text-slate-950"
-                          : "border-border bg-white/5 text-foreground hover:border-accent/50 hover:bg-white/8",
+                          ? "border-accent/45 bg-accent/12 text-accent-strong shadow-[inset_0_0_0_1px_rgba(15,143,134,0.1)]"
+                          : "border-border bg-surface/70 text-foreground hover:border-accent/50 hover:bg-surface-elevated",
                       )}
                     >
                       {item.label}

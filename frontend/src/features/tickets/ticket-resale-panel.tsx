@@ -246,7 +246,7 @@ export function TicketResalePanel({
               <div className="mt-3">
                 <Link
                   href={`/marketplace/${eventSlug}`}
-                  className="inline-flex rounded-full border border-border bg-white/8 px-4 py-2 text-sm font-semibold text-foreground transition hover:border-accent/50 hover:bg-white/12"
+                  className="inline-flex rounded-full border border-border bg-surface-elevated px-4 py-2 text-sm font-semibold text-foreground transition hover:border-accent/50 hover:bg-surface-soft"
                 >
                   View in marketplace
                 </Link>
@@ -301,7 +301,7 @@ export function TicketResalePanel({
               type="button"
               onClick={submitResale}
               disabled={isPending}
-              className="inline-flex rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-surface-soft disabled:cursor-not-allowed disabled:opacity-65"
+              className="inline-flex rounded-full bg-accent px-5 py-3 text-sm font-semibold text-white transition hover:bg-accent-strong disabled:cursor-not-allowed disabled:opacity-65"
             >
               {isPending ? "Creating resale listing..." : "List for resale"}
             </button>

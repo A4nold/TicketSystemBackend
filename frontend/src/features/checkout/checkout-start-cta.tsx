@@ -154,7 +154,7 @@ export function CheckoutStartCta({
         <button
           type="button"
           onClick={continueToCheckout}
-          className="inline-flex w-full items-center justify-center rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-surface-soft"
+          className="inline-flex w-full items-center justify-center rounded-full bg-accent px-5 py-3 text-sm font-semibold text-white transition hover:bg-accent-strong"
         >
           Continue with {ticketType.name}
         </button>

@@ -182,13 +182,13 @@ export function OwnedTicketDetail({ serialNumber }: OwnedTicketDetailProps) {
                 <button
                   type="button"
                   onClick={() => ticketQuery.refetch()}
-                  className="inline-flex rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-surface-soft"
+                  className="inline-flex rounded-full bg-accent px-5 py-3 text-sm font-semibold text-white transition hover:bg-accent-strong"
                 >
                   Retry ticket detail
                 </button>
                 <Link
                   href="/wallet"
-                  className="inline-flex rounded-full border border-border bg-white/8 px-5 py-3 text-sm font-semibold text-foreground transition hover:border-accent/50 hover:bg-white/12"
+                  className="inline-flex rounded-full border border-border bg-surface-elevated px-5 py-3 text-sm font-semibold text-foreground transition hover:border-accent/50 hover:bg-surface-soft"
                 >
                   Back to wallet
                 </Link>
@@ -264,13 +264,13 @@ export function OwnedTicketDetail({ serialNumber }: OwnedTicketDetailProps) {
                   <button
                     type="button"
                     onClick={() => ticketQuery.refetch()}
-                    className="inline-flex rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-surface-soft"
+                    className="inline-flex rounded-full bg-accent px-5 py-3 text-sm font-semibold text-white transition hover:bg-accent-strong"
                   >
                     Refresh ticket state
                   </button>
                   <Link
                     href="/wallet"
-                    className="inline-flex rounded-full border border-border bg-white/8 px-5 py-3 text-sm font-semibold text-foreground transition hover:border-accent/50 hover:bg-white/12"
+                    className="inline-flex rounded-full border border-border bg-surface-elevated px-5 py-3 text-sm font-semibold text-foreground transition hover:border-accent/50 hover:bg-surface-soft"
                   >
                     Back to wallet
                   </Link>
@@ -468,7 +468,7 @@ export function OwnedTicketDetail({ serialNumber }: OwnedTicketDetailProps) {
                         href={ticket.event.postEventContent.ctaUrl}
                         target="_blank"
                         rel="noreferrer"
-                        className="inline-flex rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-surface-soft"
+                        className="inline-flex rounded-full bg-accent px-5 py-3 text-sm font-semibold text-white transition hover:bg-accent-strong"
                       >
                         {ticket.event.postEventContent.ctaLabel}
                       </a>

@@ -258,14 +258,14 @@ export function EventCreationForm({ onCreated }: EventCreationFormProps) {
             <div className="flex flex-wrap gap-3">
               <Link
                 href={`/events/${createdEvent.slug}`}
-                className="inline-flex rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-surface-soft"
+                className="inline-flex rounded-full bg-accent px-5 py-3 text-sm font-semibold text-white transition hover:bg-accent-strong"
               >
                 View public event page
               </Link>
               <button
                 type="button"
                 onClick={() => setCreatedEvent(null)}
-                className="inline-flex rounded-full border border-border bg-white/8 px-5 py-3 text-sm font-semibold text-foreground transition hover:border-accent/50 hover:bg-white/12"
+                className="inline-flex rounded-full border border-border bg-surface-elevated px-5 py-3 text-sm font-semibold text-foreground transition hover:border-accent/50 hover:bg-surface-soft"
               >
                 Create another event
               </button>
@@ -574,7 +574,7 @@ export function EventCreationForm({ onCreated }: EventCreationFormProps) {
             type="button"
             onClick={submitEvent}
             disabled={isPending}
-            className="inline-flex rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-surface-soft disabled:cursor-not-allowed disabled:opacity-65"
+            className="inline-flex rounded-full bg-accent px-5 py-3 text-sm font-semibold text-white transition hover:bg-accent-strong disabled:cursor-not-allowed disabled:opacity-65"
           >
             {isPending ? "Creating event..." : "Create event"}
           </button>
@@ -585,7 +585,7 @@ export function EventCreationForm({ onCreated }: EventCreationFormProps) {
               setCreatedEvent(null);
               setForm(initialFormState);
             }}
-            className="inline-flex rounded-full border border-border bg-white/8 px-5 py-3 text-sm font-semibold text-foreground transition hover:border-accent-warm/50 hover:bg-white/12"
+            className="inline-flex rounded-full border border-border bg-surface-elevated px-5 py-3 text-sm font-semibold text-foreground transition hover:border-accent-warm/50 hover:bg-surface-soft"
           >
             Reset form
           </button>

@@ -334,7 +334,7 @@ export function TicketTransferPanel({
               type="button"
               onClick={submitTransfer}
               disabled={isPending}
-              className="inline-flex rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-surface-soft disabled:cursor-not-allowed disabled:opacity-65"
+              className="inline-flex rounded-full bg-accent px-5 py-3 text-sm font-semibold text-white transition hover:bg-accent-strong disabled:cursor-not-allowed disabled:opacity-65"
             >
               {isPending ? "Starting transfer..." : "Start transfer"}
             </button>
@@ -374,7 +374,7 @@ export function TicketTransferPanel({
                   type="button"
                   onClick={submitReminder}
                   disabled={isPending}
-                  className="inline-flex rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-surface-soft disabled:cursor-not-allowed disabled:opacity-65"
+                  className="inline-flex rounded-full bg-accent px-5 py-3 text-sm font-semibold text-white transition hover:bg-accent-strong disabled:cursor-not-allowed disabled:opacity-65"
                 >
                   {isPending ? "Sending reminder..." : "Send reminder"}
                 </button>

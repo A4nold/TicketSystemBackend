@@ -258,8 +258,8 @@ export function AuthScreen({
               onClick={() => setMode("register")}
               className={`flex-1 rounded-full px-4 py-2 text-sm font-medium transition ${
                 mode === "register"
-                  ? "bg-white text-slate-950"
-                  : "text-foreground hover:bg-white/10"
+                  ? "bg-foreground text-background"
+                  : "text-foreground hover:bg-surface-soft"
               }`}
             >
               Create account
@@ -269,8 +269,8 @@ export function AuthScreen({
               onClick={() => setMode("login")}
               className={`flex-1 rounded-full px-4 py-2 text-sm font-medium transition ${
                 mode === "login"
-                  ? "bg-white text-slate-950"
-                  : "text-foreground hover:bg-white/10"
+                  ? "bg-foreground text-background"
+                  : "text-foreground hover:bg-surface-soft"
               }`}
             >
               Sign in
@@ -307,7 +307,7 @@ export function AuthScreen({
                     onClick={() => handleRegisterChange("accountType", "ATTENDEE")}
                     className={`rounded-[1.2rem] border px-4 py-3 text-left transition ${
                       registerValues.accountType === "ATTENDEE"
-                        ? "border-transparent bg-white text-slate-950"
+                        ? "border-transparent bg-foreground text-background"
                         : "border-border bg-black/10 text-foreground hover:border-accent/50"
                     }`}
                   >
@@ -321,7 +321,7 @@ export function AuthScreen({
                     onClick={() => handleRegisterChange("accountType", "ORGANIZER")}
                     className={`rounded-[1.2rem] border px-4 py-3 text-left transition ${
                       registerValues.accountType === "ORGANIZER"
-                        ? "border-transparent bg-white text-slate-950"
+                        ? "border-transparent bg-foreground text-background"
                         : "border-border bg-black/10 text-foreground hover:border-accent/50"
                     }`}
                   >
@@ -404,7 +404,7 @@ export function AuthScreen({
               <button
                 type="submit"
                 disabled={isPending}
-                className="inline-flex w-full items-center justify-center rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-surface-soft disabled:cursor-not-allowed disabled:opacity-70"
+                className="inline-flex w-full items-center justify-center rounded-full bg-accent px-5 py-3 text-sm font-semibold text-white transition hover:bg-accent-strong disabled:cursor-not-allowed disabled:opacity-70"
               >
                 {isPending
                   ? "Creating account..."
@@ -462,7 +462,7 @@ export function AuthScreen({
               <button
                 type="submit"
                 disabled={isPending}
-                className="inline-flex w-full items-center justify-center rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-surface-soft disabled:cursor-not-allowed disabled:opacity-70"
+                className="inline-flex w-full items-center justify-center rounded-full bg-accent px-5 py-3 text-sm font-semibold text-white transition hover:bg-accent-strong disabled:cursor-not-allowed disabled:opacity-70"
               >
                 {isPending ? "Signing in..." : "Sign in"}
               </button>

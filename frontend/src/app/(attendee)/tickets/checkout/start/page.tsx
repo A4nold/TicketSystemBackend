@@ -30,7 +30,7 @@ function InvalidSelectionState() {
 
       <Link
         href="/"
-        className="inline-flex rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-surface-soft"
+        className="inline-flex rounded-full bg-accent px-5 py-3 text-sm font-semibold text-white transition hover:bg-accent-strong"
       >
         Back to public home
       </Link>

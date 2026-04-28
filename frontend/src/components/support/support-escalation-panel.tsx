@@ -33,11 +33,11 @@ export function SupportEscalationPanel({
         <div className="flex flex-wrap gap-3">
           <Link
             href={getSupportMailtoHref(subject)}
-            className="inline-flex rounded-full border border-border bg-white/8 px-5 py-3 text-sm font-semibold text-foreground transition hover:border-accent/50 hover:bg-white/12"
+            className="inline-flex rounded-full border border-border bg-surface-elevated px-5 py-3 text-sm font-semibold text-foreground transition hover:border-accent/50 hover:bg-surface-soft"
           >
             {ctaLabel}
           </Link>
-          <span className="inline-flex items-center rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-950">
+          <span className="inline-flex items-center rounded-full bg-accent px-5 py-3 text-sm font-semibold text-white">
             {getSupportLabel()}
           </span>
         </div>

@@ -1,19 +1,19 @@
 @import "tailwindcss";
 
 :root {
-  --background: #08111f;
-  --foreground: #eef4fb;
-  --surface: #0f1b2d;
-  --surface-elevated: #14253b;
-  --surface-soft: #edf3f8;
-  --muted: #9db0c2;
-  --border: rgba(157, 176, 194, 0.24);
-  --accent: #36d8ca;
-  --accent-strong: #20b4ab;
-  --accent-warm: #ff7d5d;
-  --success: #31c67f;
-  --warning: #f7b94c;
-  --danger: #ff6c6c;
+  --background: #f7fafc;
+  --foreground: #102033;
+  --surface: #ffffff;
+  --surface-elevated: #edf6f8;
+  --surface-soft: #dff0f2;
+  --muted: #5d7084;
+  --border: rgba(16, 32, 51, 0.14);
+  --accent: #0f8f86;
+  --accent-strong: #0a6861;
+  --accent-warm: #d95f43;
+  --success: #16845a;
+  --warning: #b7791f;
+  --danger: #d04444;
   --font-sans-stack:
     "Avenir Next", Avenir, "Segoe UI", "Helvetica Neue", sans-serif;
   --font-display-stack:
@@ -45,12 +45,13 @@
 
 html {
   background:
-    radial-gradient(circle at top, rgba(54, 216, 202, 0.16), transparent 30%),
-    linear-gradient(180deg, #091321 0%, #08111f 48%, #0b1625 100%);
+    radial-gradient(circle at top, rgba(15, 143, 134, 0.14), transparent 30%),
+    linear-gradient(180deg, #ffffff 0%, #f7fafc 48%, #edf6f8 100%);
 }
 
 body {
   min-height: 100vh;
+  background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans-stack);
 }
@@ -61,7 +62,7 @@ a {
 }
 
 ::selection {
-  background: rgba(54, 216, 202, 0.32);
+  background: rgba(15, 143, 134, 0.22);
   color: var(--foreground);
 }
 

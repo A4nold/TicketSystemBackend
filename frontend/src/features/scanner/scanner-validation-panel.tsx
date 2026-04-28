@@ -102,7 +102,7 @@ export function ScannerValidationPanel({
                   type="button"
                   onClick={cameraActive ? onStopCamera : onStartCamera}
                   disabled={isCameraPending || !selectedEvent}
-                  className="inline-flex rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-surface-soft disabled:cursor-not-allowed disabled:opacity-65"
+                  className="inline-flex rounded-full bg-accent px-5 py-3 text-sm font-semibold text-white transition hover:bg-accent-strong disabled:cursor-not-allowed disabled:opacity-65"
                 >
                   {isCameraPending
                     ? "Starting camera..."
@@ -190,7 +190,7 @@ export function ScannerValidationPanel({
                 type="button"
                 onClick={onSubmitValidation}
                 disabled={isPending}
-                className="inline-flex rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-surface-soft disabled:cursor-not-allowed disabled:opacity-65"
+                className="inline-flex rounded-full bg-accent px-5 py-3 text-sm font-semibold text-white transition hover:bg-accent-strong disabled:cursor-not-allowed disabled:opacity-65"
               >
                 {isPending
                   ? degradedMode

@@ -72,7 +72,7 @@ export function ProtectedSurfaceGate({
           </p>
           <Link
             href={`/auth?mode=login&next=${encodeURIComponent(nextPath)}`}
-            className="inline-flex rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-surface-soft"
+            className="inline-flex rounded-full bg-accent px-5 py-3 text-sm font-semibold text-white transition hover:bg-accent-strong"
           >
             Go to sign-in
           </Link>
@@ -119,13 +119,13 @@ export function ProtectedSurfaceGate({
             <div className="flex flex-wrap gap-3">
               <Link
                 href={defaultPath}
-                className="inline-flex rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-surface-soft"
+                className="inline-flex rounded-full bg-accent px-5 py-3 text-sm font-semibold text-white transition hover:bg-accent-strong"
               >
                 Go to my surface
               </Link>
               <Link
                 href="/"
-                className="inline-flex rounded-full border border-border bg-white/8 px-5 py-3 text-sm font-semibold text-foreground transition hover:border-accent/50 hover:bg-white/12"
+                className="inline-flex rounded-full border border-border bg-surface-elevated px-5 py-3 text-sm font-semibold text-foreground transition hover:border-accent/50 hover:bg-surface-soft"
               >
                 Back to public home
               </Link>

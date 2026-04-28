@@ -181,14 +181,14 @@ export function CheckoutReturnStatus({
               <div className="flex flex-wrap gap-3">
                 <Link
                   href={attendeeHref}
-                  className="inline-flex rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-surface-soft"
+                  className="inline-flex rounded-full bg-accent px-5 py-3 text-sm font-semibold text-white transition hover:bg-accent-strong"
                 >
                   Continue to your wallet
                 </Link>
                 <button
                   type="button"
                   onClick={() => orderQuery.refetch()}
-                  className="inline-flex rounded-full border border-success/30 bg-white/8 px-5 py-3 text-sm font-semibold text-foreground transition hover:border-success/50 hover:bg-white/12"
+                  className="inline-flex rounded-full border border-success/30 bg-surface-elevated px-5 py-3 text-sm font-semibold text-foreground transition hover:border-success/50 hover:bg-surface-soft"
                 >
                   Refresh order state
                 </button>
@@ -223,13 +223,13 @@ export function CheckoutReturnStatus({
                   <button
                     type="button"
                     onClick={() => orderQuery.refetch()}
-                    className="inline-flex rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-surface-soft"
+                    className="inline-flex rounded-full bg-accent px-5 py-3 text-sm font-semibold text-white transition hover:bg-accent-strong"
                   >
                     Refresh payment status
                   </button>
                   <Link
                     href={attendeeHref}
-                    className="inline-flex rounded-full border border-border bg-white/8 px-5 py-3 text-sm font-semibold text-foreground transition hover:border-accent/50 hover:bg-white/12"
+                    className="inline-flex rounded-full border border-border bg-surface-elevated px-5 py-3 text-sm font-semibold text-foreground transition hover:border-accent/50 hover:bg-surface-soft"
                   >
                     Back to attendee surface
                   </Link>
@@ -265,13 +265,13 @@ export function CheckoutReturnStatus({
                 <div className="flex flex-wrap gap-3">
                   <Link
                     href="/"
-                    className="inline-flex rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-surface-soft"
+                    className="inline-flex rounded-full bg-accent px-5 py-3 text-sm font-semibold text-white transition hover:bg-accent-strong"
                   >
                     Return to public home
                   </Link>
                   <Link
                     href={attendeeHref}
-                    className="inline-flex rounded-full border border-border bg-white/8 px-5 py-3 text-sm font-semibold text-foreground transition hover:border-accent/50 hover:bg-white/12"
+                    className="inline-flex rounded-full border border-border bg-surface-elevated px-5 py-3 text-sm font-semibold text-foreground transition hover:border-accent/50 hover:bg-surface-soft"
                   >
                     Back to attendee surface
                   </Link>
@@ -307,13 +307,13 @@ export function CheckoutReturnStatus({
                   <button
                     type="button"
                     onClick={() => orderQuery.refetch()}
-                    className="inline-flex rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-surface-soft"
+                    className="inline-flex rounded-full bg-accent px-5 py-3 text-sm font-semibold text-white transition hover:bg-accent-strong"
                   >
                     Retry order lookup
                   </button>
                   <Link
                     href={attendeeHref}
-                    className="inline-flex rounded-full border border-danger/30 bg-white/8 px-5 py-3 text-sm font-semibold text-foreground transition hover:border-danger/50 hover:bg-white/12"
+                    className="inline-flex rounded-full border border-danger/30 bg-surface-elevated px-5 py-3 text-sm font-semibold text-foreground transition hover:border-danger/50 hover:bg-surface-soft"
                   >
                     Go to attendee surface
                   </Link>

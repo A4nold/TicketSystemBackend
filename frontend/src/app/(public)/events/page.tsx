@@ -30,7 +30,7 @@ function EventDiscoveryCard({ event }: { event: PublicEventSummary }) {
   return (
     <Link
       href={`/events/${event.slug}`}
-      className="group rounded-[1.6rem] border border-border bg-white/5 p-5 transition hover:border-accent/45 hover:bg-white/8"
+      className="group rounded-[1.6rem] border border-border bg-surface/70 p-5 transition hover:border-accent/45 hover:bg-surface-elevated"
     >
       <div className="space-y-4">
         <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em]">
@@ -107,7 +107,7 @@ export default async function EventsDiscoveryPage() {
 
   return (
     <div className="space-y-8">
-      <Panel className="overflow-hidden bg-[linear-gradient(135deg,rgba(54,216,202,0.12),rgba(255,125,93,0.12),rgba(8,17,31,0.82))]">
+      <Panel className="overflow-hidden bg-[linear-gradient(135deg,rgba(255,255,255,0.98),rgba(223,240,242,0.76),rgba(255,236,230,0.82))]">
         <div className="space-y-4">
           <p className="text-sm font-medium uppercase tracking-[0.28em] text-accent">
             Event discovery
@@ -116,7 +116,7 @@ export default async function EventsDiscoveryPage() {
             <h1 className="max-w-4xl font-display text-4xl leading-tight sm:text-5xl">
               Browse upcoming events and choose where your next ticket goes.
             </h1>
-            <p className="max-w-2xl text-base leading-7 text-slate-200 sm:text-lg">
+            <p className="max-w-2xl text-base leading-7 text-muted sm:text-lg">
               Compare event timing, venue context, and ticket entry points from one marketplace-style listing surface.
             </p>
           </div>

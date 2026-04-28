@@ -68,7 +68,7 @@ export default async function MarketplaceEventPage({
 
   return (
     <div className="space-y-8">
-      <Panel className="overflow-hidden bg-[linear-gradient(135deg,rgba(255,125,93,0.15),rgba(54,216,202,0.1),rgba(8,17,31,0.84))]">
+      <Panel className="overflow-hidden bg-[linear-gradient(135deg,rgba(255,255,255,0.98),rgba(223,240,242,0.76),rgba(255,236,230,0.82))]">
         <div className="space-y-4">
           <p className="text-sm font-medium uppercase tracking-[0.28em] text-accent-warm">
             Event resale marketplace
@@ -77,18 +77,18 @@ export default async function MarketplaceEventPage({
             <h1 className="max-w-4xl font-display text-4xl leading-tight sm:text-5xl">
               {event.title}
             </h1>
-            <p className="max-w-2xl text-base leading-7 text-slate-200 sm:text-lg">
+            <p className="max-w-2xl text-base leading-7 text-muted sm:text-lg">
               Browse active resale listings for this event and enter the secondary-market purchase flow without leaving the product.
             </p>
           </div>
           <div className="grid gap-3 sm:grid-cols-3">
-            <div className="rounded-[1.2rem] border border-white/12 bg-black/15 p-4 text-sm text-foreground">
+            <div className="rounded-[1.2rem] border border-border bg-black/15 p-4 text-sm text-foreground">
               {formatEventWindow(event)}
             </div>
-            <div className="rounded-[1.2rem] border border-white/12 bg-black/15 p-4 text-sm text-foreground">
+            <div className="rounded-[1.2rem] border border-border bg-black/15 p-4 text-sm text-foreground">
               {event.venueLabel}
             </div>
-            <div className="rounded-[1.2rem] border border-white/12 bg-black/15 p-4 text-sm text-foreground">
+            <div className="rounded-[1.2rem] border border-border bg-black/15 p-4 text-sm text-foreground">
               {listings.length} active resale listing{listings.length === 1 ? "" : "s"}
             </div>
           </div>
@@ -113,13 +113,13 @@ export default async function MarketplaceEventPage({
           <div className="flex flex-wrap gap-3">
             <Link
               href={`/events/${event.slug}`}
-              className="inline-flex rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-surface-soft"
+              className="inline-flex rounded-full bg-accent px-5 py-3 text-sm font-semibold text-white transition hover:bg-accent-strong"
             >
               Open event page
             </Link>
             <Link
               href="/marketplace"
-              className="inline-flex rounded-full border border-border bg-white/8 px-5 py-3 text-sm font-semibold text-foreground transition hover:border-accent/50 hover:bg-white/12"
+              className="inline-flex rounded-full border border-border bg-surface-elevated px-5 py-3 text-sm font-semibold text-foreground transition hover:border-accent/50 hover:bg-surface-soft"
             >
               Back to marketplace
             </Link>

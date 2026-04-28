@@ -185,13 +185,13 @@ export function WalletActivityPanel({
                     <div className="mt-4 flex flex-wrap gap-3">
                       <Link
                         href={`/transfer/accept/${encodeURIComponent(transfer.serialNumber)}`}
-                        className="inline-flex rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-surface-soft"
+                        className="inline-flex rounded-full bg-accent px-5 py-3 text-sm font-semibold text-white transition hover:bg-accent-strong"
                       >
                         Review transfer
                       </Link>
                       <Link
                         href={`/events/${transfer.event.slug}`}
-                        className="inline-flex rounded-full border border-border bg-white/8 px-5 py-3 text-sm font-semibold text-foreground transition hover:border-accent/50 hover:bg-white/12"
+                        className="inline-flex rounded-full border border-border bg-surface-elevated px-5 py-3 text-sm font-semibold text-foreground transition hover:border-accent/50 hover:bg-surface-soft"
                       >
                         View event
                       </Link>
@@ -243,14 +243,14 @@ export function WalletActivityPanel({
                         onClick={() =>
                           openNotification(notification.id, notification.actionUrl)
                         }
-                        className="inline-flex rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-surface-soft"
+                        className="inline-flex rounded-full bg-accent px-5 py-3 text-sm font-semibold text-white transition hover:bg-accent-strong"
                       >
                         Open update
                       </button>
                       <button
                         type="button"
                         onClick={() => openNotification(notification.id, null)}
-                        className="inline-flex rounded-full border border-border bg-white/8 px-5 py-3 text-sm font-semibold text-foreground transition hover:border-accent/50 hover:bg-white/12"
+                        className="inline-flex rounded-full border border-border bg-surface-elevated px-5 py-3 text-sm font-semibold text-foreground transition hover:border-accent/50 hover:bg-surface-soft"
                       >
                         Mark as read
                       </button>
@@ -272,13 +272,13 @@ export function WalletActivityPanel({
           <div className="flex flex-wrap gap-3">
             <Link
               href={`/wallet/${encodeURIComponent(upcomingTicket.serialNumber)}`}
-              className="inline-flex rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-surface-soft"
+              className="inline-flex rounded-full bg-accent px-5 py-3 text-sm font-semibold text-white transition hover:bg-accent-strong"
             >
               Open next ticket
             </Link>
             <Link
               href={`/wallet?eventSlug=${encodeURIComponent(upcomingTicket.event.slug)}`}
-              className="inline-flex rounded-full border border-border bg-white/8 px-5 py-3 text-sm font-semibold text-foreground transition hover:border-accent/50 hover:bg-white/12"
+              className="inline-flex rounded-full border border-border bg-surface-elevated px-5 py-3 text-sm font-semibold text-foreground transition hover:border-accent/50 hover:bg-surface-soft"
             >
               Filter this event
             </Link>
@@ -317,7 +317,7 @@ export function WalletActivityPanel({
                   <div className="mt-4 flex flex-wrap gap-3">
                     <Link
                       href={`/wallet/${encodeURIComponent(ticket.serialNumber)}`}
-                      className="inline-flex rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-surface-soft"
+                      className="inline-flex rounded-full bg-accent px-5 py-3 text-sm font-semibold text-white transition hover:bg-accent-strong"
                     >
                       Open ticket detail
                     </Link>
@@ -327,7 +327,7 @@ export function WalletActivityPanel({
                         href={ticket.event.postEventContent.ctaUrl}
                         target="_blank"
                         rel="noreferrer"
-                        className="inline-flex rounded-full border border-border bg-white/8 px-5 py-3 text-sm font-semibold text-foreground transition hover:border-accent/50 hover:bg-white/12"
+                        className="inline-flex rounded-full border border-border bg-surface-elevated px-5 py-3 text-sm font-semibold text-foreground transition hover:border-accent/50 hover:bg-surface-soft"
                       >
                         {ticket.event.postEventContent.ctaLabel}
                       </a>

@@ -20,7 +20,7 @@ export default function EventNotFound() {
         </div>
         <Link
           href="/"
-          className="inline-flex rounded-full border border-border bg-white px-5 py-3 text-sm font-medium text-slate-950 transition hover:bg-surface-soft"
+          className="inline-flex rounded-full border border-border bg-accent px-5 py-3 text-sm font-medium text-white transition hover:bg-accent-strong"
         >
           Back to public access
         </Link>

@@ -98,14 +98,14 @@ export function RecentOrderPanel({ orderId }: RecentOrderPanelProps) {
         <div className="flex flex-wrap gap-3">
           <Link
             href={`/checkout/success?orderId=${encodeURIComponent(order.id)}`}
-            className="inline-flex rounded-full border border-success/30 bg-white/8 px-5 py-3 text-sm font-semibold text-foreground transition hover:border-success/50 hover:bg-white/12"
+            className="inline-flex rounded-full border border-success/30 bg-surface-elevated px-5 py-3 text-sm font-semibold text-foreground transition hover:border-success/50 hover:bg-surface-soft"
           >
             Reopen confirmation
           </Link>
           <button
             type="button"
             onClick={() => orderQuery.refetch()}
-            className="inline-flex rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-surface-soft"
+            className="inline-flex rounded-full bg-accent px-5 py-3 text-sm font-semibold text-white transition hover:bg-accent-strong"
           >
             Refresh latest purchase
           </button>

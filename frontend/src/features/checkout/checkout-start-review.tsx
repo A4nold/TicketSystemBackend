@@ -277,13 +277,13 @@ export function CheckoutStartReview({
                   type="button"
                   onClick={beginPayment}
                   disabled={isPending}
-                  className="inline-flex w-full items-center justify-center rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-surface-soft disabled:cursor-not-allowed disabled:opacity-65"
+                  className="inline-flex w-full items-center justify-center rounded-full bg-accent px-5 py-3 text-sm font-semibold text-white transition hover:bg-accent-strong disabled:cursor-not-allowed disabled:opacity-65"
                 >
                   {isPending ? "Starting secure payment..." : "Continue to secure payment"}
                 </button>
                 <Link
                   href={`/events/${event.slug}`}
-                  className="inline-flex w-full items-center justify-center rounded-full border border-border bg-white/8 px-5 py-3 text-sm font-semibold text-foreground transition hover:border-accent/50 hover:bg-white/12"
+                  className="inline-flex w-full items-center justify-center rounded-full border border-border bg-surface-elevated px-5 py-3 text-sm font-semibold text-foreground transition hover:border-accent/50 hover:bg-surface-soft"
                 >
                   Back to event details
                 </Link>

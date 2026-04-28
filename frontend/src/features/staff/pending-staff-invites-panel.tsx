@@ -109,7 +109,7 @@ export function PendingStaffInvitesPanel() {
                 type="button"
                 onClick={() => acceptInvite(invite.eventId)}
                 disabled={isPending && pendingEventId === invite.eventId}
-                className="mt-4 inline-flex rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-surface-soft disabled:cursor-not-allowed disabled:opacity-65"
+                className="mt-4 inline-flex rounded-full bg-accent px-5 py-3 text-sm font-semibold text-white transition hover:bg-accent-strong disabled:cursor-not-allowed disabled:opacity-65"
               >
                 {isPending && pendingEventId === invite.eventId
                   ? "Accepting invite..."

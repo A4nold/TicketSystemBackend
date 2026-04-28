@@ -148,7 +148,7 @@ export function PendingTransferInboxPanel() {
                   type="button"
                   onClick={() => beginAcceptance(transfer.serialNumber)}
                   disabled={isPending && pendingSerialNumber === transfer.serialNumber}
-                  className="inline-flex rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-surface-soft disabled:cursor-not-allowed disabled:opacity-65"
+                  className="inline-flex rounded-full bg-accent px-5 py-3 text-sm font-semibold text-white transition hover:bg-accent-strong disabled:cursor-not-allowed disabled:opacity-65"
                 >
                   {isPending && pendingSerialNumber === transfer.serialNumber
                     ? "Accepting..."
@@ -156,13 +156,13 @@ export function PendingTransferInboxPanel() {
                 </button>
                 <Link
                   href={`/transfer/accept/${encodeURIComponent(transfer.serialNumber)}`}
-                  className="inline-flex rounded-full border border-border bg-white/8 px-5 py-3 text-sm font-semibold text-foreground transition hover:border-accent/50 hover:bg-white/12"
+                  className="inline-flex rounded-full border border-border bg-surface-elevated px-5 py-3 text-sm font-semibold text-foreground transition hover:border-accent/50 hover:bg-surface-soft"
                 >
                   Review transfer
                 </Link>
                 <Link
                   href={`/events/${transfer.event.slug}`}
-                  className="inline-flex rounded-full border border-border bg-white/8 px-5 py-3 text-sm font-semibold text-foreground transition hover:border-accent/50 hover:bg-white/12"
+                  className="inline-flex rounded-full border border-border bg-surface-elevated px-5 py-3 text-sm font-semibold text-foreground transition hover:border-accent/50 hover:bg-surface-soft"
                 >
                   View event
                 </Link>

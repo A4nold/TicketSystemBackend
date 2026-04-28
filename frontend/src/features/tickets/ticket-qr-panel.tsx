@@ -105,7 +105,7 @@ export function TicketQrPanel({
             <button
               type="button"
               onClick={() => setShouldLoadQr(true)}
-              className="inline-flex rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-surface-soft"
+              className="inline-flex rounded-full bg-accent px-5 py-3 text-sm font-semibold text-white transition hover:bg-accent-strong"
             >
               Show scan-ready QR
             </button>
@@ -127,7 +127,7 @@ export function TicketQrPanel({
             <button
               type="button"
               onClick={() => qrQuery.refetch()}
-              className="inline-flex rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-surface-soft"
+              className="inline-flex rounded-full bg-accent px-5 py-3 text-sm font-semibold text-white transition hover:bg-accent-strong"
             >
               Retry QR retrieval
             </button>
@@ -136,7 +136,7 @@ export function TicketQrPanel({
 
         {shouldLoadQr && qrQuery.data && qrImageUrl ? (
           <div className="space-y-4">
-            <div className="mx-auto w-full max-w-[22rem] rounded-[2rem] border border-success/20 bg-[#f7f6f0] p-5 shadow-[0_18px_60px_rgba(2,8,20,0.18)]">
+            <div className="mx-auto w-full max-w-[22rem] rounded-[2rem] border border-success/20 bg-surface p-5 shadow-[0_18px_50px_rgba(16,32,51,0.12)]">
               <Image
                 src={qrImageUrl}
                 alt={`Scan-ready QR for ticket ${serialNumber}`}
@@ -175,7 +175,7 @@ export function TicketQrPanel({
               <button
                 type="button"
                 onClick={() => qrQuery.refetch()}
-                className="inline-flex rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-surface-soft"
+                className="inline-flex rounded-full bg-accent px-5 py-3 text-sm font-semibold text-white transition hover:bg-accent-strong"
               >
                 Refresh QR
               </button>
@@ -185,7 +185,7 @@ export function TicketQrPanel({
                   setShouldLoadQr(false);
                   setQrImageUrl(null);
                 }}
-                className="inline-flex rounded-full border border-border bg-white/8 px-5 py-3 text-sm font-semibold text-foreground transition hover:border-accent/50 hover:bg-white/12"
+                className="inline-flex rounded-full border border-border bg-surface-elevated px-5 py-3 text-sm font-semibold text-foreground transition hover:border-accent/50 hover:bg-surface-soft"
               >
                 Return to ticket detail
               </button>
