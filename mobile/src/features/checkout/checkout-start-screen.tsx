@@ -18,6 +18,10 @@ import { getPublicEventBySlug } from "@/lib/events/public-events-client";
 import { createCheckoutOrder, getCheckoutQuote } from "@/lib/orders/orders-client";
 import { palette } from "@/styles/theme";
 
+function buildAppReturnUrl(pathname: "/checkout/success" | "/checkout/cancel") {
+  return ExpoLinking.createURL(pathname, { scheme: "ticketsystem" });
+}
+
 function createIdempotencyKey() {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
     return `checkout-${crypto.randomUUID()}`;
@@ -215,7 +219,7 @@ export function CheckoutStartScreen() {
         : undefined;
       const order = await createCheckoutOrder(
         {
-          cancelReturnUrl: ExpoLinking.createURL("/checkout/cancel"),
+          cancelReturnUrl: buildAppReturnUrl("/checkout/cancel"),
           eventSlug: resolvedEvent.slug,
           idempotencyKey,
           items: [
@@ -225,7 +229,7 @@ export function CheckoutStartScreen() {
             },
           ],
           paymentProvider,
-          successReturnUrl: ExpoLinking.createURL("/checkout/success"),
+          successReturnUrl: buildAppReturnUrl("/checkout/success"),
         },
         activeSession.accessToken,
       );
@@ -234,8 +238,8 @@ export function CheckoutStartScreen() {
         throw new Error("Checkout URL was not returned by the backend.");
       }
 
-      const successReturnUrl = ExpoLinking.createURL("/checkout/success");
-      const cancelReturnUrl = ExpoLinking.createURL("/checkout/cancel");
+      const successReturnUrl = buildAppReturnUrl("/checkout/success");
+      const cancelReturnUrl = buildAppReturnUrl("/checkout/cancel");
 
       const authResult = await WebBrowser.openAuthSessionAsync(
         order.checkoutUrl,
