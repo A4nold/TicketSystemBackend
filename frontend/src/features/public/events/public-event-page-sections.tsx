@@ -181,6 +181,7 @@ function TicketCard({
           eventSlug={event.slug}
           ticketType={{
             availabilityLabel: ticketType.availabilityLabel,
+            currency: ticketType.currency,
             id: ticketType.id,
             isPurchasable: ticketType.isPurchasable,
             maxPerOrder: ticketType.maxPerOrder,

@@ -103,7 +103,7 @@ export async function listOwnedTickets(
   },
 ) {
   return apiFetch<OwnedTicketSummary[]>(
-    "/api/tickets/me/owned",
+    "/api/me/tickets",
     {
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -117,7 +117,7 @@ export async function getOwnedTicketBySerialNumber(
   serialNumber: string,
   accessToken: string,
 ) {
-  return apiFetch<OwnedTicketDetail>(`/api/tickets/me/owned/${serialNumber}`, {
+  return apiFetch<OwnedTicketDetail>(`/api/me/tickets/${serialNumber}`, {
     headers: {
       Authorization: `Bearer ${accessToken}`,
     },

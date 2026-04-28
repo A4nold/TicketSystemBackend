@@ -8,7 +8,7 @@ export type CreateCheckoutPayload = {
     quantity: number;
     ticketTypeId: string;
   }>;
-  paymentProvider?: "STRIPE";
+  paymentProvider?: "STRIPE" | "PAYSTACK";
   idempotencyKey?: string;
 };
 

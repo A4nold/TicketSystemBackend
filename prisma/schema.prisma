@@ -202,6 +202,7 @@ model Event {
   description          String?
   venueName            String?           @map("venue_name")
   venueAddress         String?           @map("venue_address")
+  currency             String            @default("EUR")
   timezone             String
   startsAt             DateTime          @map("starts_at")
   endsAt               DateTime?         @map("ends_at")

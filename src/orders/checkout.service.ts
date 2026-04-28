@@ -59,6 +59,8 @@ export class CheckoutService {
     }
 
     const { event, feePolicy, requestedItems, ticketTypes, totals } = quote;
+    const paymentProvider =
+      payload.paymentProvider ?? this.resolveDefaultPaymentProvider(totals.currency);
     const order = await this.prisma.order.create({
       data: {
         userId: user.id,
@@ -68,7 +70,7 @@ export class CheckoutService {
         subtotalAmount: totals.subtotal,
         feeAmount: totals.fee,
         totalAmount: totals.total,
-        paymentProvider: payload.paymentProvider ?? PaymentProvider.STRIPE,
+        paymentProvider,
         checkoutSessionId: this.generateCheckoutSessionId(),
         idempotencyKey: payload.idempotencyKey,
         items: {
@@ -109,6 +111,62 @@ export class CheckoutService {
           id: order.id,
           currency: order.currency,
           totalAmount: order.totalAmount,
+          userEmail: user.email,
+          userId: order.userId,
+          successReturnUrl: payload.successReturnUrl,
+          event: {
+            title: order.event.title,
+            slug: order.event.slug,
+          },
+          items: order.items.map((item) => ({
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+            ticketType: {
+              name: item.ticketType.name,
+              description: item.ticketType.description,
+              currency: item.ticketType.currency,
+            },
+          })),
+        });
+
+        checkoutSessionId = session.checkoutSessionId;
+        checkoutUrl = session.checkoutUrl ?? null;
+        paymentStatus = session.paymentStatus ?? null;
+        checkoutStatus = session.checkoutStatus ?? null;
+        isAwaitingPaymentConfirmation =
+          session.isAwaitingPaymentConfirmation ?? true;
+
+        await this.prisma.order.update({
+          where: { id: order.id },
+          data: {
+            checkoutSessionId,
+          },
+        });
+
+        this.logger.log(
+          `checkout.create.session_created orderId=${order.id} checkoutSessionId=${checkoutSessionId} paymentStatus=${paymentStatus ?? "unknown"} checkoutStatus=${checkoutStatus ?? "unknown"} awaitingConfirmation=${isAwaitingPaymentConfirmation}`,
+        );
+      } catch (error) {
+        this.logger.error(
+          `checkout.create.session_failed orderId=${order.id} userId=${user.id} provider=${order.paymentProvider} reason="${error instanceof Error ? error.message : "Unknown error"}"`,
+        );
+        throw error;
+      }
+    }
+
+    if (
+      order.paymentProvider === PaymentProvider.PAYSTACK &&
+      process.env.PAYSTACK_SECRET_KEY
+    ) {
+      try {
+        const session = await this.paymentsService.createPaystackCheckoutTransaction({
+          cancelReturnUrl: payload.cancelReturnUrl,
+          feeAmount: order.feeAmount,
+          feePolicy,
+          id: order.id,
+          currency: order.currency,
+          totalAmount: order.totalAmount,
+          userEmail: user.email,
           userId: order.userId,
           successReturnUrl: payload.successReturnUrl,
           event: {
@@ -451,5 +509,11 @@ export class CheckoutService {
 
   private generateCheckoutSessionId() {
     return `chk_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+  }
+
+  private resolveDefaultPaymentProvider(currency: string) {
+    return currency.toUpperCase() === "NGN"
+      ? PaymentProvider.PAYSTACK
+      : PaymentProvider.STRIPE;
   }
 }

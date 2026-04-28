@@ -132,6 +132,9 @@ export class EventSummaryResponseDto {
   @ApiProperty({ nullable: true })
   venueAddress!: string | null;
 
+  @ApiProperty({ example: "NGN" })
+  currency!: string;
+
   @ApiProperty()
   timezone!: string;
 

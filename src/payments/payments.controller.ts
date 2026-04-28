@@ -34,4 +34,23 @@ export class PaymentsController {
 
     return this.paymentsService.handleStripeWebhook(rawBody, signature);
   }
+
+  @Post("paystack")
+  @HttpCode(200)
+  async handlePaystackWebhook(
+    @Req() request: Request & { rawBody?: Buffer },
+    @Headers("x-paystack-signature") signature?: string,
+  ) {
+    if (!signature) {
+      throw new BadRequestException("Missing Paystack signature header.");
+    }
+
+    const rawBody = request.rawBody;
+
+    if (!rawBody) {
+      throw new BadRequestException("Paystack webhook raw body is missing.");
+    }
+
+    return this.paymentsService.handlePaystackWebhook(rawBody, signature);
+  }
 }

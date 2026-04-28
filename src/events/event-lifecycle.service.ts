@@ -47,6 +47,7 @@ export class EventLifecycleService {
           description: payload.description?.trim(),
           venueName: payload.venueName?.trim(),
           venueAddress: payload.venueAddress?.trim(),
+          currency: this.normalizeCurrency(payload.currency),
           timezone: payload.timezone.trim(),
           startsAt,
           endsAt,
@@ -105,6 +106,13 @@ export class EventLifecycleService {
   async updateEvent(eventId: string, payload: UpdateEventDto) {
     const existingEvent = await this.prisma.event.findUnique({
       where: { id: eventId },
+      include: {
+        _count: {
+          select: {
+            ticketTypes: true,
+          },
+        },
+      },
     });
 
     if (!existingEvent) {
@@ -112,6 +120,7 @@ export class EventLifecycleService {
     }
 
     this.assertEventDates(payload, existingEvent);
+    this.assertCurrencyChangeAllowed(payload, existingEvent);
 
     const wasPostEventPublished = this.isPostEventContentPublished(existingEvent);
 
@@ -132,6 +141,9 @@ export class EventLifecycleService {
           : {}),
         ...(payload.venueAddress !== undefined
           ? { venueAddress: payload.venueAddress?.trim() ?? null }
+          : {}),
+        ...(payload.currency !== undefined
+          ? { currency: this.normalizeCurrency(payload.currency) }
           : {}),
         ...(payload.timezone !== undefined
           ? { timezone: payload.timezone.trim() }
@@ -260,6 +272,41 @@ export class EventLifecycleService {
       user.platformRoles.includes("EVENT_OWNER") ||
       user.appRoles.includes("organizer")
     );
+  }
+
+  private normalizeCurrency(currency?: string) {
+    const normalized = currency?.trim().toUpperCase() || "EUR";
+
+    if (!["EUR", "NGN"].includes(normalized)) {
+      throw new BadRequestException("Event currency must be EUR or NGN.");
+    }
+
+    return normalized;
+  }
+
+  private assertCurrencyChangeAllowed(
+    payload: Partial<CreateEventDto>,
+    existingEvent: {
+      currency: string;
+      _count: {
+        ticketTypes: number;
+      };
+    },
+  ) {
+    if (payload.currency === undefined) {
+      return;
+    }
+
+    const nextCurrency = this.normalizeCurrency(payload.currency);
+
+    if (
+      nextCurrency !== existingEvent.currency &&
+      existingEvent._count.ticketTypes > 0
+    ) {
+      throw new BadRequestException(
+        "Event currency cannot be changed after ticket types have been created.",
+      );
+    }
   }
 
   private assertEventDates(

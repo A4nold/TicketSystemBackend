@@ -9,6 +9,7 @@ type CheckoutStartCtaProps = Readonly<{
   eventSlug: string;
   ticketType: {
     availabilityLabel: string;
+    currency: string;
     id: string;
     isPurchasable: boolean;
     maxPerOrder: number | null;
@@ -55,11 +56,11 @@ export function CheckoutStartCta({
 
   const totalLabel = useMemo(() => {
     return new Intl.NumberFormat("en-IE", {
-      currency: "EUR",
+      currency: ticketType.currency,
       maximumFractionDigits: 2,
       style: "currency",
     }).format(ticketType.priceValue * quantity);
-  }, [quantity, ticketType.priceValue]);
+  }, [quantity, ticketType.priceValue, ticketType.currency]);
 
   function updateQuantity(nextValue: number) {
     if (!Number.isInteger(nextValue) || nextValue < 1 || nextValue > maxSelectable) {

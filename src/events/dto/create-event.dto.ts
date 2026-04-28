@@ -1,9 +1,11 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { EventStatus } from "@prisma/client";
+import { Transform } from "class-transformer";
 import {
   IsBoolean,
   IsDateString,
   IsEnum,
+  IsIn,
   IsOptional,
   IsString,
   IsUrl,
@@ -49,6 +51,18 @@ export class CreateEventDto {
   @IsString()
   @MaxLength(240)
   venueAddress?: string;
+
+  @ApiPropertyOptional({
+    description: "Currency used by every ticket type for this event.",
+    enum: ["EUR", "NGN"],
+    example: "NGN",
+    default: "EUR",
+  })
+  @IsOptional()
+  @IsString()
+  @Transform(({ value }) => typeof value === "string" ? value.toUpperCase() : value)
+  @IsIn(["EUR", "NGN"])
+  currency?: string;
 
   @ApiProperty({
     example: "Europe/Dublin",

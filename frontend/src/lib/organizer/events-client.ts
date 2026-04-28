@@ -6,6 +6,7 @@ import type { AuthMembership } from "@/lib/auth/types";
 export type CreateOrganizerEventPayload = {
   allowResale?: boolean;
   coverImageUrl?: string;
+  currency?: "EUR" | "NGN";
   description?: string;
   endsAt?: string;
   maxResalePrice?: string;
@@ -82,6 +83,7 @@ export type OrganizerEventResponse = {
   timezone: string;
   title: string;
   venueAddress: string | null;
+  currency: string;
   venueName: string | null;
 };
 
@@ -112,6 +114,7 @@ export type OrganizerEventSummary = {
   timezone: string;
   title: string;
   venueAddress: string | null;
+  currency: string;
   venueName: string | null;
 };
 

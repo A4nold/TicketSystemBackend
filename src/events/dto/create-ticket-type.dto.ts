@@ -1,8 +1,9 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { Type } from "class-transformer";
+import { Transform, Type } from "class-transformer";
 import {
   IsBoolean,
   IsDateString,
+  IsIn,
   IsInt,
   IsOptional,
   IsString,
@@ -38,6 +39,8 @@ export class CreateTicketTypeDto {
   })
   @IsOptional()
   @IsString()
+  @Transform(({ value }) => typeof value === "string" ? value.toUpperCase() : value)
+  @IsIn(["EUR", "NGN"])
   @MaxLength(8)
   currency?: string;
 

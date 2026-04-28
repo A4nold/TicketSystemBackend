@@ -5,6 +5,7 @@ import {
   NotImplementedException,
 } from "@nestjs/common";
 import { OrderStatus, PaymentProvider, Prisma } from "@prisma/client";
+import { createHmac, timingSafeEqual } from "crypto";
 import Stripe from "stripe";
 
 import { NotificationsService } from "../notifications/notifications.service";
@@ -19,6 +20,7 @@ type CheckoutOrder = {
   currency: string;
   totalAmount: Prisma.Decimal;
   successReturnUrl?: string;
+  userEmail: string;
   userId: string;
   event: {
     title: string;
@@ -41,6 +43,27 @@ type StripeCheckoutState = {
   paymentStatus: string | null;
   checkoutStatus: string | null;
   isAwaitingPaymentConfirmation: boolean;
+};
+
+type PaystackInitializeResponse = {
+  status: boolean;
+  message: string;
+  data?: {
+    access_code?: string;
+    authorization_url?: string;
+    reference?: string;
+  };
+};
+
+type PaystackVerifyResponse = {
+  status: boolean;
+  message: string;
+  data?: {
+    amount?: number;
+    currency?: string;
+    reference?: string;
+    status?: string;
+  };
 };
 
 @Injectable()
@@ -140,6 +163,66 @@ export class PaymentsService {
       checkoutStatus: session.status,
       isAwaitingPaymentConfirmation:
         session.payment_status !== "paid" && session.status !== "expired",
+    };
+  }
+
+  async createPaystackCheckoutTransaction(order: CheckoutOrder) {
+    this.logger.log(
+      `payments.paystack.transaction_initialize.started orderId=${order.id} userId=${order.userId} total=${order.totalAmount.toFixed(2)} currency=${order.currency}`,
+    );
+
+    const frontendUrl = process.env.FRONTEND_APP_URL;
+
+    if (!frontendUrl && !order.successReturnUrl) {
+      throw new NotImplementedException(
+        "FRONTEND_APP_URL must be configured to create Paystack checkout transactions unless an explicit return URL is provided.",
+      );
+    }
+
+    const reference = this.generatePaystackReference(order.id);
+    const callbackUrl = this.buildCheckoutReturnUrl({
+      fallbackBaseUrl: `${frontendUrl?.replace(/\/$/, "") ?? ""}/checkout/success`,
+      orderId: order.id,
+      providedUrl: order.successReturnUrl,
+      sessionPlaceholder: false,
+    });
+
+    const response = await this.paystackFetch<PaystackInitializeResponse>(
+      "/transaction/initialize",
+      {
+        body: JSON.stringify({
+          amount: this.toPaymentSubunit(order.totalAmount),
+          callback_url: callbackUrl,
+          currency: order.currency.toUpperCase(),
+          email: order.userEmail,
+          metadata: {
+            eventSlug: order.event.slug,
+            orderId: order.id,
+            userId: order.userId,
+          },
+          reference,
+        }),
+        method: "POST",
+      },
+    );
+
+    if (!response.status || !response.data?.authorization_url || !response.data.reference) {
+      this.logger.error(
+        `payments.paystack.transaction_initialize.failed orderId=${order.id} userId=${order.userId} message="${response.message}"`,
+      );
+      throw new BadRequestException("Paystack checkout could not be initialized.");
+    }
+
+    this.logger.log(
+      `payments.paystack.transaction_initialize.completed orderId=${order.id} reference=${response.data.reference}`,
+    );
+
+    return {
+      checkoutSessionId: response.data.reference,
+      checkoutUrl: response.data.authorization_url,
+      paymentStatus: "pending",
+      checkoutStatus: "initialized",
+      isAwaitingPaymentConfirmation: true,
     };
   }
 
@@ -298,6 +381,112 @@ export class PaymentsService {
     return { received: true };
   }
 
+  async handlePaystackWebhook(rawBody: Buffer, signature: string) {
+    const secretKey = process.env.PAYSTACK_SECRET_KEY;
+
+    if (!secretKey) {
+      throw new NotImplementedException(
+        "PAYSTACK_SECRET_KEY must be configured to process Paystack webhooks.",
+      );
+    }
+
+    if (!this.isValidPaystackSignature(rawBody, signature, secretKey)) {
+      this.logger.warn("payments.paystack.webhook.invalid_signature");
+      throw new BadRequestException("Invalid Paystack webhook signature.");
+    }
+
+    let event: any;
+
+    try {
+      event = JSON.parse(rawBody.toString("utf8"));
+    } catch {
+      throw new BadRequestException("Invalid Paystack webhook payload.");
+    }
+
+    const reference = event?.data?.reference;
+    const eventType = event?.event ?? "unknown";
+
+    if (!reference) {
+      throw new BadRequestException("Paystack webhook did not include a transaction reference.");
+    }
+
+    const providerEventId = `paystack:${eventType}:${reference}`;
+
+    this.logger.log(
+      `payments.paystack.webhook.received eventId=${providerEventId} type=${eventType}`,
+    );
+
+    const existing = await this.prisma.webhookEvent.findUnique({
+      where: {
+        providerEventId,
+      },
+    });
+
+    if (existing?.processedAt) {
+      this.logger.log(
+        `payments.paystack.webhook.duplicate eventId=${providerEventId} type=${eventType}`,
+      );
+      return { received: true, duplicate: true };
+    }
+
+    const relatedEventId = await this.resolveRelatedEventIdFromOrderId(
+      event?.data?.metadata?.orderId ?? null,
+    );
+
+    await this.prisma.webhookEvent.upsert({
+      where: {
+        providerEventId,
+      },
+      create: {
+        eventId: relatedEventId,
+        provider: PaymentProvider.PAYSTACK,
+        providerEventId,
+        eventType,
+        payload: event as unknown as Prisma.InputJsonValue,
+        processedAt: null,
+      },
+      update: {
+        eventId: relatedEventId,
+        payload: event as unknown as Prisma.InputJsonValue,
+        processingError: null,
+      },
+    });
+
+    try {
+      if (eventType === "charge.success") {
+        await this.verifyAndApplyPaystackReference(reference);
+      }
+
+      await this.prisma.webhookEvent.update({
+        where: {
+          providerEventId,
+        },
+        data: {
+          processedAt: new Date(),
+          processingError: null,
+        },
+      });
+    } catch (error) {
+      this.logger.error(
+        `payments.paystack.webhook.failed eventId=${providerEventId} type=${eventType} reason="${error instanceof Error ? error.message : "Unknown error"}"`,
+      );
+      await this.prisma.webhookEvent.update({
+        where: {
+          providerEventId,
+        },
+        data: {
+          processingError: `[${eventType}][reference:${reference}] ${
+            error instanceof Error ? error.message : "Unknown webhook processing error."
+          }`,
+        },
+      });
+
+      throw error;
+    }
+
+    return { received: true };
+  }
+
   async getStripeCheckoutState(checkoutSessionId: string): Promise<StripeCheckoutState> {
     const stripe = this.getStripeClient();
     const session = await stripe.checkout.sessions.retrieve(checkoutSessionId);
@@ -309,6 +498,21 @@ export class PaymentsService {
       checkoutStatus: session.status ?? null,
       isAwaitingPaymentConfirmation:
         session.payment_status !== "paid" && session.status !== "expired",
+    };
+  }
+
+  async getPaystackCheckoutState(reference: string): Promise<StripeCheckoutState> {
+    const verification = await this.verifyPaystackTransaction(reference);
+    const status = verification.data?.status ?? null;
+
+    return {
+      checkoutSessionId: reference,
+      checkoutUrl: null,
+      paymentStatus: status,
+      checkoutStatus: status,
+      isAwaitingPaymentConfirmation: !["success", "abandoned", "failed"].includes(
+        status ?? "",
+      ),
     };
   }
 
@@ -341,6 +545,41 @@ export class PaymentsService {
         const stripe = this.getStripeClient();
         const session = await stripe.checkout.sessions.retrieve(order.checkoutSessionId);
         await this.markOrderCancelledFromStripeSession(session);
+      }
+    }
+
+    return checkoutState;
+  }
+
+  async reconcilePendingOrderWithProvider(order: {
+    id: string;
+    status: OrderStatus;
+    paymentProvider: PaymentProvider;
+    checkoutSessionId: string | null;
+  }): Promise<StripeCheckoutState | null> {
+    if (order.paymentProvider === PaymentProvider.STRIPE) {
+      return this.reconcilePendingOrderWithStripe(order);
+    }
+
+    if (
+      order.paymentProvider !== PaymentProvider.PAYSTACK ||
+      !order.checkoutSessionId ||
+      !process.env.PAYSTACK_SECRET_KEY
+    ) {
+      return null;
+    }
+
+    const checkoutState = await this.getPaystackCheckoutState(order.checkoutSessionId);
+
+    this.logger.log(
+      `payments.paystack.reconcile.checked orderId=${order.id} reference=${order.checkoutSessionId} orderStatus=${order.status} paymentStatus=${checkoutState.paymentStatus ?? "unknown"} checkoutStatus=${checkoutState.checkoutStatus ?? "unknown"}`,
+    );
+
+    if (order.status === OrderStatus.PENDING) {
+      if (checkoutState.paymentStatus === "success") {
+        await this.verifyAndApplyPaystackReference(order.checkoutSessionId);
+      } else if (["abandoned", "failed"].includes(checkoutState.paymentStatus ?? "")) {
+        await this.markOrderCancelledFromPaystackReference(order.checkoutSessionId);
       }
     }
 
@@ -526,11 +765,98 @@ export class PaymentsService {
     );
   }
 
+  private async verifyAndApplyPaystackReference(reference: string) {
+    const verification = await this.verifyPaystackTransaction(reference);
+
+    if (!verification.status || !verification.data) {
+      throw new BadRequestException("Paystack verification failed.");
+    }
+
+    if (verification.data.status !== "success") {
+      return;
+    }
+
+    const order = await this.prisma.order.findFirst({
+      where: {
+        checkoutSessionId: reference,
+        paymentProvider: PaymentProvider.PAYSTACK,
+      },
+    });
+
+    if (!order) {
+      throw new BadRequestException(`Paystack order for reference "${reference}" was not found.`);
+    }
+
+    const verifiedAmount = verification.data.amount;
+    const verifiedCurrency = verification.data.currency?.toUpperCase();
+    const expectedAmount = this.toPaymentSubunit(order.totalAmount);
+
+    if (
+      verifiedAmount !== expectedAmount ||
+      verifiedCurrency !== order.currency.toUpperCase()
+    ) {
+      throw new BadRequestException(
+        `Paystack verification mismatch for order "${order.id}".`,
+      );
+    }
+
+    await this.markOrderPaidFromStripeSession({
+      client_reference_id: order.id,
+      id: reference,
+      payment_intent: reference,
+    });
+
+    this.logger.log(
+      `payments.paystack.mark_paid.completed orderId=${order.id} reference=${reference}`,
+    );
+  }
+
+  private async markOrderCancelledFromPaystackReference(reference: string) {
+    const order = await this.prisma.order.findFirst({
+      where: {
+        checkoutSessionId: reference,
+        paymentProvider: PaymentProvider.PAYSTACK,
+      },
+    });
+
+    if (!order || order.status !== OrderStatus.PENDING) {
+      this.logger.log(
+        `payments.paystack.mark_cancelled.skipped reference=${reference} orderId=${order?.id ?? "missing"} status=${order?.status ?? "missing"}`,
+      );
+      return;
+    }
+
+    await this.prisma.order.update({
+      where: { id: order.id },
+      data: {
+        cancelledAt: new Date(),
+        status: OrderStatus.CANCELLED,
+      },
+    });
+
+    this.logger.log(
+      `payments.paystack.mark_cancelled.completed orderId=${order.id} reference=${reference}`,
+    );
+  }
+
   private async resolveRelatedEventId(event: any) {
     const session = event?.data?.object;
     const orderId =
       session?.client_reference_id ?? session?.metadata?.orderId ?? null;
 
+    if (!orderId) {
+      return null;
+    }
+
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      select: { eventId: true },
+    });
+
+    return order?.eventId ?? null;
+  }
+
+  private async resolveRelatedEventIdFromOrderId(orderId: string | null) {
     if (!orderId) {
       return null;
     }
@@ -570,6 +896,69 @@ export class PaymentsService {
     return new StripeConstructor(secretKey, {
       apiVersion: "2025-03-31.basil",
     });
+  }
+
+  private async paystackFetch<T>(
+    path: string,
+    init: RequestInit = {},
+  ): Promise<T> {
+    const secretKey = process.env.PAYSTACK_SECRET_KEY;
+
+    if (!secretKey) {
+      throw new NotImplementedException(
+        "PAYSTACK_SECRET_KEY must be configured to use Paystack payments.",
+      );
+    }
+
+    const response = await fetch(`https://api.paystack.co${path}`, {
+      ...init,
+      headers: {
+        Authorization: `Bearer ${secretKey}`,
+        "Content-Type": "application/json",
+        ...(init.headers ?? {}),
+      },
+    });
+    const payload = await response.json().catch(() => null);
+
+    if (!response.ok) {
+      throw new BadRequestException(
+        payload?.message ?? `Paystack request failed with ${response.status}.`,
+      );
+    }
+
+    return payload as T;
+  }
+
+  private verifyPaystackTransaction(reference: string) {
+    return this.paystackFetch<PaystackVerifyResponse>(
+      `/transaction/verify/${encodeURIComponent(reference)}`,
+      {
+        method: "GET",
+      },
+    );
+  }
+
+  private isValidPaystackSignature(
+    rawBody: Buffer,
+    signature: string,
+    secretKey: string,
+  ) {
+    const expected = createHmac("sha512", secretKey).update(rawBody).digest("hex");
+    const expectedBuffer = Buffer.from(expected, "hex");
+    const signatureBuffer = Buffer.from(signature, "hex");
+
+    return (
+      expectedBuffer.length === signatureBuffer.length &&
+      timingSafeEqual(expectedBuffer, signatureBuffer)
+    );
+  }
+
+  private generatePaystackReference(orderId: string) {
+    return `order-${orderId}-${Date.now().toString(36)}`;
+  }
+
+  private toPaymentSubunit(amount: Prisma.Decimal) {
+    return Math.round(Number(amount) * 100);
   }
 
   private toEventCode(slug: string) {

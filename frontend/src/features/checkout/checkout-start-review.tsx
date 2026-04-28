@@ -55,14 +55,18 @@ function formatMoney(value: string, currency: string) {
   }).format(Number(value));
 }
 
+function getPaymentProviderForCurrency(currency: string) {
+  return currency.toUpperCase() === "NGN" ? "PAYSTACK" : "STRIPE";
+}
+
 function describeFeePolicy(policy: {
   fixedAmount: string;
   fixedFeeApplication: "PER_ORDER" | "PER_TICKET";
   percentRate: string;
   responsibility: "BUYER" | "ORGANIZER";
-}) {
+}, currency: string) {
   const percentLabel = `${(Number(policy.percentRate) * 100).toFixed(2)}%`;
-  const fixedLabel = `+ EUR ${Number(policy.fixedAmount).toFixed(2)} ${
+  const fixedLabel = `+ ${currency.toUpperCase()} ${Number(policy.fixedAmount).toFixed(2)} ${
     policy.fixedFeeApplication === "PER_TICKET" ? "per ticket" : "per order"
   }`;
 
@@ -106,7 +110,6 @@ export function CheckoutStartReview({
               ticketTypeId: selection.ticketTypeId,
             },
           ],
-          paymentProvider: "STRIPE",
         },
         session!.accessToken,
       ),
@@ -129,6 +132,9 @@ export function CheckoutStartReview({
     setErrorMessage(null);
     startTransition(async () => {
       try {
+        const paymentProvider = quoteQuery.data
+          ? getPaymentProviderForCurrency(quoteQuery.data.currency)
+          : undefined;
         const order = await createCheckoutOrder(
           {
             eventSlug: event.slug,
@@ -139,7 +145,7 @@ export function CheckoutStartReview({
                 ticketTypeId: selection.ticketTypeId,
               },
             ],
-            paymentProvider: "STRIPE",
+            paymentProvider,
           },
           session.accessToken,
         );
@@ -260,7 +266,10 @@ export function CheckoutStartReview({
                           : `${quoteQuery.data.feePolicy.displayName} is absorbed by the organizer for this order.`}
                       </p>
                       <p className="text-xs leading-5 text-muted">
-                        {describeFeePolicy(quoteQuery.data.feePolicy)}
+                        {describeFeePolicy(
+                          quoteQuery.data.feePolicy,
+                          quoteQuery.data.currency,
+                        )}
                       </p>
                     </>
                   ) : null}

@@ -68,10 +68,11 @@ export function toOrderResponse(
     checkoutState?.isAwaitingPaymentConfirmation ??
     order.isAwaitingPaymentConfirmation ??
     (order.status === OrderStatus.PENDING &&
-      order.paymentProvider === PaymentProvider.STRIPE &&
+      (order.paymentProvider === PaymentProvider.STRIPE ||
+        order.paymentProvider === PaymentProvider.PAYSTACK) &&
       Boolean(order.checkoutSessionId) &&
-      paymentStatus !== "paid" &&
-      checkoutStatus !== "expired");
+      !["paid", "success"].includes(paymentStatus ?? "") &&
+      !["expired", "abandoned", "failed"].includes(checkoutStatus ?? ""));
 
   return {
     id: order.id,

@@ -12,8 +12,14 @@ describe("ExpireTransferService", () => {
         findMany: vi.fn().mockResolvedValue([
           {
             id: "transfer_1",
+            recipientUserId: "user_2",
+            senderUserId: "user_1",
             ticket: {
+              event: {
+                title: "Campus Neon Takeover",
+              },
               id: "ticket_1",
+              serialNumber: "CNT-GA-0001",
               status: "TRANSFER_PENDING",
             },
           },
@@ -34,8 +40,14 @@ describe("ExpireTransferService", () => {
         }),
       ),
     };
+    const notificationsService = {
+      notifyTransferExpired: vi.fn().mockResolvedValue(undefined),
+    };
 
-    const service = new ExpireTransferService(prisma as never);
+    const service = new ExpireTransferService(
+      prisma as never,
+      notificationsService as never,
+    );
 
     const expiredCount = await service.expireOverdueTransfersForUser({
       accountType: "ATTENDEE",
@@ -61,6 +73,12 @@ describe("ExpireTransferService", () => {
         status: "ISSUED",
       },
     });
+    expect(notificationsService.notifyTransferExpired).toHaveBeenCalledWith({
+      eventTitle: "Campus Neon Takeover",
+      recipientUserId: "user_2",
+      senderUserId: "user_1",
+      serialNumber: "CNT-GA-0001",
+    });
   });
 });
 
@@ -85,6 +103,7 @@ describe("RemindTransferService", () => {
     };
     const notificationsService = {
       createUserNotification: vi.fn().mockResolvedValue(undefined),
+      notifyTransferReminder: vi.fn().mockResolvedValue(undefined),
       sendTransferRecipientEmail: vi.fn().mockResolvedValue(undefined),
     };
     const expireTransferService = {
@@ -144,7 +163,12 @@ describe("RemindTransferService", () => {
       },
     });
     expect(notificationsService.sendTransferRecipientEmail).toHaveBeenCalled();
-    expect(notificationsService.createUserNotification).toHaveBeenCalledTimes(2);
+    expect(notificationsService.notifyTransferReminder).toHaveBeenCalledWith({
+      eventTitle: "Campus Neon Takeover",
+      recipientUserId: "user_2",
+      serialNumber: "CNT-GA-0001",
+    });
+    expect(notificationsService.createUserNotification).toHaveBeenCalledTimes(1);
     expect(result.reminderSentAt).toEqual(new Date("2026-05-01T12:00:00.000Z"));
   });
 });

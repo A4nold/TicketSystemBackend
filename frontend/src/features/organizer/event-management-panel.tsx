@@ -24,6 +24,7 @@ import {
 
 type EventFormState = {
   allowResale: boolean;
+  currency: "EUR" | "NGN";
   description: string;
   endsAt: string;
   maxResalePrice: string;
@@ -77,6 +78,7 @@ function toIsoDateTime(value: string) {
 function toEventFormState(event: Awaited<ReturnType<typeof getOrganizerEventBySlug>>): EventFormState {
   return {
     allowResale: event.allowResale,
+    currency: event.currency as EventFormState["currency"],
     description: event.description ?? "",
     endsAt: toLocalDateTime(event.endsAt),
     maxResalePrice: event.resalePolicy.maxResalePrice ?? "",
@@ -100,9 +102,9 @@ function toEventFormState(event: Awaited<ReturnType<typeof getOrganizerEventBySl
   };
 }
 
-function blankTicketTypeForm(): TicketTypeFormState {
+function blankTicketTypeForm(currency = "EUR"): TicketTypeFormState {
   return {
-    currency: "EUR",
+    currency,
     description: "",
     isActive: true,
     maxPerOrder: "",
@@ -254,7 +256,7 @@ export function EventManagementPanel({ refreshKey = 0 }: EventManagementPanelPro
       ? ticketTypeFormState.form
       : currentTicketType
         ? toTicketTypeFormState(currentTicketType)
-        : blankTicketTypeForm();
+        : blankTicketTypeForm(eventDetailQuery.data?.currency);
   const readinessItems = eventDetailQuery.data
     ? [
         {
@@ -331,6 +333,7 @@ export function EventManagementPanel({ refreshKey = 0 }: EventManagementPanelPro
           selectedSummary.id,
           {
             allowResale: currentEventForm.allowResale,
+            currency: currentEventForm.currency,
             description: currentEventForm.description || undefined,
             endsAt: toIsoDateTime(currentEventForm.endsAt),
             maxResalePrice: currentEventForm.maxResalePrice || undefined,
@@ -368,7 +371,7 @@ export function EventManagementPanel({ refreshKey = 0 }: EventManagementPanelPro
     }
 
     const payload: CreateTicketTypePayload = {
-      currency: currentTicketTypeForm.currency || "EUR",
+      currency: eventDetailQuery.data?.currency ?? currentTicketTypeForm.currency,
       description: currentTicketTypeForm.description || undefined,
       isActive: currentTicketTypeForm.isActive,
       maxPerOrder: currentTicketTypeForm.maxPerOrder
@@ -739,6 +742,16 @@ export function EventManagementPanel({ refreshKey = 0 }: EventManagementPanelPro
                   <input type="text" value={currentEventForm.timezone} onChange={(event) => updateEventFormField(eventDetailQuery.data.id, currentEventForm, setEventFormState, { timezone: event.target.value })} className="w-full rounded-[1.2rem] border border-border bg-black/10 px-4 py-3 text-sm text-foreground outline-hidden transition focus:border-accent-warm/50" />
                 </label>
                 <label className="block space-y-2">
+                  <span className="text-xs font-semibold uppercase tracking-[0.24em] text-muted">Currency</span>
+                  <select value={currentEventForm.currency} onChange={(event) => updateEventFormField(eventDetailQuery.data.id, currentEventForm, setEventFormState, { currency: event.target.value as EventFormState["currency"] })} disabled={eventDetailQuery.data.ticketTypes.length > 0} className="w-full rounded-[1.2rem] border border-border bg-black/10 px-4 py-3 text-sm text-foreground outline-hidden transition focus:border-accent-warm/50 disabled:cursor-not-allowed disabled:opacity-65">
+                    <option value="EUR">EUR - Euro</option>
+                    <option value="NGN">NGN - Nigerian naira</option>
+                  </select>
+                  {eventDetailQuery.data.ticketTypes.length > 0 ? (
+                    <span className="text-xs leading-5 text-muted">Currency is locked after ticket types exist.</span>
+                  ) : null}
+                </label>
+                <label className="block space-y-2">
                   <span className="text-xs font-semibold uppercase tracking-[0.24em] text-muted">Status</span>
                   <select value={currentEventForm.status} onChange={(event) => updateEventFormField(eventDetailQuery.data.id, currentEventForm, setEventFormState, { status: event.target.value as EventFormState["status"] })} className="w-full rounded-[1.2rem] border border-border bg-black/10 px-4 py-3 text-sm text-foreground outline-hidden transition focus:border-accent-warm/50">
                     <option value="DRAFT">Draft</option>
@@ -1096,10 +1109,10 @@ export function EventManagementPanel({ refreshKey = 0 }: EventManagementPanelPro
                   <button
                     type="button"
                     onClick={() => {
-                      setSelectedTicketTypeId("");
+                      setSelectedTicketTypeId("new");
                       setTicketTypeFormState({
                         key: `${eventDetailQuery.data.id}-new`,
-                        form: blankTicketTypeForm(),
+                        form: blankTicketTypeForm(eventDetailQuery.data.currency),
                       });
                     }}
                     className="rounded-full border border-dashed border-border px-4 py-2 text-sm font-semibold text-muted transition hover:border-accent-warm/40 hover:bg-surface-soft"
@@ -1132,7 +1145,8 @@ export function EventManagementPanel({ refreshKey = 0 }: EventManagementPanelPro
                 </label>
                 <label className="block space-y-2">
                   <span className="text-xs font-semibold uppercase tracking-[0.24em] text-muted">Currency</span>
-                  <input type="text" value={currentTicketTypeForm.currency} onChange={(event) => updateTicketTypeFormField(ticketTypeDraftKey, currentTicketTypeForm, setTicketTypeFormState, { currency: event.target.value })} className="w-full rounded-[1.2rem] border border-border bg-black/10 px-4 py-3 text-sm text-foreground outline-hidden transition focus:border-accent-warm/50" />
+                  <input type="text" value={eventDetailQuery.data.currency} disabled className="w-full rounded-[1.2rem] border border-border bg-black/10 px-4 py-3 text-sm text-foreground outline-hidden disabled:cursor-not-allowed disabled:opacity-65" />
+                  <span className="text-xs leading-5 text-muted">Ticket types inherit the event currency.</span>
                 </label>
                 <label className="block space-y-2">
                   <span className="text-xs font-semibold uppercase tracking-[0.24em] text-muted">Sort order</span>

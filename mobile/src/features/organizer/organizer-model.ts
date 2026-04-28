@@ -6,6 +6,7 @@ import type {
 } from "@/lib/organizer/events-client";
 
 export type EventEditorState = {
+  currency: "EUR" | "NGN";
   description: string;
   endsAt: string;
   slug: string;
@@ -52,6 +53,7 @@ export function toIsoDateTime(value: string) {
 
 export function toEventEditorState(event: OrganizerEventResponse): EventEditorState {
   return {
+    currency: event.currency as EventEditorState["currency"],
     description: event.description ?? "",
     endsAt: toLocalDateTime(event.endsAt),
     slug: event.slug,
@@ -101,6 +103,7 @@ export function buildOrganizerEventPatch(
 ): Partial<CreateOrganizerEventPayload> {
   return {
     description: form.description || undefined,
+    currency: form.currency,
     endsAt: toIsoDateTime(form.endsAt),
     slug: form.slug || undefined,
     startsAt: new Date(form.startsAt).toISOString(),
@@ -162,6 +165,10 @@ export function validateEventEditorState(form: EventEditorState): FormValidation
 
   if (!form.slug.trim()) {
     fieldErrors.slug = "Add a short event slug.";
+  }
+
+  if (!["EUR", "NGN"].includes(form.currency)) {
+    fieldErrors.currency = "Choose EUR or NGN.";
   }
 
   return {

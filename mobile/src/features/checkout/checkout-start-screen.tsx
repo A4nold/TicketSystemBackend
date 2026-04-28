@@ -26,12 +26,16 @@ function createIdempotencyKey() {
   return `checkout-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-function formatMoney(value: number) {
+function formatMoney(value: number, currency = "EUR") {
   return new Intl.NumberFormat("en-IE", {
-    currency: "EUR",
+    currency,
     maximumFractionDigits: 2,
     style: "currency",
   }).format(value);
+}
+
+function getPaymentProviderForCurrency(currency: string) {
+  return currency.toUpperCase() === "NGN" ? "PAYSTACK" : "STRIPE";
 }
 
 function describeFeePolicy(policy: {
@@ -39,9 +43,9 @@ function describeFeePolicy(policy: {
   fixedFeeApplication: "PER_ORDER" | "PER_TICKET";
   percentRate: string;
   responsibility: "BUYER" | "ORGANIZER";
-}) {
+}, currency: string) {
   const percentLabel = `${(Number(policy.percentRate) * 100).toFixed(2)}%`;
-  const fixedLabel = `+ EUR ${Number(policy.fixedAmount).toFixed(2)} ${
+  const fixedLabel = `+ ${currency.toUpperCase()} ${Number(policy.fixedAmount).toFixed(2)} ${
     policy.fixedFeeApplication === "PER_TICKET" ? "per ticket" : "per order"
   }`;
 
@@ -86,7 +90,6 @@ export function CheckoutStartScreen() {
               ticketTypeId: selectedTicketType!.id,
             },
           ],
-          paymentProvider: "STRIPE",
         },
         session!.accessToken,
       ),
@@ -207,6 +210,9 @@ export function CheckoutStartScreen() {
     setIsSubmitting(true);
 
     try {
+      const paymentProvider = quoteQuery.data
+        ? getPaymentProviderForCurrency(quoteQuery.data.currency)
+        : undefined;
       const order = await createCheckoutOrder(
         {
           cancelReturnUrl: ExpoLinking.createURL("/checkout/cancel"),
@@ -218,7 +224,7 @@ export function CheckoutStartScreen() {
               ticketTypeId: resolvedTicketType.id,
             },
           ],
-          paymentProvider: "STRIPE",
+          paymentProvider,
           successReturnUrl: ExpoLinking.createURL("/checkout/success"),
         },
         activeSession.accessToken,
@@ -287,7 +293,9 @@ export function CheckoutStartScreen() {
               {resolvedTicketType.name} x {quantity}
             </Text>
             <Text style={styles.pricingValue}>
-              {quoteQuery.data ? formatMoney(Number(quoteQuery.data.subtotalAmount)) : formatMoney(subtotal)}
+              {quoteQuery.data
+                ? formatMoney(Number(quoteQuery.data.subtotalAmount), quoteQuery.data.currency)
+                : formatMoney(subtotal, resolvedTicketType.currency)}
             </Text>
           </View>
           {quoteQuery.isLoading ? (
@@ -297,18 +305,24 @@ export function CheckoutStartScreen() {
             <>
               <View style={styles.pricingRow}>
                 <Text style={styles.copy}>{quoteQuery.data.feePolicy.displayName}</Text>
-                <Text style={styles.pricingValue}>{formatMoney(Number(quoteQuery.data.feeAmount))}</Text>
+                <Text style={styles.pricingValue}>
+                  {formatMoney(Number(quoteQuery.data.feeAmount), quoteQuery.data.currency)}
+                </Text>
               </View>
               <View style={[styles.pricingRow, styles.pricingTotal]}>
                 <Text style={styles.totalLabel}>Total</Text>
-                <Text style={styles.totalValue}>{formatMoney(Number(quoteQuery.data.totalAmount))}</Text>
+                <Text style={styles.totalValue}>
+                  {formatMoney(Number(quoteQuery.data.totalAmount), quoteQuery.data.currency)}
+                </Text>
               </View>
               <Text style={styles.copy}>
                 {quoteQuery.data.feePolicy.responsibility === "BUYER"
                   ? `${quoteQuery.data.feePolicy.displayName} is included in your checkout total.`
                   : `${quoteQuery.data.feePolicy.displayName} is absorbed by the organizer for this order.`}
               </Text>
-              <Text style={styles.policyNote}>{describeFeePolicy(quoteQuery.data.feePolicy)}</Text>
+              <Text style={styles.policyNote}>
+                {describeFeePolicy(quoteQuery.data.feePolicy, quoteQuery.data.currency)}
+              </Text>
             </>
           ) : null}
           {quoteQuery.isError ? (

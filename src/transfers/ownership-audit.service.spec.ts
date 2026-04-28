@@ -193,8 +193,14 @@ describe("Transfer ownership audit hardening", () => {
       transferRequest: {
         findFirst: vi.fn().mockResolvedValue({
           id: "transfer_1",
+          recipientUserId: null,
+          senderUserId: "user_1",
           ticket: {
+            event: {
+              title: "Campus Neon Takeover",
+            },
             id: "ticket_1",
+            serialNumber: "CNT-GA-0001",
             status: "TRANSFER_PENDING",
           },
         }),
@@ -210,8 +216,14 @@ describe("Transfer ownership audit hardening", () => {
         }),
       ),
     };
+    const notificationsService = {
+      notifyTransferExpired: vi.fn().mockResolvedValue(undefined),
+    };
 
-    const service = new ExpireTransferService(prisma as never);
+    const service = new ExpireTransferService(
+      prisma as never,
+      notificationsService as never,
+    );
 
     const expired = await service.expireOverdueTransferForSerialNumber("CNT-GA-0001");
 
@@ -227,6 +239,12 @@ describe("Transfer ownership audit hardening", () => {
       data: {
         status: "ISSUED",
       },
+    });
+    expect(notificationsService.notifyTransferExpired).toHaveBeenCalledWith({
+      eventTitle: "Campus Neon Takeover",
+      recipientUserId: null,
+      senderUserId: "user_1",
+      serialNumber: "CNT-GA-0001",
     });
   });
 });

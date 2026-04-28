@@ -16,6 +16,7 @@ function buildEvent(overrides: Partial<OrganizerEventResponse> = {}): OrganizerE
   return {
     allowResale: false,
     coverImageUrl: null,
+    currency: "EUR",
     description: "Campus night.",
     endsAt: "2026-05-12T23:00:00.000Z",
     id: overrides.id ?? "event-1",
@@ -66,6 +67,7 @@ describe("organizer-model", () => {
     const form = toEventEditorState(buildEvent());
 
     expect(form.title).toBe("Campus Neon");
+    expect(form.currency).toBe("EUR");
     expect(form.timezone).toBe("Europe/Dublin");
     expect(form.startsAt).toContain("2026-05-12");
   });
@@ -73,6 +75,7 @@ describe("organizer-model", () => {
   it("builds an event patch with optional fields omitted", () => {
     const payload = buildOrganizerEventPatch({
       description: "",
+      currency: "NGN",
       endsAt: "",
       slug: "campus-neon",
       startsAt: "2026-05-12T20:00",
@@ -84,6 +87,7 @@ describe("organizer-model", () => {
     });
 
     expect(payload.description).toBeUndefined();
+    expect(payload.currency).toBe("NGN");
     expect(payload.title).toBe("Campus Neon");
     expect(payload.venueAddress).toBeUndefined();
     expect(payload.venueName).toBe("The Yard");
@@ -114,6 +118,7 @@ describe("organizer-model", () => {
   it("validates the required event fields before save", () => {
     const result = validateEventEditorState({
       description: "",
+      currency: "EUR",
       endsAt: "not-a-date",
       slug: "",
       startsAt: "",

@@ -12,15 +12,22 @@ describe("PostEventNotificationSchedulerService", () => {
     vi.useFakeTimers();
     vi.stubEnv("POST_EVENT_NOTIFICATION_SWEEP_INTERVAL_MS", "60000");
 
-    const trySweepEligibleEvents = vi.fn().mockResolvedValue(undefined);
-    const service = new PostEventNotificationSchedulerService({
-      trySweepEligibleEvents,
-    } as never);
+    const preEventSweep = {
+      trySweepEligibleEvents: vi.fn().mockResolvedValue(undefined),
+    };
+    const postEventSweep = {
+      trySweepEligibleEvents: vi.fn().mockResolvedValue(undefined),
+    };
+    const service = new PostEventNotificationSchedulerService(
+      preEventSweep as never,
+      postEventSweep as never,
+    );
 
     service.onModuleInit();
     await vi.advanceTimersByTimeAsync(0);
 
-    expect(trySweepEligibleEvents).toHaveBeenCalled();
+    expect(preEventSweep.trySweepEligibleEvents).toHaveBeenCalled();
+    expect(postEventSweep.trySweepEligibleEvents).toHaveBeenCalled();
 
     service.onModuleDestroy();
   });
@@ -29,15 +36,22 @@ describe("PostEventNotificationSchedulerService", () => {
     vi.useFakeTimers();
     vi.stubEnv("POST_EVENT_NOTIFICATION_SWEEP_INTERVAL_MS", "1000");
 
-    const trySweepEligibleEvents = vi.fn().mockResolvedValue(undefined);
-    const service = new PostEventNotificationSchedulerService({
-      trySweepEligibleEvents,
-    } as never);
+    const preEventSweep = {
+      trySweepEligibleEvents: vi.fn().mockResolvedValue(undefined),
+    };
+    const postEventSweep = {
+      trySweepEligibleEvents: vi.fn().mockResolvedValue(undefined),
+    };
+    const service = new PostEventNotificationSchedulerService(
+      preEventSweep as never,
+      postEventSweep as never,
+    );
 
     service.onModuleInit();
     await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
 
-    expect(trySweepEligibleEvents).toHaveBeenCalledTimes(2);
+    expect(preEventSweep.trySweepEligibleEvents).toHaveBeenCalledTimes(2);
+    expect(postEventSweep.trySweepEligibleEvents).toHaveBeenCalledTimes(2);
 
     service.onModuleDestroy();
   });

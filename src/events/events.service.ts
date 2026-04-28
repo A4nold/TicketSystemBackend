@@ -42,6 +42,7 @@ export class EventsService {
     if (!event) {
       throw new NotFoundException(`Event with id "${eventId}" was not found.`);
     }
+    this.assertTicketTypeCurrency(payload.currency, event.currency);
     this.assertTicketTypeDates(payload, event);
 
     const ticketType = await this.prisma.ticketType.create({
@@ -50,7 +51,7 @@ export class EventsService {
         name: payload.name.trim(),
         description: payload.description?.trim(),
         price: new Prisma.Decimal(payload.price),
-        currency: payload.currency?.trim() ?? "EUR",
+        currency: event.currency,
         quantity: payload.quantity,
         maxPerOrder: payload.maxPerOrder ?? null,
         saleStartsAt: payload.saleStartsAt ? new Date(payload.saleStartsAt) : null,
@@ -89,6 +90,10 @@ export class EventsService {
       );
     }
 
+    this.assertTicketTypeCurrency(
+      payload.currency,
+      existingTicketType.currency,
+    );
     this.assertTicketTypeDates(payload, event, existingTicketType);
 
     const ticketType = await this.prisma.ticketType.update({
@@ -100,9 +105,6 @@ export class EventsService {
           : {}),
         ...(payload.price !== undefined
           ? { price: new Prisma.Decimal(payload.price) }
-          : {}),
-        ...(payload.currency !== undefined
-          ? { currency: payload.currency.trim() }
           : {}),
         ...(payload.quantity !== undefined ? { quantity: payload.quantity } : {}),
         ...(payload.maxPerOrder !== undefined
@@ -134,6 +136,20 @@ export class EventsService {
     return event.staffMemberships.map((membership) =>
       toStaffMembershipResponse(membership),
     );
+  }
+
+  private assertTicketTypeCurrency(
+    payloadCurrency: string | undefined,
+    expectedCurrency: string,
+  ) {
+    if (
+      payloadCurrency !== undefined &&
+      payloadCurrency.trim().toUpperCase() !== expectedCurrency
+    ) {
+      throw new BadRequestException(
+        `Ticket type currency must match the event currency (${expectedCurrency}).`,
+      );
+    }
   }
 
   async inviteStaff(eventId: string, payload: InviteStaffMemberDto) {

@@ -1,4 +1,5 @@
-import { ForbiddenException } from "@nestjs/common";
+import { BadRequestException, ForbiddenException } from "@nestjs/common";
+import { Prisma } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
 import type { AuthenticatedUser } from "../auth/types/authenticated-user.type";
@@ -60,6 +61,7 @@ describe("EventsService.createEvent", () => {
     const createdEvent = {
       allowResale: false,
       coverImageUrl: null,
+      currency: "EUR",
       description: null,
       endsAt: null,
       id: "event_123",
@@ -139,6 +141,7 @@ describe("EventsService response mapping", () => {
     const createdEvent = {
       allowResale: true,
       coverImageUrl: null,
+      currency: "NGN",
       description: "Main event description",
       endsAt: null,
       id: "event_123",
@@ -231,6 +234,7 @@ describe("EventsService response mapping", () => {
       id: "user_123",
       lastName: "User",
     });
+    expect(result.currency).toBe("NGN");
     expect(result.ticketTypes).toEqual([
       {
         currency: "EUR",
@@ -263,5 +267,84 @@ describe("EventsService response mapping", () => {
       message: "Thanks for coming.",
       publishedAt: new Date("2026-05-16T12:00:00.000Z"),
     });
+  });
+});
+
+describe("EventsService ticket currency", () => {
+  it("creates ticket types using the event currency", async () => {
+    const prisma = {
+      event: {
+        findUnique: vi.fn().mockResolvedValue({
+          currency: "NGN",
+          endsAt: null,
+          id: "event_123",
+          startsAt: new Date("2026-05-15T20:00:00.000Z"),
+        }),
+      },
+      ticketType: {
+        create: vi.fn().mockResolvedValue({
+          currency: "NGN",
+          description: null,
+          id: "ticket_type_1",
+          isActive: true,
+          maxPerOrder: null,
+          name: "General Admission",
+          price: new Prisma.Decimal("2500.00"),
+          quantity: 100,
+          saleEndsAt: null,
+          saleStartsAt: null,
+        }),
+      },
+    };
+    const service = new EventsService(
+      prisma as never,
+      { createEvent: vi.fn(), updateEvent: vi.fn() } as never,
+    );
+
+    const result = await service.createTicketType("event_123", {
+      currency: "NGN",
+      name: "General Admission",
+      price: "2500.00",
+      quantity: 100,
+    });
+
+    expect(prisma.ticketType.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          currency: "NGN",
+        }),
+      }),
+    );
+    expect(result.currency).toBe("NGN");
+  });
+
+  it("rejects ticket type currency that differs from the event currency", async () => {
+    const prisma = {
+      event: {
+        findUnique: vi.fn().mockResolvedValue({
+          currency: "NGN",
+          endsAt: null,
+          id: "event_123",
+          startsAt: new Date("2026-05-15T20:00:00.000Z"),
+        }),
+      },
+      ticketType: {
+        create: vi.fn(),
+      },
+    };
+    const service = new EventsService(
+      prisma as never,
+      { createEvent: vi.fn(), updateEvent: vi.fn() } as never,
+    );
+
+    await expect(
+      service.createTicketType("event_123", {
+        currency: "EUR",
+        name: "General Admission",
+        price: "2500.00",
+        quantity: 100,
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.ticketType.create).not.toHaveBeenCalled();
   });
 });

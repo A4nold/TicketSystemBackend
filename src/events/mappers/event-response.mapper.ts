@@ -44,6 +44,7 @@ export type EventSummarySource = {
   description: string | null;
   venueName: string | null;
   venueAddress: string | null;
+  currency: string;
   timezone: string;
   startsAt: Date;
   endsAt: Date | null;
@@ -115,6 +116,7 @@ export function toEventSummaryResponse(event: EventSummarySource) {
     description: event.description,
     venueName: event.venueName,
     venueAddress: event.venueAddress,
+    currency: event.currency,
     timezone: event.timezone,
     startsAt: event.startsAt,
     endsAt: event.endsAt,

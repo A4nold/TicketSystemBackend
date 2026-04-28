@@ -13,13 +13,13 @@ describe("apiFetch", () => {
       ok: true,
     } as Response);
 
-    await apiFetch("/api/tickets/me/owned", undefined, {
+    await apiFetch("/api/me/tickets", undefined, {
       eventSlug: "campus-neon",
       status: undefined,
     });
 
     expect(fetchSpy).toHaveBeenCalledWith(
-      "http://localhost:3000/api/tickets/me/owned?eventSlug=campus-neon",
+      "http://localhost:3000/api/me/tickets?eventSlug=campus-neon",
       undefined,
     );
   });

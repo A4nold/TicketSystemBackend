@@ -15,6 +15,7 @@ import {
 
 const eventSchema = z.object({
   allowResale: z.boolean(),
+  currency: z.enum(["EUR", "NGN"]),
   description: z.string().max(2000).optional(),
   endsAt: z.string().optional(),
   maxResalePrice: z.string().optional(),
@@ -66,6 +67,7 @@ function getErrorText(error: unknown) {
 
 const initialFormState: {
   allowResale: boolean;
+  currency: "EUR" | "NGN";
   description: string;
   endsAt: string;
   maxResalePrice: string;
@@ -88,6 +90,7 @@ const initialFormState: {
   venueName: string;
 } = {
   allowResale: false,
+  currency: "EUR",
   description: "",
   endsAt: "",
   maxResalePrice: "",
@@ -150,6 +153,7 @@ export function EventCreationForm({ onCreated }: EventCreationFormProps) {
         const created = await createOrganizerEvent(
           {
             allowResale: parsed.data.allowResale,
+            currency: parsed.data.currency,
             description: parsed.data.description || undefined,
             endsAt: toIsoDateTime(parsed.data.endsAt),
             maxResalePrice: parsed.data.maxResalePrice || undefined,
@@ -352,6 +356,20 @@ export function EventCreationForm({ onCreated }: EventCreationFormProps) {
               placeholder="Europe/Dublin"
               className="w-full rounded-[1.2rem] border border-border bg-black/10 px-4 py-3 text-sm text-foreground outline-hidden transition focus:border-accent-warm/50"
             />
+          </label>
+
+          <label className="block space-y-2">
+            <span className="text-xs font-semibold uppercase tracking-[0.24em] text-muted">
+              Currency
+            </span>
+            <select
+              value={form.currency}
+              onChange={(event) => updateField("currency", event.target.value as "EUR" | "NGN")}
+              className="w-full rounded-[1.2rem] border border-border bg-black/10 px-4 py-3 text-sm text-foreground outline-hidden transition focus:border-accent-warm/50"
+            >
+              <option value="EUR">EUR - Euro</option>
+              <option value="NGN">NGN - Nigerian naira</option>
+            </select>
           </label>
 
           <label className="block space-y-2">

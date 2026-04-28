@@ -81,7 +81,7 @@ export class OrderQueryService {
     checkoutSessionId: string | null;
   }) {
     try {
-      return await this.paymentsService.reconcilePendingOrderWithStripe(order);
+      return await this.paymentsService.reconcilePendingOrderWithProvider(order);
     } catch {
       return null;
     }

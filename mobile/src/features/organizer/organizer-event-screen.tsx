@@ -52,6 +52,7 @@ const STATUS_OPTIONS: EventEditorState["status"][] = [
   "CANCELLED",
   "COMPLETED",
 ];
+const CURRENCY_OPTIONS: EventEditorState["currency"][] = ["EUR", "NGN"];
 const STAFF_ROLE_OPTIONS = ["ADMIN", "SCANNER"] as const;
 
 if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -269,8 +270,11 @@ export function OrganizerEventScreen() {
 
     return currentTicketType
       ? toTicketTypeEditorState(currentTicketType)
-      : blankTicketTypeEditorState();
-  }, [eventDetailQuery.data?.ticketTypes, selectedTicketTypeId]);
+      : {
+          ...blankTicketTypeEditorState(),
+          currency: eventDetailQuery.data?.currency ?? "EUR",
+        };
+  }, [eventDetailQuery.data?.currency, eventDetailQuery.data?.ticketTypes, selectedTicketTypeId]);
   const eventIsDirty = Boolean(
     eventForm &&
       pristineEventForm &&
@@ -386,8 +390,11 @@ export function OrganizerEventScreen() {
       return;
     }
 
-    setTicketTypeForm(blankTicketTypeEditorState());
-  }, [eventDetailQuery.data?.ticketTypes, selectedTicketTypeId]);
+    setTicketTypeForm({
+      ...blankTicketTypeEditorState(),
+      currency: eventDetailQuery.data?.currency ?? "EUR",
+    });
+  }, [eventDetailQuery.data?.currency, eventDetailQuery.data?.ticketTypes, selectedTicketTypeId]);
 
   useEffect(() => {
     if (!notice) {
@@ -452,14 +459,20 @@ export function OrganizerEventScreen() {
         await updateOrganizerTicketType(
           selectedSummary.id,
           selectedTicketTypeId,
-          buildTicketTypePayload(ticketTypeForm),
+          {
+            ...buildTicketTypePayload(ticketTypeForm),
+            currency: eventDetailQuery.data?.currency,
+          },
           session.accessToken,
         );
         setNotice("Ticket type updated.");
       } else {
         const created = await createOrganizerTicketType(
           selectedSummary.id,
-          buildTicketTypePayload(ticketTypeForm),
+          {
+            ...buildTicketTypePayload(ticketTypeForm),
+            currency: eventDetailQuery.data?.currency,
+          },
           session.accessToken,
         );
         setSelectedTicketTypeId(created.id);
@@ -786,6 +799,22 @@ export function OrganizerEventScreen() {
                   />
                 </View>
 
+                <View style={styles.field}>
+                  <Text style={styles.fieldLabel}>Currency</Text>
+                  <SegmentedControl
+                    onSelect={(value) =>
+                      setEventForm((current) => (current ? { ...current, currency: value } : current))
+                    }
+                    options={CURRENCY_OPTIONS}
+                    selected={eventForm.currency}
+                  />
+                  {eventDetailQuery.data.ticketTypes.length > 0 ? (
+                    <Text style={styles.hintText}>
+                      Currency is locked on the server after ticket types exist.
+                    </Text>
+                  ) : null}
+                </View>
+
                 <ActionButton
                   disabled={!eventValidation?.isValid}
                   loading={isSavingEvent}
@@ -904,14 +933,17 @@ export function OrganizerEventScreen() {
                 </View>
                 <View style={styles.row}>
                   <View style={styles.rowItem}>
-                    <Field
-                      compact
-                      label="Currency"
-                      onChangeText={(value) =>
-                        setTicketTypeForm((current) => ({ ...current, currency: value }))
-                      }
-                      value={ticketTypeForm.currency}
-                    />
+                    <View style={styles.field}>
+                      <Text style={styles.fieldLabel}>Currency</Text>
+                      <View style={[styles.input, styles.inputCompact]}>
+                        <Text style={styles.readonlyValue}>
+                          {eventDetailQuery.data.currency}
+                        </Text>
+                      </View>
+                      <Text style={styles.hintText}>
+                        Ticket types inherit the event currency.
+                      </Text>
+                    </View>
                   </View>
                   <View style={styles.rowItem}>
                     <Field
@@ -1281,6 +1313,11 @@ const styles = StyleSheet.create({
     minHeight: 46,
     paddingHorizontal: 14,
     paddingVertical: 12,
+  },
+  readonlyValue: {
+    color: palette.ink,
+    fontSize: 15,
+    fontWeight: "700",
   },
   inputError: {
     borderColor: palette.danger,
