@@ -3,13 +3,15 @@
 import { apiFetch } from "@/lib/api/client";
 
 export type CreateCheckoutPayload = {
+  cancelReturnUrl?: string;
   eventSlug: string;
+  idempotencyKey?: string;
   items: Array<{
     quantity: number;
     ticketTypeId: string;
   }>;
   paymentProvider?: "STRIPE" | "PAYSTACK";
-  idempotencyKey?: string;
+  successReturnUrl?: string;
 };
 
 export type CheckoutQuoteResponse = {
