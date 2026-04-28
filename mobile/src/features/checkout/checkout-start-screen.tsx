@@ -234,15 +234,29 @@ export function CheckoutStartScreen() {
         throw new Error("Checkout URL was not returned by the backend.");
       }
 
-      try {
-        await Linking.openURL(order.checkoutUrl);
-      } catch {
-        const result = await WebBrowser.openBrowserAsync(order.checkoutUrl, {
+      const successReturnUrl = ExpoLinking.createURL("/checkout/success");
+      const cancelReturnUrl = ExpoLinking.createURL("/checkout/cancel");
+
+      const authResult = await WebBrowser.openAuthSessionAsync(
+        order.checkoutUrl,
+        successReturnUrl,
+      );
+
+      if (authResult.type === "success" && authResult.url) {
+        await Linking.openURL(authResult.url);
+      } else if (authResult.type === "cancel") {
+        setErrorMessage("Checkout was dismissed before payment could continue.");
+      } else if (authResult.type === "dismiss") {
+        setErrorMessage("Checkout was closed before the app received a return callback.");
+      } else {
+        const fallbackResult = await WebBrowser.openBrowserAsync(order.checkoutUrl, {
           presentationStyle: WebBrowser.WebBrowserPresentationStyle.FULL_SCREEN,
         });
 
-        if (result.type === "cancel") {
+        if (fallbackResult.type === "cancel") {
           setErrorMessage("Checkout was dismissed before payment could continue.");
+        } else if (fallbackResult.type !== "opened") {
+          await Linking.openURL(cancelReturnUrl);
         }
       }
     } catch (error) {

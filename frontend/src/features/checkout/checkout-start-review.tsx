@@ -75,6 +75,15 @@ function describeFeePolicy(policy: {
     : `${percentLabel} ${fixedLabel}, absorbed by the organizer`;
 }
 
+function buildCheckoutReturnUrl(pathname: "/checkout/success" | "/checkout/cancel") {
+  if (typeof window === "undefined") {
+    return undefined;
+  }
+
+  const url = new URL(pathname, window.location.origin);
+  return url.toString();
+}
+
 export function CheckoutStartReview({
   event,
   nextPath,
@@ -137,6 +146,7 @@ export function CheckoutStartReview({
           : undefined;
         const order = await createCheckoutOrder(
           {
+            cancelReturnUrl: buildCheckoutReturnUrl("/checkout/cancel"),
             eventSlug: event.slug,
             idempotencyKey,
             items: [
@@ -146,6 +156,7 @@ export function CheckoutStartReview({
               },
             ],
             paymentProvider,
+            successReturnUrl: buildCheckoutReturnUrl("/checkout/success"),
           },
           session.accessToken,
         );
