@@ -1,10 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
 import * as WebBrowser from "expo-web-browser";
 import * as ExpoLinking from "expo-linking";
-import { Link, useLocalSearchParams } from "expo-router";
+import { Link, useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
 import {
   Linking,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -15,7 +16,11 @@ import { useAuth } from "@/components/providers/auth-provider";
 import { SupportCard } from "@/components/support/support-card";
 import { ActionButton, Card, Screen } from "@/components/ui";
 import { getPublicEventBySlug } from "@/lib/events/public-events-client";
-import { createCheckoutOrder, getCheckoutQuote } from "@/lib/orders/orders-client";
+import {
+  createCheckoutOrder,
+  getCheckoutQuote,
+  getOrderById,
+} from "@/lib/orders/orders-client";
 import { palette } from "@/styles/theme";
 
 function buildAppReturnUrl(pathname: "/checkout/success" | "/checkout/cancel") {
@@ -59,6 +64,7 @@ function describeFeePolicy(policy: {
 }
 
 export function CheckoutStartScreen() {
+  const router = useRouter();
   const params = useLocalSearchParams<{
     eventSlug?: string;
     quantity?: string;
@@ -240,6 +246,20 @@ export function CheckoutStartScreen() {
 
       const successReturnUrl = buildAppReturnUrl("/checkout/success");
       const cancelReturnUrl = buildAppReturnUrl("/checkout/cancel");
+      const isPaystackCheckout = paymentProvider === "PAYSTACK";
+
+      if (Platform.OS === "ios" && isPaystackCheckout) {
+        router.push({
+          pathname: "/checkout/paystack-inline",
+          params: {
+            cancelReturnUrl,
+            checkoutUrl: order.checkoutUrl,
+            orderId: order.id,
+            successReturnUrl,
+          },
+        });
+        return;
+      }
 
       const authResult = await WebBrowser.openAuthSessionAsync(
         order.checkoutUrl,
@@ -248,10 +268,29 @@ export function CheckoutStartScreen() {
 
       if (authResult.type === "success" && authResult.url) {
         await Linking.openURL(authResult.url);
-      } else if (authResult.type === "cancel") {
+      } else if (authResult.type === "cancel" || authResult.type === "dismiss") {
+        const latestOrder = await getOrderById(order.id, activeSession.accessToken);
+
+        if (latestOrder.status === "PAID") {
+          router.replace({
+            pathname: "/checkout/success",
+            params: { orderId: order.id },
+          });
+          return;
+        }
+
+        if (
+          latestOrder.status === "PENDING" &&
+          latestOrder.isAwaitingPaymentConfirmation
+        ) {
+          router.replace({
+            pathname: "/checkout/success",
+            params: { orderId: order.id },
+          });
+          return;
+        }
+
         setErrorMessage("Checkout was dismissed before payment could continue.");
-      } else if (authResult.type === "dismiss") {
-        setErrorMessage("Checkout was closed before the app received a return callback.");
       } else {
         const fallbackResult = await WebBrowser.openBrowserAsync(order.checkoutUrl, {
           presentationStyle: WebBrowser.WebBrowserPresentationStyle.FULL_SCREEN,

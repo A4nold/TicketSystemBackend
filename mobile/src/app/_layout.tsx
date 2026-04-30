@@ -35,6 +35,12 @@ function RootNavigator() {
           presentation: "modal",
         }}
       />
+      <Stack.Screen
+        name="checkout/paystack-inline"
+        options={{
+          presentation: "modal",
+        }}
+      />
       <Stack.Screen name="checkout/success" />
       <Stack.Screen name="checkout/cancel" />
       <Stack.Screen
