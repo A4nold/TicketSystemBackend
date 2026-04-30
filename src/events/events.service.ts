@@ -3,9 +3,10 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { Prisma, StaffRole } from "@prisma/client";
+import { NotificationType, Prisma, StaffRole } from "@prisma/client";
 
 import { AuthenticatedUser } from "../auth/types/authenticated-user.type";
+import { NotificationsService } from "../notifications/notifications.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateEventDto } from "./dto/create-event.dto";
 import { CreateTicketTypeDto } from "./dto/create-ticket-type.dto";
@@ -24,6 +25,7 @@ export class EventsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly eventLifecycleService: EventLifecycleService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async createEvent(payload: CreateEventDto, user: AuthenticatedUser) {
@@ -199,6 +201,27 @@ export class EventsService {
         },
       },
     });
+
+    const event = await this.prisma.event.findUnique({
+      where: { id: eventId },
+      select: { title: true },
+    });
+
+    if (event) {
+      await this.notificationsService.createUserNotification({
+        actionUrl: `/staff/accept/${encodeURIComponent(eventId)}`,
+        body: `You've been invited as ${membership.role} for ${event.title}.`,
+        metadata: {
+          eventId,
+          membershipId: membership.id,
+          role: membership.role,
+        },
+        sendPush: true,
+        title: "New role invitation",
+        type: "STAFF_INVITE_RECEIVED" as NotificationType,
+        userId: invitee.id,
+      });
+    }
 
     return toStaffMembershipResponse(membership);
   }

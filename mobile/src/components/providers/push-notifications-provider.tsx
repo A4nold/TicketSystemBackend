@@ -1,6 +1,7 @@
 import Constants from "expo-constants";
 import * as Device from "expo-device";
 import * as Notifications from "expo-notifications";
+import { router } from "expo-router";
 import {
   createContext,
   type PropsWithChildren,
@@ -36,6 +37,29 @@ type PushNotificationsContextValue = {
 };
 
 const PushNotificationsContext = createContext<PushNotificationsContextValue | null>(null);
+
+function resolvePushActionPath(actionUrl: unknown) {
+  if (typeof actionUrl !== "string") {
+    return null;
+  }
+
+  const trimmedActionUrl = actionUrl.trim();
+
+  if (!trimmedActionUrl.startsWith("/")) {
+    return null;
+  }
+
+  if (trimmedActionUrl.startsWith("/wallet/")) {
+    const serialNumber = trimmedActionUrl.slice("/wallet/".length);
+    return `/tickets/${serialNumber}`;
+  }
+
+  if (trimmedActionUrl === "/wallet") {
+    return "/wallet";
+  }
+
+  return trimmedActionUrl;
+}
 
 function getProjectId() {
   const envProjectId = process.env.EXPO_PUBLIC_EXPO_PROJECT_ID?.trim();
@@ -96,6 +120,23 @@ export function PushNotificationsProvider({ children }: PropsWithChildren) {
   useEffect(() => {
     previousSessionRef.current = session ? { accessToken: session.accessToken } : null;
   }, [session]);
+
+  useEffect(() => {
+    const subscription = Notifications.addNotificationResponseReceivedListener((response) => {
+      const actionUrl = response.notification.request.content.data?.actionUrl;
+      const path = resolvePushActionPath(actionUrl);
+
+      if (!path) {
+        return;
+      }
+
+      router.push(path as never);
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, []);
 
   async function registerCurrentDevice(accessToken: string) {
     if (!Device.isDevice) {

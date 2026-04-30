@@ -1,3 +1,4 @@
+import { Ionicons } from "@expo/vector-icons";
 import { Redirect, Tabs } from "expo-router";
 
 import { useAuth } from "@/components/providers/auth-provider";
@@ -29,6 +30,13 @@ export default function TabLayout() {
       <Tabs.Screen
         name="wallet/index"
         options={{
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons
+              name={focused ? "wallet" : "wallet-outline"}
+              size={size}
+              color={color}
+            />
+          ),
           tabBarLabel: "Wallet",
           title: "Wallet",
         }}
@@ -36,6 +44,13 @@ export default function TabLayout() {
       <Tabs.Screen
         name="activity"
         options={{
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons
+              name={focused ? "pulse" : "pulse-outline"}
+              size={size}
+              color={color}
+            />
+          ),
           tabBarLabel: "Activity",
           title: "Activity",
         }}
@@ -44,6 +59,13 @@ export default function TabLayout() {
         name="organizer"
         options={{
           href: showOrganizerTab ? undefined : null,
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons
+              name={focused ? "briefcase" : "briefcase-outline"}
+              size={size}
+              color={color}
+            />
+          ),
           tabBarLabel: "Organizer",
           title: "Organizer",
         }}
@@ -52,6 +74,13 @@ export default function TabLayout() {
         name="scanner/index"
         options={{
           href: showScannerTab ? undefined : null,
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons
+              name={focused ? "qr-code" : "qr-code-outline"}
+              size={size}
+              color={color}
+            />
+          ),
           tabBarLabel: "Scanner",
           title: "Scanner",
         }}
@@ -59,6 +88,13 @@ export default function TabLayout() {
       <Tabs.Screen
         name="account"
         options={{
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons
+              name={focused ? "person-circle" : "person-circle-outline"}
+              size={size}
+              color={color}
+            />
+          ),
           tabBarLabel: "Account",
           title: "Account",
         }}

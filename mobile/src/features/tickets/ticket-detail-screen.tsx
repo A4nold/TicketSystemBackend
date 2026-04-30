@@ -32,6 +32,7 @@ import {
   getOwnedTicketBySerialNumber,
   getOwnedTicketQrPayload,
 } from "@/lib/tickets/tickets-client";
+import { commonStyles } from "@/styles/common";
 import { palette } from "@/styles/theme";
 
 if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -570,14 +571,10 @@ const styles = StyleSheet.create({
     height: 100,
   },
   content: {
-    gap: 18,
-    padding: 20,
-    paddingBottom: 48,
+    ...commonStyles.contentContainer,
   },
   copy: {
-    color: palette.muted,
-    fontSize: 15,
-    lineHeight: 22,
+    ...commonStyles.bodyCopy,
   },
   errorText: {
     color: palette.danger,
@@ -673,8 +670,7 @@ const styles = StyleSheet.create({
     gap: 14,
   },
   sectionShell: {
-    gap: 14,
-    padding: 18,
+    ...commonStyles.sectionShell,
   },
   sectionChevron: {
     color: palette.muted,
@@ -684,18 +680,14 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
   },
   sectionHeaderButton: {
-    alignItems: "flex-start",
-    flexDirection: "row",
-    gap: 12,
-    justifyContent: "space-between",
+    ...commonStyles.sectionHeaderRow,
   },
   sectionHeaderCopy: {
     flex: 1,
     gap: 6,
   },
   sectionHeaderMeta: {
-    alignItems: "flex-end",
-    gap: 8,
+    ...commonStyles.sectionHeaderMeta,
   },
   sectionStateAttention: {
     backgroundColor: palette.warningSoft,
@@ -705,19 +697,10 @@ const styles = StyleSheet.create({
     color: palette.warning,
   },
   sectionStatePill: {
-    backgroundColor: palette.backgroundMuted,
-    borderColor: palette.divider,
-    borderRadius: 999,
-    borderWidth: 1,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
+    ...commonStyles.sectionStatusPill,
   },
   sectionStatePillText: {
-    color: palette.muted,
-    fontSize: 10,
-    fontWeight: "800",
-    letterSpacing: 0.8,
-    textTransform: "uppercase",
+    ...commonStyles.sectionStatusPillText,
   },
   sectionStateSaved: {
     backgroundColor: palette.successSoft,
@@ -734,9 +717,7 @@ const styles = StyleSheet.create({
     color: palette.accentDeep,
   },
   sectionTitle: {
-    color: palette.ink,
-    fontSize: 22,
-    fontWeight: "800",
+    ...commonStyles.headingLg,
   },
   stack: {
     gap: 12,

@@ -17,6 +17,33 @@ export type PaginatedWalletNotifications = {
   nextCursor: string | null;
 };
 
+export function getInAppPathFromNotification(notification: WalletNotification) {
+  const actionUrl = notification.actionUrl?.trim();
+
+  if (!actionUrl) {
+    return null;
+  }
+
+  if (actionUrl.startsWith("/transfer/accept/")) {
+    return actionUrl;
+  }
+
+  if (actionUrl.startsWith("/staff/accept/")) {
+    return actionUrl;
+  }
+
+  if (actionUrl.startsWith("/wallet/")) {
+    const serialNumber = actionUrl.slice("/wallet/".length);
+    return `/tickets/${serialNumber}`;
+  }
+
+  if (actionUrl === "/wallet") {
+    return "/wallet";
+  }
+
+  return null;
+}
+
 export async function listWalletNotifications(
   accessToken: string,
   query?: {
@@ -34,6 +61,23 @@ export async function listWalletNotifications(
     {
       cursor: query?.cursor,
       limit: query?.limit?.toString(),
+    },
+  );
+}
+
+export async function markWalletNotificationAsRead(
+  notificationId: string,
+  accessToken: string,
+) {
+  return apiFetch<WalletNotification>(
+    `/api/me/notifications/${notificationId}/read`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({}),
     },
   );
 }

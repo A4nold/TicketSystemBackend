@@ -21,6 +21,7 @@ import { formatDateTime } from "@/lib/formatters";
 import { getOrderById } from "@/lib/orders/orders-client";
 import type { OwnedTicketSummary } from "@/lib/tickets/tickets-client";
 import { listOwnedTickets } from "@/lib/tickets/tickets-client";
+import { commonStyles } from "@/styles/common";
 import { palette } from "@/styles/theme";
 
 if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -343,14 +344,10 @@ export function WalletHomeScreen() {
 
 const styles = StyleSheet.create({
   content: {
-    gap: 18,
-    padding: 20,
-    paddingBottom: 48,
+    ...commonStyles.contentContainer,
   },
   copy: {
-    color: palette.muted,
-    fontSize: 15,
-    lineHeight: 22,
+    ...commonStyles.bodyCopy,
   },
   detailLabel: {
     color: palette.muted,
@@ -360,8 +357,8 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
   },
   detailStrip: {
-    flexDirection: "row",
-    gap: 12,
+    ...commonStyles.heroDarkMetricRow,
+    marginTop: 0,
   },
   detailTile: {
     backgroundColor: palette.glass,
@@ -407,11 +404,7 @@ const styles = StyleSheet.create({
     opacity: 0.9,
   },
   heroEyebrow: {
-    color: "#ffe0bf",
-    fontSize: 12,
-    fontWeight: "800",
-    letterSpacing: 1.5,
-    textTransform: "uppercase",
+    ...commonStyles.heroDarkEyebrow,
   },
   heroGlowPrimary: {
     backgroundColor: "rgba(255, 213, 162, 0.22)",
@@ -439,33 +432,18 @@ const styles = StyleSheet.create({
     maxWidth: 320,
   },
   heroShell: {
-    backgroundColor: palette.black,
-    gap: 14,
+    ...commonStyles.heroDarkShell,
     overflow: "hidden",
-    padding: 22,
     position: "relative",
   },
   metricCard: {
-    backgroundColor: "rgba(255,255,255,0.08)",
-    borderColor: "rgba(255,255,255,0.12)",
-    borderRadius: 18,
-    borderWidth: 1,
-    flex: 1,
-    gap: 6,
-    minHeight: 84,
-    padding: 14,
+    ...commonStyles.heroDarkMetricCard,
   },
   metricLabel: {
-    color: "#dbc7b6",
-    fontSize: 11,
-    fontWeight: "800",
-    letterSpacing: 1.1,
-    textTransform: "uppercase",
+    ...commonStyles.heroDarkMetricLabel,
   },
   metricRow: {
-    flexDirection: "row",
-    gap: 12,
-    marginTop: 8,
+    ...commonStyles.heroDarkMetricRow,
   },
   metricValue: {
     color: palette.white,
@@ -513,42 +491,26 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
   },
   sectionHeaderButton: {
-    alignItems: "flex-start",
-    flexDirection: "row",
-    gap: 12,
-    justifyContent: "space-between",
+    ...commonStyles.sectionHeaderRow,
   },
   sectionHeaderCopy: {
     flex: 1,
     gap: 6,
   },
   sectionHeaderMeta: {
-    alignItems: "flex-end",
-    gap: 8,
+    ...commonStyles.sectionHeaderMeta,
   },
   sectionShell: {
-    gap: 14,
-    padding: 18,
+    ...commonStyles.sectionShell,
   },
   sectionStatePill: {
-    backgroundColor: palette.backgroundMuted,
-    borderColor: palette.divider,
-    borderRadius: 999,
-    borderWidth: 1,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
+    ...commonStyles.sectionStatusPill,
   },
   sectionStatePillText: {
-    color: palette.muted,
-    fontSize: 10,
-    fontWeight: "800",
-    letterSpacing: 0.8,
-    textTransform: "uppercase",
+    ...commonStyles.sectionStatusPillText,
   },
   sectionTitle: {
-    color: palette.ink,
-    fontSize: 22,
-    fontWeight: "800",
+    ...commonStyles.headingLg,
   },
   serial: {
     color: palette.ink,
@@ -564,20 +526,11 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
   },
   smallStatusPill: {
+    ...commonStyles.neutralPill,
     alignSelf: "flex-start",
-    backgroundColor: palette.backgroundMuted,
-    borderColor: palette.divider,
-    borderRadius: 999,
-    borderWidth: 1,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
   },
   smallStatusPillText: {
-    color: palette.ink,
-    fontSize: 10,
-    fontWeight: "800",
-    letterSpacing: 0.8,
-    textTransform: "uppercase",
+    ...commonStyles.neutralPillText,
   },
   statusPill: {
     alignSelf: "flex-start",
@@ -605,10 +558,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   ticketHeaderRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 12,
-    justifyContent: "space-between",
+    ...commonStyles.rowBetweenCenterGap12,
   },
   ticketHeaderText: {
     flex: 1,

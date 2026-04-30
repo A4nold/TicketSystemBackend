@@ -47,6 +47,10 @@ export type IncomingTransfer = {
   };
 };
 
+export function getTransferAcceptPath(serialNumber: string) {
+  return `/transfer/accept/${encodeURIComponent(serialNumber)}`;
+}
+
 export async function createTransfer(
   serialNumber: string,
   payload: CreateTransferPayload,
@@ -95,5 +99,19 @@ export async function listIncomingTransfers(accessToken: string) {
     headers: {
       Authorization: `Bearer ${accessToken}`,
     },
+  });
+}
+
+export async function acceptTransfer(
+  serialNumber: string,
+  accessToken: string,
+) {
+  return apiFetch<TransferResponse>(`/api/tickets/${serialNumber}/accept-transfer`, {
+    body: JSON.stringify({}),
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    method: "POST",
   });
 }

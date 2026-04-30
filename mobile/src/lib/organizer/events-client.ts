@@ -243,6 +243,17 @@ export async function inviteOrganizerStaff(
   });
 }
 
+export async function acceptOrganizerStaffInvite(eventId: string, accessToken: string) {
+  return apiFetch<OrganizerStaffMembership>(`/api/events/${eventId}/staff/accept`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({}),
+  });
+}
+
 export async function updateOrganizerStaffRole(
   eventId: string,
   membershipId: string,

@@ -26,6 +26,7 @@ type AuthContextValue = {
   errorMessage: string | null;
   isAuthenticating: boolean;
   session: AuthSession | null;
+  refreshSession: () => Promise<void>;
   signIn: (payload: LoginPayload) => Promise<boolean>;
   signUp: (payload: RegisterPayload) => Promise<boolean>;
   signOut: () => Promise<void>;
@@ -70,6 +71,18 @@ export function AuthProvider({ children }: PropsWithChildren) {
       errorMessage,
       isAuthenticating,
       session,
+      refreshSession: async () => {
+        if (!session?.accessToken) {
+          return;
+        }
+
+        const nextSession = {
+          ...session,
+          user: await getCurrentAttendee(session.accessToken),
+        };
+        setSession(nextSession);
+        await persistSession(nextSession);
+      },
       signIn: async (payload) => {
         setIsAuthenticating(true);
         setErrorMessage(null);

@@ -1,4 +1,5 @@
-import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import {
   LayoutAnimation,
@@ -14,8 +15,14 @@ import {
 import { useAuth } from "@/components/providers/auth-provider";
 import { ActionButton, Card, Screen } from "@/components/ui";
 import { formatDateTime } from "@/lib/formatters";
-import { listWalletNotifications } from "@/lib/notifications/notifications-client";
-import { listIncomingTransfers } from "@/lib/transfers/transfers-client";
+import {
+  getInAppPathFromNotification,
+  listWalletNotifications,
+  markWalletNotificationAsRead,
+  type WalletNotification,
+} from "@/lib/notifications/notifications-client";
+import { getTransferAcceptPath, listIncomingTransfers } from "@/lib/transfers/transfers-client";
+import { commonStyles } from "@/styles/common";
 import { palette } from "@/styles/theme";
 
 if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -65,6 +72,8 @@ function ActivitySection({
 }
 
 export function ActivityScreen() {
+  const router = useRouter();
+  const queryClient = useQueryClient();
   const { session } = useAuth();
   const [isTransfersExpanded, setIsTransfersExpanded] = useState(true);
   const [isNotificationsExpanded, setIsNotificationsExpanded] = useState(true);
@@ -129,6 +138,30 @@ export function ActivityScreen() {
     return () => clearTimeout(timer);
   }, [activityMessage]);
 
+  async function openNotification(notification: WalletNotification) {
+    if (!session?.accessToken) {
+      return;
+    }
+
+    try {
+      if (!notification.readAt) {
+        await markWalletNotificationAsRead(notification.id, session.accessToken);
+        await queryClient.invalidateQueries({ queryKey: ["wallet-notifications"] });
+      }
+    } catch {
+      // keep navigation resilient even if read sync fails
+    }
+
+    const path = getInAppPathFromNotification(notification);
+
+    if (!path) {
+      setActivityMessage("Notification opened. No wallet action is required.");
+      return;
+    }
+
+    router.push(path as never);
+  }
+
   return (
     <Screen
       title="Activity"
@@ -171,7 +204,13 @@ export function ActivityScreen() {
           >
             {transfersQuery.data?.length ? (
               transfersQuery.data.map((transfer) => (
-                <View key={transfer.id} style={styles.feedCard}>
+                <Pressable
+                  key={transfer.id}
+                  onPress={() =>
+                    router.push(getTransferAcceptPath(transfer.serialNumber) as never)
+                  }
+                  style={styles.feedCard}
+                >
                   <View style={styles.feedHeader}>
                     <Text style={styles.feedTitle}>{transfer.ticketType.name}</Text>
                     <View style={styles.feedPill}>
@@ -182,7 +221,12 @@ export function ActivityScreen() {
                   <Text style={styles.feedMeta}>
                     Expires {formatDateTime(transfer.expiresAt)}
                   </Text>
-                </View>
+                  <View style={styles.transferActionRow}>
+                    <View style={styles.actionPill}>
+                      <Text style={styles.actionPillText}>Open transfer</Text>
+                    </View>
+                  </View>
+                </Pressable>
               ))
             ) : (
               <View style={styles.emptyCard}>
@@ -204,18 +248,33 @@ export function ActivityScreen() {
           >
             {notificationItems.length ? (
               notificationItems.map((notification) => (
-                <View key={notification.id} style={styles.feedCard}>
+                <Pressable
+                  key={notification.id}
+                  onPress={() => void openNotification(notification)}
+                  style={styles.feedCard}
+                >
                   <View style={styles.feedHeader}>
                     <Text style={styles.feedTitle}>{notification.title}</Text>
-                    <View style={styles.neutralPill}>
-                      <Text style={styles.neutralPillText}>
-                        {notification.readAt ? "Read" : "New"}
-                      </Text>
+                    <View style={styles.feedHeaderPills}>
+                      {notification.type === "TRANSFER_RECEIVED" ? (
+                        <View style={styles.actionPill}>
+                          <Text style={styles.actionPillText}>Open transfer</Text>
+                        </View>
+                      ) : notification.type === "STAFF_INVITE_RECEIVED" ? (
+                        <View style={styles.actionPill}>
+                          <Text style={styles.actionPillText}>Open role invite</Text>
+                        </View>
+                      ) : null}
+                      <View style={styles.neutralPill}>
+                        <Text style={styles.neutralPillText}>
+                          {notification.readAt ? "Read" : "New"}
+                        </Text>
+                      </View>
                     </View>
                   </View>
                   <Text style={styles.feedBody}>{notification.body}</Text>
                   <Text style={styles.feedMeta}>{formatDateTime(notification.createdAt)}</Text>
-                </View>
+                </Pressable>
               ))
             ) : (
               <View style={styles.emptyCard}>
@@ -271,22 +330,13 @@ const styles = StyleSheet.create({
     height: 100,
   },
   content: {
-    gap: 18,
-    padding: 20,
-    paddingBottom: 48,
+    ...commonStyles.contentContainer,
   },
   copy: {
-    color: palette.muted,
-    fontSize: 15,
-    lineHeight: 22,
+    ...commonStyles.bodyCopy,
   },
   emptyCard: {
-    backgroundColor: palette.backgroundMuted,
-    borderColor: palette.divider,
-    borderRadius: 20,
-    borderWidth: 1,
-    gap: 8,
-    padding: 16,
+    ...commonStyles.subtleEmptyCard,
   },
   emptyTitle: {
     color: palette.ink,
@@ -299,18 +349,15 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
   feedCard: {
-    backgroundColor: palette.card,
-    borderColor: palette.divider,
-    borderRadius: 22,
-    borderWidth: 1,
-    gap: 10,
-    padding: 16,
+    ...commonStyles.softCard,
   },
   feedHeader: {
+    ...commonStyles.rowBetweenCenterGap12,
+  },
+  feedHeaderPills: {
     alignItems: "center",
     flexDirection: "row",
-    gap: 12,
-    justifyContent: "space-between",
+    gap: 8,
   },
   feedMeta: {
     color: palette.mutedSoft,
@@ -320,13 +367,22 @@ const styles = StyleSheet.create({
   feedPill: {
     backgroundColor: palette.warningSoft,
     borderColor: "#ead39a",
-    borderRadius: 999,
-    borderWidth: 1,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
+    ...commonStyles.pillBase,
   },
   feedPillText: {
     color: palette.warning,
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+  },
+  actionPill: {
+    backgroundColor: palette.successSoft,
+    borderColor: "#bfe8ce",
+    ...commonStyles.pillBase,
+  },
+  actionPillText: {
+    color: palette.success,
     fontSize: 10,
     fontWeight: "800",
     letterSpacing: 0.8,
@@ -346,16 +402,10 @@ const styles = StyleSheet.create({
     opacity: 0.9,
   },
   heroEyebrow: {
-    color: "#ffe0bf",
-    fontSize: 12,
-    fontWeight: "800",
-    letterSpacing: 1.5,
-    textTransform: "uppercase",
+    ...commonStyles.heroDarkEyebrow,
   },
   heroShell: {
-    backgroundColor: palette.black,
-    gap: 14,
-    padding: 22,
+    ...commonStyles.heroDarkShell,
   },
   heroTitle: {
     color: palette.white,
@@ -365,26 +415,13 @@ const styles = StyleSheet.create({
     maxWidth: 320,
   },
   metricCard: {
-    backgroundColor: "rgba(255,255,255,0.08)",
-    borderColor: "rgba(255,255,255,0.12)",
-    borderRadius: 18,
-    borderWidth: 1,
-    flex: 1,
-    gap: 6,
-    minHeight: 84,
-    padding: 14,
+    ...commonStyles.heroDarkMetricCard,
   },
   metricLabel: {
-    color: "#dbc7b6",
-    fontSize: 11,
-    fontWeight: "800",
-    letterSpacing: 1.1,
-    textTransform: "uppercase",
+    ...commonStyles.heroDarkMetricLabel,
   },
   metricRow: {
-    flexDirection: "row",
-    gap: 12,
-    marginTop: 8,
+    ...commonStyles.heroDarkMetricRow,
   },
   metricValue: {
     color: palette.white,
@@ -392,19 +429,10 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
   neutralPill: {
-    backgroundColor: palette.backgroundMuted,
-    borderColor: palette.divider,
-    borderRadius: 999,
-    borderWidth: 1,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
+    ...commonStyles.neutralPill,
   },
   neutralPillText: {
-    color: palette.ink,
-    fontSize: 10,
-    fontWeight: "800",
-    letterSpacing: 0.8,
-    textTransform: "uppercase",
+    ...commonStyles.neutralPillText,
   },
   sectionChevron: {
     color: palette.muted,
@@ -414,42 +442,26 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
   },
   sectionHeaderButton: {
-    alignItems: "flex-start",
-    flexDirection: "row",
-    gap: 12,
-    justifyContent: "space-between",
+    ...commonStyles.sectionHeaderRow,
   },
   sectionHeaderCopy: {
     flex: 1,
     gap: 6,
   },
   sectionHeaderMeta: {
-    alignItems: "flex-end",
-    gap: 8,
+    ...commonStyles.sectionHeaderMeta,
   },
   sectionShell: {
-    gap: 14,
-    padding: 18,
+    ...commonStyles.sectionShell,
   },
   sectionStatePill: {
-    backgroundColor: palette.backgroundMuted,
-    borderColor: palette.divider,
-    borderRadius: 999,
-    borderWidth: 1,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
+    ...commonStyles.sectionStatusPill,
   },
   sectionStatePillText: {
-    color: palette.muted,
-    fontSize: 10,
-    fontWeight: "800",
-    letterSpacing: 0.8,
-    textTransform: "uppercase",
+    ...commonStyles.sectionStatusPillText,
   },
   sectionTitle: {
-    color: palette.ink,
-    fontSize: 22,
-    fontWeight: "800",
+    ...commonStyles.headingLg,
   },
   stickyActionWrap: {
     minWidth: 180,
@@ -488,5 +500,9 @@ const styles = StyleSheet.create({
     color: palette.ink,
     fontSize: 14,
     fontWeight: "800",
+  },
+  transferActionRow: {
+    alignItems: "flex-start",
+    marginTop: 2,
   },
 });
