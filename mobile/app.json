@@ -1,10 +1,10 @@
 {
   "expo": {
-    "name": "TicketSystem Mobile",
+    "name": "Maya",
     "slug": "ticketsystem-mobile",
-    "version": "1.0.0",
+    "version": "1.0.3",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/MayaIcon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "scheme": "ticketsystem",
@@ -20,11 +20,14 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.event.ticketsystem-mobile"
+      "bundleIdentifier": "com.event.ticketsystem-mobile",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
+        "foregroundImage": "./assets/MayaIcon.png",
         "backgroundColor": "#f5efe2"
       },
       "edgeToEdgeEnabled": true,
