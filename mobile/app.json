@@ -9,7 +9,7 @@
     "newArchEnabled": true,
     "scheme": "ticketsystem",
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./assets/maya-splash-icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#f5efe2"
     },
