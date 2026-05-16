@@ -223,9 +223,12 @@ export function CheckoutStartScreen() {
       const paymentProvider = quoteQuery.data
         ? getPaymentProviderForCurrency(quoteQuery.data.currency)
         : undefined;
+      const isPaystackCheckout = paymentProvider === "PAYSTACK";
       const order = await createCheckoutOrder(
         {
-          cancelReturnUrl: buildAppReturnUrl("/checkout/cancel"),
+          cancelReturnUrl: isPaystackCheckout
+            ? undefined
+            : buildAppReturnUrl("/checkout/cancel"),
           eventSlug: resolvedEvent.slug,
           idempotencyKey,
           items: [
@@ -235,7 +238,9 @@ export function CheckoutStartScreen() {
             },
           ],
           paymentProvider,
-          successReturnUrl: buildAppReturnUrl("/checkout/success"),
+          successReturnUrl: isPaystackCheckout
+            ? undefined
+            : buildAppReturnUrl("/checkout/success"),
         },
         activeSession.accessToken,
       );
@@ -246,8 +251,6 @@ export function CheckoutStartScreen() {
 
       const successReturnUrl = buildAppReturnUrl("/checkout/success");
       const cancelReturnUrl = buildAppReturnUrl("/checkout/cancel");
-      const isPaystackCheckout = paymentProvider === "PAYSTACK";
-
       if (Platform.OS === "ios" && isPaystackCheckout) {
         router.push({
           pathname: "/checkout/paystack-inline",

@@ -246,7 +246,17 @@ export class PaymentsService {
     providedUrl?: string;
     sessionPlaceholder: boolean;
   }) {
-    const baseUrl = providedUrl?.trim() || fallbackBaseUrl;
+    const trimmedProvidedUrl = providedUrl?.trim();
+    const parsedProvidedUrl = trimmedProvidedUrl
+      ? this.tryParseUrl(trimmedProvidedUrl)
+      : null;
+    const parsedFallbackUrl = this.tryParseUrl(fallbackBaseUrl);
+    const baseUrl =
+      parsedProvidedUrl?.protocol === "http:" || parsedProvidedUrl?.protocol === "https:"
+        ? trimmedProvidedUrl!
+        : parsedFallbackUrl
+          ? fallbackBaseUrl
+          : trimmedProvidedUrl || fallbackBaseUrl;
 
     if (!baseUrl) {
       throw new NotImplementedException("A valid checkout return URL could not be resolved.");
@@ -268,6 +278,14 @@ export class PaymentsService {
         : "";
 
       return `${baseUrl}${separator}orderId=${encodeURIComponent(orderId)}${sessionSuffix}`;
+    }
+  }
+
+  private tryParseUrl(value: string) {
+    try {
+      return new URL(value);
+    } catch {
+      return null;
     }
   }
 
