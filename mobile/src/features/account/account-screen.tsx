@@ -221,6 +221,20 @@ export function AccountScreen() {
           </View>
         </Card>
 
+        <Card padded={false}>
+          <View style={styles.sectionShell}>
+            <Text style={styles.sectionTitle}>Legal</Text>
+            <Text style={styles.copy}>Read how Maya handles your data and account information.</Text>
+            <ActionButton
+              onPress={() => {
+                router.push("/privacy-policy" as never);
+              }}
+              title="View privacy policy"
+              variant="secondary"
+            />
+          </View>
+        </Card>
+
         <SupportCard
           body="Use this path if recovery, wallet delivery, or scanner access still fails after retrying in-app. Include your account email and the event or ticket reference involved."
           subject="TicketSystem account support"

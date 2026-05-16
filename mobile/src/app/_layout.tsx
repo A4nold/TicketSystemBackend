@@ -49,6 +49,7 @@ function RootNavigator() {
           presentation: "modal",
         }}
       />
+      <Stack.Screen name="privacy-policy" />
     </Stack>
   );
 }
