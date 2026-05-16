@@ -5,7 +5,7 @@ import {
   UnauthorizedException,
 } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
-import { StaffRole } from "@prisma/client";
+import { PushDeviceStatus, StaffRole, UserStatus } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { createHash, randomBytes } from "crypto";
 
@@ -108,6 +108,53 @@ export class AuthService {
     }
 
     return this.toAuthUser(user);
+  }
+
+  async deleteAccount(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        status: true,
+      },
+    });
+
+    if (!user || user.status !== "ACTIVE") {
+      throw new UnauthorizedException("This account is not active.");
+    }
+
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: userId },
+        data: {
+          email: `deleted+${userId}@ticketsystem.local`,
+          passwordHash: null,
+          status: UserStatus.DELETED,
+        },
+      }),
+      this.prisma.passwordResetToken.updateMany({
+        where: {
+          userId,
+          usedAt: null,
+        },
+        data: {
+          usedAt: new Date(),
+        },
+      }),
+      this.prisma.pushDevice.updateMany({
+        where: {
+          userId,
+          status: PushDeviceStatus.ACTIVE,
+        },
+        data: {
+          status: PushDeviceStatus.DISABLED,
+        },
+      }),
+    ]);
+
+    return {
+      message: "Your account has been deleted.",
+    };
   }
 
   async requestPasswordReset(payload: ForgotPasswordDto) {

@@ -1,17 +1,22 @@
 import { useRouter } from "expo-router";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { useState } from "react";
+import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { useAuth } from "@/components/providers/auth-provider";
 import { usePushNotifications } from "@/components/providers/push-notifications-provider";
 import { SupportCard } from "@/components/support/support-card";
 import { canManageOrganizerEvents, hasOrganizerSurfaceAccess } from "@/features/auth/organizer-access";
 import { canAccessScannerEvents, hasScannerSurfaceAccess } from "@/features/auth/scanner-access";
+import { deleteCurrentAccount } from "@/lib/auth/auth-client";
 import { ActionButton, Card, Screen } from "@/components/ui";
 import { palette } from "@/styles/theme";
 
 export function AccountScreen() {
   const router = useRouter();
   const { session, signOut } = useAuth();
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+  const [deleteAccountError, setDeleteAccountError] = useState<string | null>(null);
   const hasOrganizerAccess = hasOrganizerSurfaceAccess(session?.user);
   const canManageEvents = canManageOrganizerEvents(session?.user);
   const hasScannerAccess = hasScannerSurfaceAccess(session?.user);
@@ -25,6 +30,28 @@ export function AccountScreen() {
     registerForPushNotifications,
     unregisterFromPushNotifications,
   } = usePushNotifications();
+
+  async function handleDeleteAccount() {
+    if (!session?.accessToken) {
+      return;
+    }
+
+    setDeleteAccountError(null);
+    setIsDeletingAccount(true);
+
+    try {
+      await deleteCurrentAccount(session.accessToken);
+      await signOut();
+      setIsDeleteModalOpen(false);
+      router.replace("/(auth)/login");
+    } catch (error) {
+      setDeleteAccountError(
+        error instanceof Error ? error.message : "Account deletion failed. Please try again.",
+      );
+    } finally {
+      setIsDeletingAccount(false);
+    }
+  }
 
   return (
     <Screen
@@ -143,6 +170,24 @@ export function AccountScreen() {
 
         <Card padded={false}>
           <View style={styles.sectionShell}>
+            <Text style={styles.sectionTitle}>Delete account</Text>
+            <Text style={styles.copy}>
+              Permanently remove this account from mobile access on this platform.
+            </Text>
+            {deleteAccountError ? <Text style={styles.error}>{deleteAccountError}</Text> : null}
+            <ActionButton
+              onPress={() => {
+                setDeleteAccountError(null);
+                setIsDeleteModalOpen(true);
+              }}
+              title="Delete account"
+              variant="secondary"
+            />
+          </View>
+        </Card>
+
+        <Card padded={false}>
+          <View style={styles.sectionShell}>
             <Text style={styles.sectionTitle}>Push notifications</Text>
             <Text style={styles.value}>
               {permissionStatus === "unsupported"
@@ -182,6 +227,48 @@ export function AccountScreen() {
           title="Need help with this account or event access?"
         />
       </ScrollView>
+
+      <Modal
+        animationType="fade"
+        onRequestClose={() => {
+          if (!isDeletingAccount) {
+            setIsDeleteModalOpen(false);
+          }
+        }}
+        transparent
+        visible={isDeleteModalOpen}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Delete account?</Text>
+            <Text style={styles.copy}>
+              This action cannot be undone. You will be signed out immediately after deletion.
+            </Text>
+            <View style={styles.modalActions}>
+              <Pressable
+                disabled={isDeletingAccount}
+                onPress={() => {
+                  setIsDeleteModalOpen(false);
+                }}
+                style={styles.modalSecondaryButton}
+              >
+                <Text style={styles.modalSecondaryText}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                disabled={isDeletingAccount}
+                onPress={() => {
+                  void handleDeleteAccount();
+                }}
+                style={styles.modalDangerButton}
+              >
+                <Text style={styles.modalDangerText}>
+                  {isDeletingAccount ? "Deleting..." : "Yes, delete"}
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </Screen>
   );
 }
@@ -282,6 +369,55 @@ const styles = StyleSheet.create({
     color: palette.white,
     fontSize: 18,
     fontWeight: "700",
+  },
+  modalActions: {
+    flexDirection: "row",
+    gap: 10,
+    justifyContent: "flex-end",
+    marginTop: 8,
+  },
+  modalBackdrop: {
+    alignItems: "center",
+    backgroundColor: "rgba(0,0,0,0.45)",
+    flex: 1,
+    justifyContent: "center",
+    padding: 20,
+  },
+  modalCard: {
+    backgroundColor: palette.white,
+    borderRadius: 18,
+    gap: 12,
+    maxWidth: 420,
+    padding: 18,
+    width: "100%",
+  },
+  modalDangerButton: {
+    backgroundColor: palette.danger,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  modalDangerText: {
+    color: palette.white,
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  modalSecondaryButton: {
+    borderColor: palette.divider,
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  modalSecondaryText: {
+    color: palette.ink,
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  modalTitle: {
+    color: palette.ink,
+    fontSize: 20,
+    fontWeight: "800",
   },
   primaryValue: {
     color: palette.ink,

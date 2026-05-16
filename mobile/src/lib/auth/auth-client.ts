@@ -75,3 +75,12 @@ export async function getCurrentAttendee(accessToken: string) {
     },
   });
 }
+
+export async function deleteCurrentAccount(accessToken: string) {
+  return apiFetch<PasswordResetResponse>("/api/auth/me", {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+    method: "DELETE",
+  });
+}

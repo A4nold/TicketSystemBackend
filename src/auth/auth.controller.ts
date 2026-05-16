@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Post, UseGuards } from "@nestjs/common";
 import {
   ApiBearerAuth,
   ApiBadRequestResponse,
@@ -99,5 +99,22 @@ export class AuthController {
   })
   me(@CurrentUser() user: AuthenticatedUser) {
     return this.authService.getMe(user.id);
+  }
+
+  @Delete("me")
+  @ApiBearerAuth("bearer")
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({
+    summary: "Delete the current authenticated user account",
+  })
+  @ApiOkResponse({
+    description: "Authenticated user account deleted",
+    type: PasswordResetResponseDto,
+  })
+  @ApiUnauthorizedResponse({
+    description: "Bearer token was missing, invalid, expired, or tied to an inactive user",
+  })
+  deleteMe(@CurrentUser() user: AuthenticatedUser) {
+    return this.authService.deleteAccount(user.id);
   }
 }
