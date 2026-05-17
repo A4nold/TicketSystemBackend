@@ -27,6 +27,18 @@ export class EventTicketTypeDto {
   @ApiProperty({ example: "15" })
   price!: string;
 
+  @ApiProperty({ enum: ["FIXED", "FREE", "OFFER_RANGE"], default: "FIXED" })
+  pricingMode!: "FIXED" | "FREE" | "OFFER_RANGE";
+
+  @ApiProperty({ example: "5.00", nullable: true })
+  minOfferPrice!: string | null;
+
+  @ApiProperty({ example: "200.00", nullable: true })
+  maxOfferPrice!: string | null;
+
+  @ApiProperty({ example: 30, default: 30 })
+  offerAutoExpireMinutes!: number;
+
   @ApiProperty()
   currency!: string;
 

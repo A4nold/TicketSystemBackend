@@ -70,6 +70,24 @@ export class CreateCheckoutDto {
   idempotencyKey?: string;
 
   @ApiPropertyOptional({
+    example: "cm_offer_request_123",
+    description: "Offer request id required for OFFER_RANGE ticket checkout.",
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  offerRequestId?: string;
+
+  @ApiPropertyOptional({
+    example: "ofr_tok_abc123",
+    description: "Unlock token issued on organizer acceptance, required for OFFER_RANGE checkout.",
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(180)
+  offerUnlockToken?: string;
+
+  @ApiPropertyOptional({
     example: "exp://127.0.0.1:8081/--/checkout/success",
     description: "Optional mobile success return URL. When provided with a cancel URL, Stripe returns into the app instead of the web frontend.",
   })

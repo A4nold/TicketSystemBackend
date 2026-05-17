@@ -14,6 +14,10 @@ type EventTicketTypeShape = {
   name: string;
   description: string | null;
   price: Prisma.Decimal;
+  pricingMode?: "FIXED" | "FREE" | "OFFER_RANGE";
+  minOfferPrice?: Prisma.Decimal | null;
+  maxOfferPrice?: Prisma.Decimal | null;
+  offerAutoExpireMinutes?: number;
   currency: string;
   quantity: number;
   maxPerOrder: number | null;
@@ -84,6 +88,10 @@ export function toTicketTypeResponse(ticketType: EventTicketTypeShape) {
     name: ticketType.name,
     description: ticketType.description,
     price: ticketType.price.toFixed(2),
+    pricingMode: ticketType.pricingMode ?? "FIXED",
+    minOfferPrice: ticketType.minOfferPrice?.toFixed(2) ?? null,
+    maxOfferPrice: ticketType.maxOfferPrice?.toFixed(2) ?? null,
+    offerAutoExpireMinutes: ticketType.offerAutoExpireMinutes ?? 30,
     currency: ticketType.currency,
     quantity: ticketType.quantity,
     maxPerOrder: ticketType.maxPerOrder,

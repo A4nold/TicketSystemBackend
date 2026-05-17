@@ -3,7 +3,11 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { NotificationType, Prisma, StaffRole } from "@prisma/client";
+import {
+  NotificationType,
+  Prisma,
+  StaffRole,
+} from "@prisma/client";
 
 import { AuthenticatedUser } from "../auth/types/authenticated-user.type";
 import { NotificationsService } from "../notifications/notifications.service";
@@ -46,13 +50,18 @@ export class EventsService {
     }
     this.assertTicketTypeCurrency(payload.currency, event.currency);
     this.assertTicketTypeDates(payload, event);
+    const normalizedPricing = this.normalizeTicketPricing(payload);
 
     const ticketType = await this.prisma.ticketType.create({
       data: {
         eventId,
         name: payload.name.trim(),
         description: payload.description?.trim(),
-        price: new Prisma.Decimal(payload.price),
+        price: normalizedPricing.price,
+        pricingMode: normalizedPricing.pricingMode,
+        minOfferPrice: normalizedPricing.minOfferPrice,
+        maxOfferPrice: normalizedPricing.maxOfferPrice,
+        offerAutoExpireMinutes: normalizedPricing.offerAutoExpireMinutes,
         currency: event.currency,
         quantity: payload.quantity,
         maxPerOrder: payload.maxPerOrder ?? null,
@@ -97,6 +106,10 @@ export class EventsService {
       existingTicketType.currency,
     );
     this.assertTicketTypeDates(payload, event, existingTicketType);
+    const normalizedPricing = this.normalizeTicketPricing(
+      payload,
+      existingTicketType,
+    );
 
     const ticketType = await this.prisma.ticketType.update({
       where: { id: ticketTypeId },
@@ -105,8 +118,18 @@ export class EventsService {
         ...(payload.description !== undefined
           ? { description: payload.description?.trim() ?? null }
           : {}),
-        ...(payload.price !== undefined
-          ? { price: new Prisma.Decimal(payload.price) }
+        ...(payload.price !== undefined ||
+        payload.pricingMode !== undefined ||
+        payload.minOfferPrice !== undefined ||
+        payload.maxOfferPrice !== undefined ||
+        payload.offerAutoExpireMinutes !== undefined
+          ? {
+              price: normalizedPricing.price,
+              pricingMode: normalizedPricing.pricingMode,
+              minOfferPrice: normalizedPricing.minOfferPrice,
+              maxOfferPrice: normalizedPricing.maxOfferPrice,
+              offerAutoExpireMinutes: normalizedPricing.offerAutoExpireMinutes,
+            }
           : {}),
         ...(payload.quantity !== undefined ? { quantity: payload.quantity } : {}),
         ...(payload.maxPerOrder !== undefined
@@ -152,6 +175,86 @@ export class EventsService {
         `Ticket type currency must match the event currency (${expectedCurrency}).`,
       );
     }
+  }
+
+  private normalizeTicketPricing(
+    payload: Partial<CreateTicketTypeDto>,
+    existingTicketType?: {
+      price: Prisma.Decimal;
+      pricingMode?: TicketPricingModeValue;
+      minOfferPrice?: Prisma.Decimal | null;
+      maxOfferPrice?: Prisma.Decimal | null;
+      offerAutoExpireMinutes?: number;
+    },
+  ): {
+    pricingMode: TicketPricingModeValue;
+    price: Prisma.Decimal;
+    minOfferPrice: Prisma.Decimal | null;
+    maxOfferPrice: Prisma.Decimal | null;
+    offerAutoExpireMinutes: number;
+  } {
+    const pricingMode = (payload.pricingMode ??
+      existingTicketType?.pricingMode ??
+      "FIXED") as TicketPricingModeValue;
+
+    const rawPrice = payload.price ?? existingTicketType?.price?.toString();
+    const rawMinOfferPrice =
+      payload.minOfferPrice ?? existingTicketType?.minOfferPrice?.toString();
+    const rawMaxOfferPrice =
+      payload.maxOfferPrice ?? existingTicketType?.maxOfferPrice?.toString();
+    const offerAutoExpireMinutes =
+      payload.offerAutoExpireMinutes ??
+      existingTicketType?.offerAutoExpireMinutes ??
+      30;
+
+    if (pricingMode === "FREE") {
+      return {
+        pricingMode,
+        price: new Prisma.Decimal("0"),
+        minOfferPrice: null,
+        maxOfferPrice: null,
+        offerAutoExpireMinutes,
+      };
+    }
+
+    if (pricingMode === "OFFER_RANGE") {
+      if (!rawMinOfferPrice || !rawMaxOfferPrice) {
+        throw new BadRequestException(
+          "Offer-range ticket types require both minOfferPrice and maxOfferPrice.",
+        );
+      }
+
+      const minOfferPrice = new Prisma.Decimal(rawMinOfferPrice);
+      const maxOfferPrice = new Prisma.Decimal(rawMaxOfferPrice);
+
+      if (minOfferPrice.gte(maxOfferPrice)) {
+        throw new BadRequestException(
+          "Offer-range ticket type minOfferPrice must be less than maxOfferPrice.",
+        );
+      }
+
+      return {
+        pricingMode,
+        price: rawPrice ? new Prisma.Decimal(rawPrice) : minOfferPrice,
+        minOfferPrice,
+        maxOfferPrice,
+        offerAutoExpireMinutes,
+      };
+    }
+
+    if (!rawPrice) {
+      throw new BadRequestException(
+        "Fixed-price ticket types require a price value.",
+      );
+    }
+
+    return {
+      pricingMode: "FIXED",
+      price: new Prisma.Decimal(rawPrice),
+      minOfferPrice: null,
+      maxOfferPrice: null,
+      offerAutoExpireMinutes,
+    };
   }
 
   async inviteStaff(eventId: string, payload: InviteStaffMemberDto) {
@@ -461,3 +564,4 @@ export class EventsService {
     }
   }
 }
+type TicketPricingModeValue = "FIXED" | "FREE" | "OFFER_RANGE";

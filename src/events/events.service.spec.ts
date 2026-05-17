@@ -347,4 +347,88 @@ describe("EventsService ticket currency", () => {
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(prisma.ticketType.create).not.toHaveBeenCalled();
   });
+
+  it("creates free ticket types with zero price", async () => {
+    const prisma = {
+      event: {
+        findUnique: vi.fn().mockResolvedValue({
+          currency: "EUR",
+          endsAt: null,
+          id: "event_123",
+          startsAt: new Date("2026-05-15T20:00:00.000Z"),
+        }),
+      },
+      ticketType: {
+        create: vi.fn().mockResolvedValue({
+          currency: "EUR",
+          description: null,
+          id: "ticket_type_free",
+          isActive: true,
+          maxOfferPrice: null,
+          maxPerOrder: null,
+          minOfferPrice: null,
+          name: "Guest List",
+          offerAutoExpireMinutes: 30,
+          price: new Prisma.Decimal("0.00"),
+          pricingMode: "FREE",
+          quantity: 50,
+          saleEndsAt: null,
+          saleStartsAt: null,
+        }),
+      },
+    };
+    const service = new EventsService(
+      prisma as never,
+      { createEvent: vi.fn(), updateEvent: vi.fn() } as never,
+    );
+
+    const result = await service.createTicketType("event_123", {
+      name: "Guest List",
+      pricingMode: "FREE",
+      quantity: 50,
+    });
+
+    expect(prisma.ticketType.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          price: new Prisma.Decimal("0"),
+          pricingMode: "FREE",
+        }),
+      }),
+    );
+    expect(result.price).toBe("0.00");
+    expect(result.pricingMode).toBe("FREE");
+  });
+
+  it("rejects offer-range ticket type when minOfferPrice is not less than maxOfferPrice", async () => {
+    const prisma = {
+      event: {
+        findUnique: vi.fn().mockResolvedValue({
+          currency: "EUR",
+          endsAt: null,
+          id: "event_123",
+          startsAt: new Date("2026-05-15T20:00:00.000Z"),
+        }),
+      },
+      ticketType: {
+        create: vi.fn(),
+      },
+    };
+    const service = new EventsService(
+      prisma as never,
+      { createEvent: vi.fn(), updateEvent: vi.fn() } as never,
+    );
+
+    await expect(
+      service.createTicketType("event_123", {
+        maxOfferPrice: "100.00",
+        minOfferPrice: "120.00",
+        name: "Offer Ticket",
+        pricingMode: "OFFER_RANGE",
+        quantity: 100,
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(prisma.ticketType.create).not.toHaveBeenCalled();
+  });
 });

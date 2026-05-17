@@ -27,11 +27,46 @@ export class CreateTicketTypeDto {
   @MaxLength(1000)
   description?: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     example: "15.00",
   })
+  @IsOptional()
   @IsString()
-  price!: string;
+  price?: string;
+
+  @ApiPropertyOptional({
+    example: "FIXED",
+    default: "FIXED",
+    enum: ["FIXED", "FREE", "OFFER_RANGE"],
+  })
+  @IsOptional()
+  @IsString()
+  @IsIn(["FIXED", "FREE", "OFFER_RANGE"])
+  pricingMode?: "FIXED" | "FREE" | "OFFER_RANGE";
+
+  @ApiPropertyOptional({
+    example: "5.00",
+  })
+  @IsOptional()
+  @IsString()
+  minOfferPrice?: string;
+
+  @ApiPropertyOptional({
+    example: "200.00",
+  })
+  @IsOptional()
+  @IsString()
+  maxOfferPrice?: string;
+
+  @ApiPropertyOptional({
+    example: 30,
+    default: 30,
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  offerAutoExpireMinutes?: number;
 
   @ApiPropertyOptional({
     example: "EUR",

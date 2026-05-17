@@ -109,9 +109,9 @@ export class OrdersController {
   })
   quoteCheckout(
     @Body() payload: CreateCheckoutDto,
-    @CurrentUser() _user: AuthenticatedUser,
+    @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.ordersService.quoteCheckout(payload);
+    return this.ordersService.quoteCheckout(payload, user);
   }
 
   @Post(":orderId/confirm-payment")

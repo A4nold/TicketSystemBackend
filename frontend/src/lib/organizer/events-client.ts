@@ -73,9 +73,13 @@ export type OrganizerEventResponse = {
     description: string | null;
     id: string;
     isActive: boolean;
+    maxOfferPrice: string | null;
     maxPerOrder: number | null;
+    minOfferPrice: string | null;
     name: string;
+    offerAutoExpireMinutes: number;
     price: string;
+    pricingMode: "FIXED" | "FREE" | "OFFER_RANGE";
     quantity: number;
     saleEndsAt?: string | null;
     saleStartsAt?: string | null;
@@ -122,9 +126,13 @@ export type CreateTicketTypePayload = {
   currency?: string;
   description?: string;
   isActive?: boolean;
+  maxOfferPrice?: string;
   maxPerOrder?: number;
+  minOfferPrice?: string;
   name: string;
-  price: string;
+  offerAutoExpireMinutes?: number;
+  price?: string;
+  pricingMode?: "FIXED" | "FREE" | "OFFER_RANGE";
   quantity: number;
   saleEndsAt?: string;
   saleStartsAt?: string;

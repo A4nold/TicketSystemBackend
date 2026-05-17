@@ -4,6 +4,8 @@ export type CreateCheckoutPayload = {
   cancelReturnUrl?: string;
   eventSlug: string;
   idempotencyKey?: string;
+  offerRequestId?: string;
+  offerUnlockToken?: string;
   items: Array<{
     quantity: number;
     ticketTypeId: string;

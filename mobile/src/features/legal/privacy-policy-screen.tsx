@@ -21,7 +21,7 @@ export function PrivacyPolicyScreen() {
         <Card>
           <Text style={styles.heading}>2. Data we collect</Text>
           <Text style={styles.copy}>
-            We may collect account profile data (such as email and name), authentication and session
+            We may collect account profile data (such as email, phone number, and name), authentication and session
             data, ticket and order history, transfer and resale activity, device and app diagnostics,
             and push notification tokens when you enable notifications.
           </Text>

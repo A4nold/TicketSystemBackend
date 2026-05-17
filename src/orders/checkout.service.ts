@@ -7,6 +7,7 @@ import {
 import { OrderStatus, PaymentProvider, Prisma } from "@prisma/client";
 
 import { AuthenticatedUser } from "../auth/types/authenticated-user.type";
+import { NotificationsService } from "../notifications/notifications.service";
 import { PaymentsService } from "../payments/payments.service";
 import { PrismaService } from "../prisma/prisma.service";
 import {
@@ -15,6 +16,7 @@ import {
 } from "./dto/create-checkout.dto";
 import { calculateFeeTotals, resolveFeePolicy, type FeePolicy } from "./fee-policy";
 import { toOrderResponse } from "./mappers/order-response.mapper";
+import { PurchasedTicketIssuanceService } from "./purchased-ticket-issuance.service";
 
 @Injectable()
 export class CheckoutService {
@@ -23,6 +25,8 @@ export class CheckoutService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly paymentsService: PaymentsService,
+    private readonly purchasedTicketIssuanceService: PurchasedTicketIssuanceService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async createCheckout(payload: CreateCheckoutDto, user: AuthenticatedUser) {
@@ -50,7 +54,7 @@ export class CheckoutService {
     let quote: Awaited<ReturnType<typeof this.prepareCheckoutQuote>>;
 
     try {
-      quote = await this.prepareCheckoutQuote(payload);
+      quote = await this.prepareCheckoutQuote(payload, user);
     } catch (error) {
       this.logger.warn(
         `checkout.quote.failed userId=${user.id} eventSlug=${payload.eventSlug} reason="${error instanceof Error ? error.message : "Unknown error"}"`,
@@ -58,9 +62,26 @@ export class CheckoutService {
       throw error;
     }
 
-    const { event, feePolicy, requestedItems, ticketTypes, totals } = quote;
+    const { event, feePolicy, requestedItems, pricedItems, totals } = quote;
     const paymentProvider =
       payload.paymentProvider ?? this.resolveDefaultPaymentProvider(totals.currency);
+    if (payload.offerRequestId && payload.offerUnlockToken) {
+      const consumed = await (this.prisma as any).ticketOfferRequest.updateMany({
+        where: {
+          id: payload.offerRequestId,
+          checkoutUnlockToken: payload.offerUnlockToken,
+          status: "ACCEPTED",
+        },
+        data: {
+          checkoutUnlockToken: null,
+        },
+      });
+
+      if (consumed.count === 0) {
+        throw new BadRequestException("Offer unlock token has already been used.");
+      }
+    }
+
     const order = await this.prisma.order.create({
       data: {
         userId: user.id,
@@ -75,24 +96,69 @@ export class CheckoutService {
         idempotencyKey: payload.idempotencyKey,
         items: {
           create: requestedItems.map((item) => {
-            const ticketType = ticketTypes.find(
+            const pricedItem = pricedItems.find(
               (candidate) => candidate.id === item.ticketTypeId,
             );
 
             return {
               ticketTypeId: item.ticketTypeId,
               quantity: item.quantity,
-              unitPrice: ticketType!.price,
-              totalPrice: ticketType!.price.mul(item.quantity),
+              unitPrice: pricedItem!.unitPrice,
+              totalPrice: pricedItem!.unitPrice.mul(item.quantity),
             };
           }),
         },
       },
       include: this.orderInclude(),
     });
+
     this.logger.log(
       `checkout.create.order_created orderId=${order.id} userId=${user.id} eventId=${event.id} subtotal=${totals.subtotal.toFixed(2)} fee=${totals.fee.toFixed(2)} total=${totals.total.toFixed(2)} currency=${totals.currency}`,
     );
+
+    if (totals.total.lte(new Prisma.Decimal(0))) {
+      const paidAt = new Date();
+      const paidOrder = await this.prisma.$transaction(async (tx) => {
+        const updatedOrder = await tx.order.update({
+          where: { id: order.id },
+          data: {
+            status: OrderStatus.PAID,
+            paidAt,
+            paymentReference: `free:${order.id}`,
+            checkoutSessionId: null,
+          },
+          include: this.orderInclude(),
+        });
+
+        await this.purchasedTicketIssuanceService.issuePurchasedTickets(
+          tx,
+          updatedOrder,
+          paidAt,
+        );
+
+        return tx.order.findUniqueOrThrow({
+          where: { id: updatedOrder.id },
+          include: this.orderInclude(),
+        });
+      });
+
+      await this.notificationsService.notifyOrderPaid({
+        eventTitle: paidOrder.event.title,
+        orderId: paidOrder.id,
+        ticketCount: paidOrder.tickets.length,
+        userId: paidOrder.userId,
+      });
+
+      return toOrderResponse({
+        ...paidOrder,
+        checkoutSessionId: null,
+        checkoutStatus: "success",
+        checkoutUrl: null,
+        feePolicy,
+        isAwaitingPaymentConfirmation: false,
+        paymentStatus: "paid",
+      });
+    }
     let checkoutSessionId = order.checkoutSessionId;
     let checkoutUrl: string | null = null;
     let paymentStatus: string | null = null;
@@ -220,9 +286,9 @@ export class CheckoutService {
     });
   }
 
-  async quoteCheckout(payload: CreateCheckoutDto) {
+  async quoteCheckout(payload: CreateCheckoutDto, user?: AuthenticatedUser) {
     try {
-      const quote = await this.prepareCheckoutQuote(payload);
+      const quote = await this.prepareCheckoutQuote(payload, user);
 
       this.logger.log(
         `checkout.quote.completed eventSlug=${payload.eventSlug} items=${quote.requestedItems.length} total=${quote.totals.total.toFixed(2)} currency=${quote.totals.currency}`,
@@ -246,15 +312,15 @@ export class CheckoutService {
           fixedFeeApplication: quote.feePolicy.fixedFeeApplication,
         },
         items: quote.requestedItems.map((item) => {
-          const ticketType = quote.ticketTypes.find((candidate) => candidate.id === item.ticketTypeId)!;
+          const pricedItem = quote.pricedItems.find((candidate) => candidate.id === item.ticketTypeId)!;
 
           return {
-            currency: ticketType.currency,
+            currency: pricedItem.currency,
             quantity: item.quantity,
-            ticketTypeId: ticketType.id,
-            ticketTypeName: ticketType.name,
-            totalPrice: ticketType.price.mul(item.quantity).toFixed(2),
-            unitPrice: ticketType.price.toFixed(2),
+            ticketTypeId: pricedItem.id,
+            ticketTypeName: pricedItem.name,
+            totalPrice: pricedItem.unitPrice.mul(item.quantity).toFixed(2),
+            unitPrice: pricedItem.unitPrice.toFixed(2),
           };
         }),
         subtotalAmount: quote.totals.subtotal.toFixed(2),
@@ -399,23 +465,23 @@ export class CheckoutService {
   }
 
   private calculateOrderTotals(
-    ticketTypes: Array<{
+    pricedItems: Array<{
       id: string;
-      price: Prisma.Decimal;
+      unitPrice: Prisma.Decimal;
       currency: string;
     }>,
     requestedItems: CheckoutLineItemDto[],
     feePolicy: FeePolicy,
   ) {
     const subtotal = requestedItems.reduce((runningTotal, item) => {
-      const ticketType = ticketTypes.find(
+      const pricedItem = pricedItems.find(
         (candidate) => candidate.id === item.ticketTypeId,
       )!;
 
-      return runningTotal.add(ticketType.price.mul(item.quantity));
+      return runningTotal.add(pricedItem.unitPrice.mul(item.quantity));
     }, new Prisma.Decimal(0));
 
-    const currencies = new Set(ticketTypes.map((ticketType) => ticketType.currency));
+    const currencies = new Set(pricedItems.map((item) => item.currency));
 
     if (currencies.size !== 1) {
       throw new BadRequestException(
@@ -423,9 +489,19 @@ export class CheckoutService {
       );
     }
 
+    if (subtotal.lte(new Prisma.Decimal(0))) {
+      return {
+        subtotal: new Prisma.Decimal(0),
+        fee: new Prisma.Decimal(0),
+        total: new Prisma.Decimal(0),
+        currency: pricedItems[0]!.currency,
+        organizerFee: new Prisma.Decimal(0),
+      };
+    }
+
     const itemCount = requestedItems.reduce((runningTotal, item) => runningTotal + item.quantity, 0);
     const appliedFees = calculateFeeTotals({
-      currency: ticketTypes[0]!.currency,
+      currency: pricedItems[0]!.currency,
       itemCount,
       policy: feePolicy,
       subtotal,
@@ -440,7 +516,10 @@ export class CheckoutService {
     };
   }
 
-  private async prepareCheckoutQuote(payload: CreateCheckoutDto) {
+  private async prepareCheckoutQuote(
+    payload: CreateCheckoutDto,
+    user?: AuthenticatedUser,
+  ) {
     const event = await this.prisma.event.findUnique({
       where: { slug: payload.eventSlug },
       include: {
@@ -476,16 +555,117 @@ export class CheckoutService {
 
     await this.assertTicketTypeAvailability(ticketTypes, requestedItems);
 
+    const pricedItems = await this.resolvePricedItems(
+      payload,
+      event.id,
+      ticketTypes,
+      requestedItems,
+      user,
+    );
+
     const feePolicy = resolveFeePolicy();
-    const totals = this.calculateOrderTotals(ticketTypes, requestedItems, feePolicy);
+    const totals = this.calculateOrderTotals(pricedItems, requestedItems, feePolicy);
 
     return {
       event,
       feePolicy,
+      pricedItems,
       requestedItems,
       ticketTypes,
       totals,
     };
+  }
+
+  private async resolvePricedItems(
+    payload: CreateCheckoutDto,
+    eventId: string,
+    ticketTypes: Array<{
+      id: string;
+      name: string;
+      price: Prisma.Decimal;
+      pricingMode?: "FIXED" | "FREE" | "OFFER_RANGE";
+      currency: string;
+    }>,
+    requestedItems: CheckoutLineItemDto[],
+    user?: AuthenticatedUser,
+  ) {
+    const now = new Date();
+    const offerRangeTypes = ticketTypes.filter(
+      (ticketType) => ticketType.pricingMode === "OFFER_RANGE",
+    );
+
+    const pricedItems = ticketTypes.map((ticketType) => ({
+      ...ticketType,
+      unitPrice:
+        ticketType.pricingMode === "FREE"
+          ? new Prisma.Decimal(0)
+          : ticketType.price,
+    }));
+
+    if (offerRangeTypes.length === 0) {
+      return pricedItems;
+    }
+
+    if (!user) {
+      throw new BadRequestException(
+        "Authenticated user context is required for offer-range checkout.",
+      );
+    }
+
+    if (!payload.offerRequestId || !payload.offerUnlockToken) {
+      throw new BadRequestException(
+        "offerRequestId and offerUnlockToken are required for offer-range checkout.",
+      );
+    }
+
+    if (offerRangeTypes.length > 1 || requestedItems.length > 1) {
+      throw new BadRequestException(
+        "Offer-range checkout currently supports a single ticket type per order.",
+      );
+    }
+
+    const requestedItem = requestedItems[0]!;
+    const offerRequest = await (this.prisma as any).ticketOfferRequest.findUnique({
+      where: { id: payload.offerRequestId },
+    });
+
+    if (!offerRequest) {
+      throw new BadRequestException("Offer request was not found.");
+    }
+
+    if (offerRequest.checkoutUnlockToken !== payload.offerUnlockToken) {
+      throw new BadRequestException("Offer unlock token is invalid.");
+    }
+
+    if (offerRequest.status !== "ACCEPTED") {
+      throw new BadRequestException("Offer request is not accepted.");
+    }
+
+    if (offerRequest.attendeeUserId !== user.id) {
+      throw new BadRequestException(
+        "Offer request does not belong to the authenticated user.",
+      );
+    }
+
+    if (
+      offerRequest.eventId !== eventId ||
+      offerRequest.ticketTypeId !== requestedItem.ticketTypeId
+    ) {
+      throw new BadRequestException(
+        "Offer request does not match the requested event/ticket type.",
+      );
+    }
+
+    if (offerRequest.expiresAt <= now) {
+      throw new BadRequestException("Offer request has expired.");
+    }
+
+    const pricedItem = pricedItems.find(
+      (item) => item.id === offerRequest.ticketTypeId,
+    )!;
+    pricedItem.unitPrice = offerRequest.offeredPrice;
+
+    return pricedItems;
   }
 
   private orderInclude() {
