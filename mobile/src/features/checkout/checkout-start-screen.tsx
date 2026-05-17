@@ -67,6 +67,8 @@ export function CheckoutStartScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{
     eventSlug?: string;
+    offerRequestId?: string;
+    offerUnlockToken?: string;
     quantity?: string;
     ticketTypeId?: string;
   }>();
@@ -75,6 +77,10 @@ export function CheckoutStartScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [idempotencyKey] = useState(createIdempotencyKey);
   const eventSlug = typeof params.eventSlug === "string" ? params.eventSlug : "";
+  const offerRequestId =
+    typeof params.offerRequestId === "string" ? params.offerRequestId : undefined;
+  const offerUnlockToken =
+    typeof params.offerUnlockToken === "string" ? params.offerUnlockToken : undefined;
   const ticketTypeId = typeof params.ticketTypeId === "string" ? params.ticketTypeId : "";
   const quantity = Math.max(1, Number(params.quantity ?? "1") || 1);
 
@@ -94,6 +100,8 @@ export function CheckoutStartScreen() {
       getCheckoutQuote(
         {
           eventSlug: event!.slug,
+          offerRequestId,
+          offerUnlockToken,
           items: [
             {
               quantity,
@@ -231,6 +239,8 @@ export function CheckoutStartScreen() {
             : buildAppReturnUrl("/checkout/cancel"),
           eventSlug: resolvedEvent.slug,
           idempotencyKey,
+          offerRequestId,
+          offerUnlockToken,
           items: [
             {
               quantity,
@@ -246,6 +256,14 @@ export function CheckoutStartScreen() {
       );
 
       if (!order.checkoutUrl) {
+        if (order.status === "PAID" || order.isAwaitingPaymentConfirmation) {
+          router.replace({
+            pathname: "/checkout/success",
+            params: { orderId: order.id },
+          });
+          return;
+        }
+
         throw new Error("Checkout URL was not returned by the backend.");
       }
 

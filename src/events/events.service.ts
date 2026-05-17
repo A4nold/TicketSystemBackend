@@ -12,6 +12,7 @@ import {
 import { AuthenticatedUser } from "../auth/types/authenticated-user.type";
 import { NotificationsService } from "../notifications/notifications.service";
 import { PrismaService } from "../prisma/prisma.service";
+import { isOfferRangePricingEnabled } from "../common/feature-flags";
 import { CreateEventDto } from "./dto/create-event.dto";
 import { CreateTicketTypeDto } from "./dto/create-ticket-type.dto";
 import { InviteStaffMemberDto } from "./dto/invite-staff-member.dto";
@@ -218,6 +219,12 @@ export class EventsService {
     }
 
     if (pricingMode === "OFFER_RANGE") {
+      if (!isOfferRangePricingEnabled()) {
+        throw new BadRequestException(
+          "Offer-range pricing is currently disabled in this environment.",
+        );
+      }
+
       if (!rawMinOfferPrice || !rawMaxOfferPrice) {
         throw new BadRequestException(
           "Offer-range ticket types require both minOfferPrice and maxOfferPrice.",

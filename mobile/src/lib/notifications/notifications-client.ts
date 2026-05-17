@@ -41,6 +41,10 @@ export function getInAppPathFromNotification(notification: WalletNotification) {
     return "/wallet";
   }
 
+  if (actionUrl.startsWith("/")) {
+    return actionUrl;
+  }
+
   return null;
 }
 

@@ -143,6 +143,7 @@ CHECKOUT_FEE_FIXED_AMOUNT=0.69
 CHECKOUT_FEE_FIXED_APPLICATION=PER_TICKET
 CHECKOUT_FEE_RESPONSIBILITY=BUYER
 POST_EVENT_NOTIFICATION_SWEEP_INTERVAL_MS=300000
+ENABLE_OFFER_RANGE_PRICING=false
 PORT=3000
 ```
 
@@ -170,6 +171,8 @@ For real-device mobile testing against Railway, point `EXPO_PUBLIC_API_BASE_URL`
 `NEXT_PUBLIC_SUPPORT_EMAIL` / `EXPO_PUBLIC_SUPPORT_EMAIL` and the optional `*_SUPPORT_LABEL` values drive the visible support and escalation links shown on auth, checkout, wallet, account, and scanner blocker states.
 
 Mobile push registration can also use `EXPO_PUBLIC_EXPO_PROJECT_ID` when you want Expo push tokens to resolve cleanly in EAS and local development-build environments. For `expo-notifications`, use a development build instead of Expo Go.
+
+`ENABLE_OFFER_RANGE_PRICING` controls whether offer-range pricing mode is active. Default is disabled (`false`) when not set. Set `true` (or `1`/`yes`/`on`) to enable by environment for staged rollout.
 
 ### 3. Run the backend
 

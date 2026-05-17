@@ -9,6 +9,7 @@ import { PendingStaffInvitesPanel } from "@/features/staff/pending-staff-invites
 import { PendingTransferInboxPanel } from "@/features/transfers/pending-transfer-inbox-panel";
 import { OwnedTicketList } from "@/features/tickets/owned-ticket-list";
 import { WalletActivityPanel } from "@/features/tickets/wallet-activity-panel";
+import { AttendeeOfferRequestsPanel } from "@/features/wallet/attendee-offer-requests-panel";
 import { WalletAccountPanel } from "@/features/wallet/wallet-account-panel";
 import { WalletHeroPanel } from "@/features/wallet/wallet-hero-panel";
 import type { OwnedTicketSummary } from "@/lib/tickets/tickets-client";
@@ -41,6 +42,7 @@ export function WalletSurface({ eventSlug, recentOrderId }: WalletSurfaceProps) 
       {recentOrderId ? <RecentOrderPanel orderId={recentOrderId} /> : null}
 
       <WalletActivityPanel recentOrderId={recentOrderId} tickets={walletTickets} />
+      <AttendeeOfferRequestsPanel />
 
       <PendingTransferInboxPanel />
 

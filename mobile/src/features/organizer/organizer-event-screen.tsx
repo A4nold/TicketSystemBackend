@@ -44,6 +44,11 @@ import {
   updateOrganizerStaffRole,
   updateOrganizerTicketType,
 } from "@/lib/organizer/events-client";
+import {
+  acceptOrganizerOffer,
+  listOrganizerOffers,
+  rejectOrganizerOffer,
+} from "@/lib/organizer/offers-client";
 import { palette } from "@/styles/theme";
 
 const STATUS_OPTIONS: EventEditorState["status"][] = [
@@ -54,6 +59,8 @@ const STATUS_OPTIONS: EventEditorState["status"][] = [
 ];
 const CURRENCY_OPTIONS: EventEditorState["currency"][] = ["EUR", "NGN"];
 const STAFF_ROLE_OPTIONS = ["ADMIN", "SCANNER"] as const;
+const TICKET_PRICING_MODE_OPTIONS = ["FIXED", "FREE", "OFFER_RANGE"] as const;
+const OFFER_STATUS_OPTIONS = ["PENDING", "ACCEPTED", "REJECTED"] as const;
 
 if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -220,6 +227,8 @@ export function OrganizerEventScreen() {
     blankTicketTypeEditorState(),
   );
   const [selectedTicketTypeId, setSelectedTicketTypeId] = useState<string>("new");
+  const [offerStatusFilter, setOfferStatusFilter] = useState<"PENDING" | "ACCEPTED" | "REJECTED">("PENDING");
+  const [offerNoteDrafts, setOfferNoteDrafts] = useState<Record<string, string>>({});
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<"ADMIN" | "SCANNER">("SCANNER");
   const [notice, setNotice] = useState<string | null>(null);
@@ -227,6 +236,7 @@ export function OrganizerEventScreen() {
   const [isSavingEvent, setIsSavingEvent] = useState(false);
   const [isSavingTicketType, setIsSavingTicketType] = useState(false);
   const [isSavingStaff, setIsSavingStaff] = useState(false);
+  const [isSavingOffers, setIsSavingOffers] = useState(false);
   const [expandedSections, setExpandedSections] = useState({
     event: true,
     staff: false,
@@ -261,6 +271,16 @@ export function OrganizerEventScreen() {
     enabled: Boolean(session?.accessToken && selectedSummary),
     queryFn: () => listOrganizerStaff(selectedSummary!.id, session!.accessToken),
     queryKey: ["organizer-staff", selectedSummary?.id, session?.accessToken],
+  });
+  const offersQuery = useQuery({
+    enabled: Boolean(session?.accessToken && selectedSummary),
+    queryFn: () =>
+      listOrganizerOffers(
+        selectedSummary!.id,
+        session!.accessToken,
+        offerStatusFilter,
+      ),
+    queryKey: ["organizer-offers", selectedSummary?.id, session?.accessToken, offerStatusFilter],
   });
   const pristineEventForm = eventDetailQuery.data ? toEventEditorState(eventDetailQuery.data) : null;
   const pristineTicketTypeForm = useMemo(() => {
@@ -517,6 +537,41 @@ export function OrganizerEventScreen() {
       setErrorMessage(getErrorMessage(error, "Staff invite couldn't be sent right now."));
     } finally {
       setIsSavingStaff(false);
+    }
+  }
+
+  async function handleOfferDecision(offerId: string, decision: "ACCEPT" | "REJECT") {
+    if (!session) {
+      return;
+    }
+
+    setNotice(null);
+    setErrorMessage(null);
+    setIsSavingOffers(true);
+
+    try {
+      if (decision === "ACCEPT") {
+        await acceptOrganizerOffer(
+          offerId,
+          session.accessToken,
+          offerNoteDrafts[offerId]?.trim() || undefined,
+        );
+        setNotice("Offer request accepted.");
+      } else {
+        await rejectOrganizerOffer(
+          offerId,
+          session.accessToken,
+          offerNoteDrafts[offerId]?.trim() || undefined,
+        );
+        setNotice("Offer request rejected.");
+      }
+
+      setOfferNoteDrafts((current) => ({ ...current, [offerId]: "" }));
+      await offersQuery.refetch();
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error, "Offer decision couldn't be saved right now."));
+    } finally {
+      setIsSavingOffers(false);
     }
   }
 
@@ -903,6 +958,34 @@ export function OrganizerEventScreen() {
                   }
                   value={ticketTypeForm.description}
                 />
+                <View style={styles.field}>
+                  <Text style={styles.fieldLabel}>Pricing mode</Text>
+                  <SegmentedControl
+                    onSelect={(value) =>
+                      setTicketTypeForm((current) => ({
+                        ...current,
+                        pricingMode: value as TicketTypeEditorState["pricingMode"],
+                        ...((value as TicketTypeEditorState["pricingMode"]) === "FREE"
+                          ? {
+                              maxOfferPrice: "",
+                              minOfferPrice: "",
+                              offerAutoExpireMinutes: "30",
+                              price: "0.00",
+                            }
+                          : {}),
+                        ...((value as TicketTypeEditorState["pricingMode"]) === "FIXED"
+                          ? {
+                              maxOfferPrice: "",
+                              minOfferPrice: "",
+                              offerAutoExpireMinutes: "30",
+                            }
+                          : {}),
+                      }))
+                    }
+                    options={TICKET_PRICING_MODE_OPTIONS}
+                    selected={ticketTypeForm.pricingMode}
+                  />
+                </View>
                 <View style={styles.row}>
                   <View style={styles.rowItem}>
                     <Field
@@ -916,6 +999,12 @@ export function OrganizerEventScreen() {
                       placeholder="15.00"
                       value={ticketTypeForm.price}
                     />
+                    {ticketTypeForm.pricingMode === "FREE" ? (
+                      <Text style={styles.hintText}>Free tickets are forced to 0.00.</Text>
+                    ) : null}
+                    {ticketTypeForm.pricingMode === "OFFER_RANGE" ? (
+                      <Text style={styles.hintText}>Base price is optional for offer-range tickets.</Text>
+                    ) : null}
                   </View>
                   <View style={styles.rowItem}>
                     <Field
@@ -958,6 +1047,49 @@ export function OrganizerEventScreen() {
                     />
                   </View>
                 </View>
+                {ticketTypeForm.pricingMode === "OFFER_RANGE" ? (
+                  <View style={styles.row}>
+                    <View style={styles.rowItem}>
+                      <Field
+                        compact
+                        error={ticketTypeValidation.fieldErrors.minOfferPrice}
+                        label="Min offer"
+                        keyboardType="numeric"
+                        onChangeText={(value) =>
+                          setTicketTypeForm((current) => ({ ...current, minOfferPrice: value }))
+                        }
+                        placeholder="5.00"
+                        value={ticketTypeForm.minOfferPrice}
+                      />
+                    </View>
+                    <View style={styles.rowItem}>
+                      <Field
+                        compact
+                        error={ticketTypeValidation.fieldErrors.maxOfferPrice}
+                        label="Max offer"
+                        keyboardType="numeric"
+                        onChangeText={(value) =>
+                          setTicketTypeForm((current) => ({ ...current, maxOfferPrice: value }))
+                        }
+                        placeholder="200.00"
+                        value={ticketTypeForm.maxOfferPrice}
+                      />
+                    </View>
+                  </View>
+                ) : null}
+                {ticketTypeForm.pricingMode === "OFFER_RANGE" ? (
+                  <Field
+                    compact
+                    error={ticketTypeValidation.fieldErrors.offerAutoExpireMinutes}
+                    label="Offer expiry minutes"
+                    keyboardType="numeric"
+                    onChangeText={(value) =>
+                      setTicketTypeForm((current) => ({ ...current, offerAutoExpireMinutes: value }))
+                    }
+                    placeholder="30"
+                    value={ticketTypeForm.offerAutoExpireMinutes}
+                  />
+                ) : null}
                 <View style={styles.row}>
                   <View style={styles.rowItem}>
                     <Field
@@ -1113,6 +1245,97 @@ export function OrganizerEventScreen() {
                     ) : null}
                   </View>
                 ))}
+            </SectionCard>
+
+            <SectionCard
+              expanded={true}
+              onToggle={() => undefined}
+              status={
+                isSavingOffers
+                  ? "saving"
+                  : notice === "Offer request accepted." || notice === "Offer request rejected."
+                    ? "saved"
+                    : "default"
+              }
+              subtitle="Review attendee offer-range requests and decide quickly."
+              title="Offer inbox"
+            >
+              {offersQuery.isLoading ? (
+              <Text style={styles.copy}>Loading pending offers…</Text>
+              ) : null}
+              <View style={styles.segmentedWrap}>
+                {OFFER_STATUS_OPTIONS.map((status) => (
+                  <Pressable
+                    key={status}
+                    onPress={() => setOfferStatusFilter(status)}
+                    style={[
+                      styles.segmentChip,
+                      offerStatusFilter === status ? styles.segmentChipActive : null,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.segmentChipText,
+                        offerStatusFilter === status ? styles.segmentChipTextActive : null,
+                      ]}
+                    >
+                      {status}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+
+              {!offersQuery.isLoading && (offersQuery.data?.length ?? 0) === 0 ? (
+                <View style={styles.inlineNotice}>
+                  <Text style={styles.inlineNoticeTitle}>No pending offer requests right now.</Text>
+                </View>
+              ) : null}
+
+              {(offersQuery.data ?? []).map((offer) => (
+                <View key={offer.id} style={styles.staffCard}>
+                  <Text style={styles.staffName}>
+                    {offer.ticketType.name} · {offer.offeredPrice} {offer.currency}
+                  </Text>
+                  <Text style={styles.copy}>
+                    {offer.attendeeUser.firstName || offer.attendeeUser.lastName
+                      ? `${offer.attendeeUser.firstName ?? ""} ${offer.attendeeUser.lastName ?? ""}`.trim()
+                      : offer.attendeeUser.email}
+                    {" · "}
+                    expires {formatDateTime(offer.expiresAt)}
+                  </Text>
+                  {offer.status === "PENDING" ? (
+                    <Field
+                      compact
+                      hint="Optional note for attendee"
+                      label="Organizer note"
+                      onChangeText={(value) =>
+                        setOfferNoteDrafts((current) => ({ ...current, [offer.id]: value }))
+                      }
+                      value={offerNoteDrafts[offer.id] ?? ""}
+                    />
+                  ) : null}
+                  {offer.organizerNote ? (
+                    <Text style={styles.copy}>Organizer note: {offer.organizerNote}</Text>
+                  ) : null}
+                  <View style={styles.actionRow}>
+                    {offer.status === "PENDING" ? (
+                      <>
+                        <ActionButton
+                          loading={isSavingOffers}
+                          onPress={() => void handleOfferDecision(offer.id, "ACCEPT")}
+                          title="Accept"
+                        />
+                        <ActionButton
+                          loading={isSavingOffers}
+                          onPress={() => void handleOfferDecision(offer.id, "REJECT")}
+                          title="Reject"
+                          variant="secondary"
+                        />
+                      </>
+                    ) : null}
+                  </View>
+                </View>
+              ))}
             </SectionCard>
           </>
         ) : null}

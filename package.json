@@ -13,6 +13,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
+    "test:e2e:offer-range:api": "bash scripts/e2e/offer-range-api-eur-ngn.sh",
+    "test:e2e:offer-range:mobile-critical": "bash scripts/e2e/mobile-critical-offer-flow.sh",
     "prisma:generate": "prisma generate --config prisma.config.ts",
     "migrate:deploy": "prisma migrate deploy --schema prisma/schema.prisma",
     "db:seed": "node prisma/seed.js",

@@ -22,9 +22,13 @@ export type TicketTypeEditorState = {
   currency: string;
   description: string;
   isActive: boolean;
+  maxOfferPrice: string;
   maxPerOrder: string;
+  minOfferPrice: string;
   name: string;
+  offerAutoExpireMinutes: string;
   price: string;
+  pricingMode: "FIXED" | "FREE" | "OFFER_RANGE";
   quantity: string;
   saleEndsAt: string;
   saleStartsAt: string;
@@ -71,9 +75,13 @@ export function blankTicketTypeEditorState(): TicketTypeEditorState {
     currency: "EUR",
     description: "",
     isActive: true,
+    maxOfferPrice: "",
     maxPerOrder: "",
+    minOfferPrice: "",
     name: "",
+    offerAutoExpireMinutes: "30",
     price: "",
+    pricingMode: "FIXED",
     quantity: "",
     saleEndsAt: "",
     saleStartsAt: "",
@@ -88,9 +96,13 @@ export function toTicketTypeEditorState(
     currency: ticketType.currency,
     description: ticketType.description ?? "",
     isActive: ticketType.isActive,
+    maxOfferPrice: ticketType.maxOfferPrice ?? "",
     maxPerOrder: ticketType.maxPerOrder ? String(ticketType.maxPerOrder) : "",
+    minOfferPrice: ticketType.minOfferPrice ?? "",
     name: ticketType.name,
+    offerAutoExpireMinutes: String(ticketType.offerAutoExpireMinutes ?? 30),
     price: ticketType.price,
+    pricingMode: ticketType.pricingMode ?? "FIXED",
     quantity: String(ticketType.quantity),
     saleEndsAt: toLocalDateTime(ticketType.saleEndsAt),
     saleStartsAt: toLocalDateTime(ticketType.saleStartsAt),
@@ -120,9 +132,15 @@ export function buildTicketTypePayload(form: TicketTypeEditorState): CreateTicke
     currency: form.currency || "EUR",
     description: form.description || undefined,
     isActive: form.isActive,
+    maxOfferPrice: form.maxOfferPrice.trim() || undefined,
     maxPerOrder: form.maxPerOrder ? Number(form.maxPerOrder) : undefined,
+    minOfferPrice: form.minOfferPrice.trim() || undefined,
     name: form.name.trim(),
-    price: form.price.trim(),
+    offerAutoExpireMinutes: form.offerAutoExpireMinutes
+      ? Number(form.offerAutoExpireMinutes)
+      : undefined,
+    price: form.price.trim() || undefined,
+    pricingMode: form.pricingMode,
     quantity: Number(form.quantity),
     saleEndsAt: toIsoDateTime(form.saleEndsAt),
     saleStartsAt: toIsoDateTime(form.saleStartsAt),
@@ -186,8 +204,30 @@ export function validateTicketTypeEditorState(
     fieldErrors.name = "Add a ticket type name.";
   }
 
-  if (!/^\d+(\.\d{1,2})?$/.test(form.price.trim())) {
+  if (form.pricingMode === "FIXED" && !/^\d+(\.\d{1,2})?$/.test(form.price.trim())) {
     fieldErrors.price = "Use a price like 15.00.";
+  }
+
+  if (form.pricingMode === "OFFER_RANGE") {
+    if (!/^\d+(\.\d{1,2})?$/.test(form.minOfferPrice.trim())) {
+      fieldErrors.minOfferPrice = "Use a minimum offer like 5.00.";
+    }
+    if (!/^\d+(\.\d{1,2})?$/.test(form.maxOfferPrice.trim())) {
+      fieldErrors.maxOfferPrice = "Use a maximum offer like 200.00.";
+    }
+    if (
+      /^\d+(\.\d{1,2})?$/.test(form.minOfferPrice.trim()) &&
+      /^\d+(\.\d{1,2})?$/.test(form.maxOfferPrice.trim()) &&
+      Number(form.minOfferPrice) >= Number(form.maxOfferPrice)
+    ) {
+      fieldErrors.maxOfferPrice = "Maximum offer must be greater than minimum offer.";
+    }
+    if (
+      !/^\d+$/.test(form.offerAutoExpireMinutes.trim()) ||
+      Number(form.offerAutoExpireMinutes) <= 0
+    ) {
+      fieldErrors.offerAutoExpireMinutes = "Set expiry minutes greater than zero.";
+    }
   }
 
   if (!/^\d+$/.test(form.quantity.trim()) || Number(form.quantity) <= 0) {

@@ -1,6 +1,6 @@
 import { BadRequestException, NotFoundException } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AuthenticatedUser } from "../auth/types/authenticated-user.type";
 import { CheckoutService } from "./checkout.service";
@@ -25,6 +25,14 @@ function createAuthenticatedUser(
 }
 
 describe("CheckoutService", () => {
+  beforeEach(() => {
+    process.env.ENABLE_OFFER_RANGE_PRICING = "true";
+  });
+
+  afterEach(() => {
+    delete process.env.ENABLE_OFFER_RANGE_PRICING;
+  });
+
   it("rejects offer-range quote when unlock fields are missing", async () => {
     const prisma = {
       event: {
@@ -260,5 +268,123 @@ describe("CheckoutService", () => {
     expect(result.status).toBe("PAID");
     expect(issuePurchasedTickets).toHaveBeenCalledTimes(1);
     expect(notifyOrderPaid).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects replayed offer unlock token during checkout creation", async () => {
+    const prisma = {
+      event: {
+        findUnique: vi.fn().mockResolvedValue({
+          id: "event_1",
+          slug: "campus-neon",
+          title: "Campus Neon",
+          startsAt: new Date("2026-05-20T19:00:00.000Z"),
+          status: "PUBLISHED",
+          salesStartAt: null,
+          salesEndAt: null,
+          ticketTypes: [
+            {
+              id: "tt_offer",
+              name: "Offer Pass",
+              price: new Prisma.Decimal("20.00"),
+              pricingMode: "OFFER_RANGE",
+              currency: "EUR",
+              quantity: 100,
+              maxPerOrder: 2,
+              saleStartsAt: null,
+              saleEndsAt: null,
+              isActive: true,
+            },
+          ],
+        }),
+      },
+      order: {
+        findFirst: vi.fn().mockResolvedValue(null),
+      },
+      orderItem: {
+        groupBy: vi.fn().mockResolvedValue([]),
+      },
+      ticketOfferRequest: {
+        findUnique: vi.fn().mockResolvedValue({
+          id: "offer_1",
+          eventId: "event_1",
+          ticketTypeId: "tt_offer",
+          attendeeUserId: "user_123",
+          offeredPrice: new Prisma.Decimal("25.00"),
+          currency: "EUR",
+          status: "ACCEPTED",
+          expiresAt: new Date(Date.now() + 60_000),
+          checkoutUnlockToken: "tok_1",
+        }),
+        updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+      },
+    };
+    const service = new CheckoutService(
+      prisma as never,
+      { createCheckoutSession: vi.fn(), createPaystackCheckoutTransaction: vi.fn() } as never,
+      { issuePurchasedTickets: vi.fn() } as never,
+      { notifyOrderPaid: vi.fn() } as never,
+    );
+    await expect(
+      service.createCheckout(
+        {
+          eventSlug: "campus-neon",
+          items: [{ ticketTypeId: "tt_offer", quantity: 1 }],
+          offerRequestId: "offer_1",
+          offerUnlockToken: "tok_1",
+        },
+        createAuthenticatedUser(),
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it("rejects offer-range quote when feature flag is disabled", async () => {
+    delete process.env.ENABLE_OFFER_RANGE_PRICING;
+    const prisma = {
+      event: {
+        findUnique: vi.fn().mockResolvedValue({
+          id: "event_1",
+          slug: "campus-neon",
+          title: "Campus Neon",
+          startsAt: new Date("2026-05-20T19:00:00.000Z"),
+          status: "PUBLISHED",
+          salesStartAt: null,
+          salesEndAt: null,
+          ticketTypes: [
+            {
+              id: "tt_offer",
+              name: "Offer Pass",
+              price: new Prisma.Decimal("20.00"),
+              pricingMode: "OFFER_RANGE",
+              currency: "EUR",
+              quantity: 100,
+              maxPerOrder: 2,
+              saleStartsAt: null,
+              saleEndsAt: null,
+              isActive: true,
+            },
+          ],
+        }),
+      },
+      orderItem: {
+        groupBy: vi.fn().mockResolvedValue([]),
+      },
+    };
+    const service = new CheckoutService(
+      prisma as never,
+      { createCheckoutSession: vi.fn(), createPaystackCheckoutTransaction: vi.fn() } as never,
+      { issuePurchasedTickets: vi.fn() } as never,
+      { notifyOrderPaid: vi.fn() } as never,
+    );
+    await expect(
+      service.quoteCheckout(
+        {
+          eventSlug: "campus-neon",
+          items: [{ ticketTypeId: "tt_offer", quantity: 1 }],
+          offerRequestId: "offer_1",
+          offerUnlockToken: "tok_1",
+        },
+        createAuthenticatedUser(),
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 });

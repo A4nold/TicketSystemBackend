@@ -20,6 +20,8 @@ type CheckoutStartReviewProps = Readonly<{
     venueLabel: string;
   };
   nextPath: string;
+  offerRequestId?: string;
+  offerUnlockToken?: string;
   selection: {
     maxPerOrder: number | null;
     name: string;
@@ -87,6 +89,8 @@ function buildCheckoutReturnUrl(pathname: "/checkout/success" | "/checkout/cance
 export function CheckoutStartReview({
   event,
   nextPath,
+  offerRequestId,
+  offerUnlockToken,
   selection,
 }: CheckoutStartReviewProps) {
   const { session } = useAuth();
@@ -113,6 +117,8 @@ export function CheckoutStartReview({
       getCheckoutQuote(
         {
           eventSlug: event.slug,
+          offerRequestId,
+          offerUnlockToken,
           items: [
             {
               quantity: selection.quantity,
@@ -125,6 +131,8 @@ export function CheckoutStartReview({
     queryKey: [
       "checkout-quote",
       event.slug,
+      offerRequestId,
+      offerUnlockToken,
       selection.quantity,
       selection.ticketTypeId,
       session?.accessToken,
@@ -149,6 +157,8 @@ export function CheckoutStartReview({
             cancelReturnUrl: buildCheckoutReturnUrl("/checkout/cancel"),
             eventSlug: event.slug,
             idempotencyKey,
+            offerRequestId,
+            offerUnlockToken,
             items: [
               {
                 quantity: selection.quantity,
@@ -162,6 +172,12 @@ export function CheckoutStartReview({
         );
 
         if (!order.checkoutUrl) {
+          if (order.status === "PAID" || order.isAwaitingPaymentConfirmation) {
+            const successPath = `/checkout/success?orderId=${encodeURIComponent(order.id)}`;
+            window.location.assign(successPath);
+            return;
+          }
+
           throw new Error("Checkout URL was not returned by the backend.");
         }
 

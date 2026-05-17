@@ -1,6 +1,6 @@
 import { BadRequestException, ForbiddenException } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AuthenticatedUser } from "../auth/types/authenticated-user.type";
 import { OffersService } from "./offers.service";
@@ -25,6 +25,14 @@ function createAuthenticatedUser(
 }
 
 describe("OffersService", () => {
+  beforeEach(() => {
+    process.env.ENABLE_OFFER_RANGE_PRICING = "true";
+  });
+
+  afterEach(() => {
+    delete process.env.ENABLE_OFFER_RANGE_PRICING;
+  });
+
   it("creates offer request for offer-range ticket types", async () => {
     const prisma = {
       ticketType: {
@@ -167,5 +175,77 @@ describe("OffersService", () => {
         createAuthenticatedUser({ id: "user_no_access" }),
       ),
     ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it("lists attendee offer requests from offers/mine flow", async () => {
+    const prisma = {
+      ticketOfferRequest: {
+        findMany: vi.fn().mockResolvedValue([
+          {
+            id: "offer_1",
+            eventId: "event_1",
+            ticketTypeId: "tt_1",
+            attendeeUserId: "user_123",
+            offeredPrice: new Prisma.Decimal("50.00"),
+            currency: "EUR",
+            status: "PENDING",
+            organizerNote: null,
+            reviewedByUserId: null,
+            reviewedAt: null,
+            expiresAt: new Date(Date.now() + 60_000),
+            checkoutUnlockToken: null,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            attendeeUser: {
+              id: "user_123",
+              email: "attendee@example.com",
+              profile: { firstName: "Test", lastName: "User" },
+            },
+            ticketType: {
+              id: "tt_1",
+              name: "VIP",
+            },
+          },
+        ]),
+      },
+    };
+
+    const service = new OffersService(
+      prisma as never,
+      { createUserNotification: vi.fn() } as never,
+    );
+
+    const result = await service.listMyOffers(
+      { status: "PENDING" },
+      createAuthenticatedUser(),
+    );
+
+    expect(result).toHaveLength(1);
+    expect(prisma.ticketOfferRequest.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          attendeeUserId: "user_123",
+          status: "PENDING",
+        }),
+      }),
+    );
+  });
+
+  it("rejects offer actions when offer-range feature flag is disabled", async () => {
+    delete process.env.ENABLE_OFFER_RANGE_PRICING;
+
+    const service = new OffersService(
+      { ticketType: { findFirst: vi.fn() } } as never,
+      { createUserNotification: vi.fn() } as never,
+    );
+
+    await expect(
+      service.createOfferRequest(
+        "event_1",
+        "tt_1",
+        { offeredPrice: "20.00" },
+        createAuthenticatedUser(),
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 });

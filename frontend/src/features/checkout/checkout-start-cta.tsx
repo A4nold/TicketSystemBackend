@@ -2,10 +2,12 @@
 
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
+import { createTicketOfferRequest } from "@/lib/offers/offers-client";
 
 import { useAuth } from "@/components/providers/auth-provider";
 
 type CheckoutStartCtaProps = Readonly<{
+  eventId: string;
   eventSlug: string;
   ticketType: {
     availabilityLabel: string;
@@ -13,7 +15,11 @@ type CheckoutStartCtaProps = Readonly<{
     id: string;
     isPurchasable: boolean;
     maxPerOrder: number | null;
+    maxOfferPriceValue: number | null;
+    minOfferPriceValue: number | null;
     name: string;
+    offerRangeLabel: string | null;
+    pricingMode: "FIXED" | "FREE" | "OFFER_RANGE";
     priceLabel: string;
     priceValue: number;
     quantity: number;
@@ -36,12 +42,15 @@ function getCheckoutStartPath(
 }
 
 export function CheckoutStartCta({
+  eventId,
   eventSlug,
   ticketType,
 }: CheckoutStartCtaProps) {
   const router = useRouter();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, session } = useAuth();
   const [quantity, setQuantity] = useState(1);
+  const [isSubmittingOffer, setIsSubmittingOffer] = useState(false);
+  const [offeredPrice, setOfferedPrice] = useState(ticketType.minOfferPriceValue ?? 0);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const maxSelectable = useMemo(() => {
@@ -61,6 +70,13 @@ export function CheckoutStartCta({
       style: "currency",
     }).format(ticketType.priceValue * quantity);
   }, [quantity, ticketType.priceValue, ticketType.currency]);
+  const offeredPriceLabel = useMemo(() => {
+    return new Intl.NumberFormat("en-IE", {
+      currency: ticketType.currency,
+      maximumFractionDigits: 2,
+      style: "currency",
+    }).format(offeredPrice);
+  }, [offeredPrice, ticketType.currency]);
 
   function updateQuantity(nextValue: number) {
     if (!Number.isInteger(nextValue) || nextValue < 1 || nextValue > maxSelectable) {
@@ -99,10 +115,86 @@ export function CheckoutStartCta({
     router.push(nextPath);
   }
 
+  async function submitOffer() {
+    if (!isAuthenticated) {
+      const nextPath = `/events/${eventSlug}`;
+      router.push(
+        `/auth?mode=login&eventSlug=${encodeURIComponent(eventSlug)}&next=${encodeURIComponent(nextPath)}`,
+      );
+      return;
+    }
+
+    if (!ticketType.minOfferPriceValue || !ticketType.maxOfferPriceValue) {
+      setErrorMessage("Offer range is not configured for this ticket type.");
+      return;
+    }
+
+    if (offeredPrice < ticketType.minOfferPriceValue || offeredPrice > ticketType.maxOfferPriceValue) {
+      setErrorMessage("Choose an offer inside the allowed range.");
+      return;
+    }
+
+    setErrorMessage(null);
+    setIsSubmittingOffer(true);
+    try {
+      if (!session?.accessToken) {
+        throw new Error("Session expired. Please sign in again.");
+      }
+      await createTicketOfferRequest(eventId, ticketType.id, offeredPrice.toFixed(2), session.accessToken);
+      setErrorMessage("Offer sent. You will get notified when the organizer reviews it.");
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Offer request failed.");
+    } finally {
+      setIsSubmittingOffer(false);
+    }
+  }
+
   if (!ticketType.isPurchasable) {
     return (
       <div className="space-y-2">
         <p className="text-sm leading-6 text-muted">{ticketType.restrictionCopy}</p>
+      </div>
+    );
+  }
+
+  if (ticketType.pricingMode === "OFFER_RANGE") {
+    return (
+      <div className="space-y-4">
+        <div className="rounded-[1.2rem] border border-border bg-background/80 px-4 py-3">
+          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-muted">Your offer</p>
+          <p className="mt-1 font-display text-2xl text-foreground">{offeredPriceLabel}</p>
+          <input
+            type="range"
+            min={ticketType.minOfferPriceValue ?? 0}
+            max={ticketType.maxOfferPriceValue ?? 0}
+            step="0.5"
+            value={offeredPrice}
+            onChange={(event) => setOfferedPrice(Number(event.target.value))}
+            className="mt-3 w-full accent-[var(--accent)]"
+          />
+          <p className="mt-2 text-sm text-muted">
+            Range: {ticketType.offerRangeLabel ?? "Not configured"}
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          <button
+            type="button"
+            onClick={() => void submitOffer()}
+            disabled={isSubmittingOffer}
+            className="inline-flex w-full items-center justify-center rounded-full bg-accent px-5 py-3 text-sm font-semibold text-white transition hover:bg-accent-strong disabled:cursor-not-allowed disabled:opacity-65"
+          >
+            {isSubmittingOffer ? "Sending offer..." : `Send offer for ${ticketType.name}`}
+          </button>
+          <p className="text-sm leading-6 text-muted">
+            Organizer must accept this offer before checkout unlocks.
+          </p>
+          {errorMessage ? (
+            <p className="rounded-2xl border border-danger/30 bg-danger/10 px-4 py-3 text-sm leading-6 text-danger">
+              {errorMessage}
+            </p>
+          ) : null}
+        </div>
       </div>
     );
   }

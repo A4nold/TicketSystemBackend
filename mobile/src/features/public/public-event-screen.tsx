@@ -7,12 +7,16 @@ import { useAuth } from "@/components/providers/auth-provider";
 import { ActionButton, Card, Screen } from "@/components/ui";
 import { ApiError } from "@/lib/api/client";
 import { getPublicEventBySlug } from "@/lib/events/public-events-client";
+import { createTicketOfferRequest } from "@/lib/offers/offers-client";
 import { palette } from "@/styles/theme";
 
 export function PublicEventScreen({ slug }: { slug: string }) {
   const { session } = useAuth();
   const [selectedTicketTypeId, setSelectedTicketTypeId] = useState("");
   const [quantity, setQuantity] = useState(1);
+  const [offerPrice, setOfferPrice] = useState(0);
+  const [offerFeedback, setOfferFeedback] = useState<string | null>(null);
+  const [isSubmittingOffer, setIsSubmittingOffer] = useState(false);
   const eventQuery = useQuery({
     queryFn: () => getPublicEventBySlug(slug),
     queryKey: ["public-event", slug],
@@ -30,6 +34,7 @@ export function PublicEventScreen({ slug }: { slug: string }) {
 
     setSelectedTicketTypeId((current) => current || defaultTicketType?.id || "");
     setQuantity(1);
+    setOfferPrice(defaultTicketType?.minOfferPriceValue ?? 0);
   }, [eventQuery.data]);
 
   if (eventQuery.isLoading) {
@@ -73,6 +78,7 @@ export function PublicEventScreen({ slug }: { slug: string }) {
     event.ticketTypes[0] ??
     null;
   const maxQuantity = selectedTicketType ? Math.max(1, selectedTicketType.maxPerOrder ?? 6) : 1;
+  const isOfferRange = selectedTicketType?.pricingMode === "OFFER_RANGE";
 
   const checkoutHref = selectedTicketType
     ? {
@@ -120,6 +126,8 @@ export function PublicEventScreen({ slug }: { slug: string }) {
               onPress={() => {
                 setSelectedTicketTypeId(ticketType.id);
                 setQuantity(1);
+                setOfferPrice(ticketType.minOfferPriceValue ?? 0);
+                setOfferFeedback(null);
               }}
             >
               <Card>
@@ -159,28 +167,91 @@ export function PublicEventScreen({ slug }: { slug: string }) {
           </Text>
           {selectedTicketType ? (
             <View style={styles.ctaStack}>
-              <View style={styles.quantityRow}>
-                <Text style={styles.quantityLabel}>Quantity</Text>
-                <View style={styles.quantityControls}>
-                  <Pressable
-                    onPress={() => setQuantity((current) => Math.max(1, current - 1))}
-                    style={styles.quantityButton}
-                  >
-                    <Text style={styles.quantityButtonText}>-</Text>
-                  </Pressable>
-                  <Text style={styles.quantityValue}>{quantity}</Text>
-                  <Pressable
-                    onPress={() => setQuantity((current) => Math.min(maxQuantity, current + 1))}
-                    style={styles.quantityButton}
-                  >
-                    <Text style={styles.quantityButtonText}>+</Text>
-                  </Pressable>
+              {!isOfferRange ? (
+                <View style={styles.quantityRow}>
+                  <Text style={styles.quantityLabel}>Quantity</Text>
+                  <View style={styles.quantityControls}>
+                    <Pressable
+                      onPress={() => setQuantity((current) => Math.max(1, current - 1))}
+                      style={styles.quantityButton}
+                    >
+                      <Text style={styles.quantityButtonText}>-</Text>
+                    </Pressable>
+                    <Text style={styles.quantityValue}>{quantity}</Text>
+                    <Pressable
+                      onPress={() => setQuantity((current) => Math.min(maxQuantity, current + 1))}
+                      style={styles.quantityButton}
+                    >
+                      <Text style={styles.quantityButtonText}>+</Text>
+                    </Pressable>
+                  </View>
                 </View>
-              </View>
-              {session && checkoutHref ? (
+              ) : null}
+              {session && checkoutHref && !isOfferRange ? (
                 <Link href={checkoutHref} style={styles.primaryLink}>
                   Continue to checkout
                 </Link>
+              ) : null}
+              {session && isOfferRange ? (
+                <>
+                  <Text style={styles.copy}>
+                    Choose an offer between {selectedTicketType.offerRangeLabel ?? "the configured range"}.
+                  </Text>
+                  <View style={styles.quantityControls}>
+                    <Pressable
+                      onPress={() =>
+                        setOfferPrice((current) =>
+                          Math.max(selectedTicketType.minOfferPriceValue ?? 0, current - 1),
+                        )
+                      }
+                      style={styles.quantityButton}
+                    >
+                      <Text style={styles.quantityButtonText}>-</Text>
+                    </Pressable>
+                    <Text style={styles.quantityValue}>
+                      {new Intl.NumberFormat("en-IE", {
+                        currency: selectedTicketType.currency,
+                        style: "currency",
+                      }).format(offerPrice)}
+                    </Text>
+                    <Pressable
+                      onPress={() =>
+                        setOfferPrice((current) =>
+                          Math.min(selectedTicketType.maxOfferPriceValue ?? current, current + 1),
+                        )
+                      }
+                      style={styles.quantityButton}
+                    >
+                      <Text style={styles.quantityButtonText}>+</Text>
+                    </Pressable>
+                  </View>
+                  <ActionButton
+                    disabled={isSubmittingOffer}
+                    onPress={() => {
+                      void (async () => {
+                        if (!session?.accessToken) {
+                          return;
+                        }
+                        setOfferFeedback(null);
+                        setIsSubmittingOffer(true);
+                        try {
+                          await createTicketOfferRequest(
+                            event.id,
+                            selectedTicketType.id,
+                            offerPrice.toFixed(2),
+                            session.accessToken,
+                          );
+                          setOfferFeedback("Offer sent. Watch notifications for organizer response.");
+                        } catch (error) {
+                          setOfferFeedback(error instanceof Error ? error.message : "Offer request failed.");
+                        } finally {
+                          setIsSubmittingOffer(false);
+                        }
+                      })();
+                    }}
+                    title={isSubmittingOffer ? "Sending offer..." : "Send offer"}
+                  />
+                </>
               ) : null}
               {!session && checkoutHref ? (
                 <>
@@ -214,6 +285,7 @@ export function PublicEventScreen({ slug }: { slug: string }) {
                   </Link>
                 </>
               ) : null}
+              {offerFeedback ? <Text style={styles.copy}>{offerFeedback}</Text> : null}
             </View>
           ) : null}
           {session ? (

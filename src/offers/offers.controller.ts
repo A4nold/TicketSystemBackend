@@ -75,6 +75,28 @@ export class OffersController {
     return this.offersService.listEventOffers(eventId, query, user);
   }
 
+  @Get("offers/mine")
+  @ApiOperation({
+    summary: "List offer requests for the current attendee",
+    description: "Returns attendee-facing offer requests, optionally filtered by status.",
+  })
+  @ApiQuery({
+    name: "status",
+    required: false,
+    enum: ["PENDING", "ACCEPTED", "REJECTED", "EXPIRED", "CANCELLED"],
+  })
+  @ApiOkResponse({
+    description: "Offer requests for the current attendee",
+    type: TicketOfferRequestResponseDto,
+    isArray: true,
+  })
+  listMyOffers(
+    @Query() query: ListTicketOfferRequestsQueryDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.offersService.listMyOffers(query, user);
+  }
+
   @Post("offers/:offerId/accept")
   @ApiOperation({
     summary: "Accept a pending offer request",
@@ -115,4 +137,3 @@ export class OffersController {
     return this.offersService.rejectOfferRequest(offerId, payload, user);
   }
 }
-

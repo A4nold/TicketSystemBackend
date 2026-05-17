@@ -1,10 +1,11 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { NotificationType, Prisma } from "@prisma/client";
 import { randomBytes } from "node:crypto";
 
 import { AuthenticatedUser } from "../auth/types/authenticated-user.type";
 import { NotificationsService } from "../notifications/notifications.service";
 import { PrismaService } from "../prisma/prisma.service";
+import { isOfferRangePricingEnabled } from "../common/feature-flags";
 import { CreateTicketOfferRequestDto } from "./dto/create-ticket-offer-request.dto";
 import { ListTicketOfferRequestsQueryDto } from "./dto/list-ticket-offer-requests-query.dto";
 import { ReviewTicketOfferRequestDto } from "./dto/review-ticket-offer-request.dto";
@@ -12,6 +13,8 @@ import { toTicketOfferRequestResponse } from "./mappers/ticket-offer-request-res
 
 @Injectable()
 export class OffersService {
+  private readonly logger = new Logger(OffersService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly notificationsService: NotificationsService,
@@ -23,6 +26,8 @@ export class OffersService {
     payload: CreateTicketOfferRequestDto,
     user: AuthenticatedUser,
   ) {
+    this.assertOfferRangeFeatureEnabled();
+
     const ticketType = await this.prisma.ticketType.findFirst({
       where: {
         id: ticketTypeId,
@@ -86,7 +91,7 @@ export class OffersService {
 
     for (const reviewer of reviewers) {
       await this.notificationsService.createUserNotification({
-        actionUrl: `/organizer/events/${encodeURIComponent(eventId)}/offers`,
+        actionUrl: `/organizer?eventId=${encodeURIComponent(eventId)}&tab=offers`,
         body: `New offer request for ${ticketType.name}: ${offeredPrice.toFixed(2)} ${ticketType.currency}.`,
         metadata: {
           attendeeUserId: user.id,
@@ -101,6 +106,10 @@ export class OffersService {
       });
     }
 
+    this.logger.log(
+      `offers.request.created offerRequestId=${offerRequest.id} eventId=${eventId} ticketTypeId=${ticketTypeId} attendeeUserId=${user.id} offeredPrice=${offeredPrice.toFixed(2)} currency=${ticketType.currency}`,
+    );
+
     return toTicketOfferRequestResponse(offerRequest);
   }
 
@@ -109,6 +118,7 @@ export class OffersService {
     query: ListTicketOfferRequestsQueryDto,
     user: AuthenticatedUser,
   ) {
+    this.assertOfferRangeFeatureEnabled();
     await this.assertOrganizerAccess(eventId, user);
 
     const offers = await this.prisma.ticketOfferRequest.findMany({
@@ -123,11 +133,26 @@ export class OffersService {
     return offers.map((offer) => toTicketOfferRequestResponse(offer));
   }
 
+  async listMyOffers(query: ListTicketOfferRequestsQueryDto, user: AuthenticatedUser) {
+    this.assertOfferRangeFeatureEnabled();
+    const offers = await this.prisma.ticketOfferRequest.findMany({
+      where: {
+        attendeeUserId: user.id,
+        status: query.status,
+      },
+      include: this.offerRequestInclude(),
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    });
+
+    return offers.map((offer) => toTicketOfferRequestResponse(offer));
+  }
+
   async acceptOfferRequest(
     offerId: string,
     payload: ReviewTicketOfferRequestDto,
     user: AuthenticatedUser,
   ) {
+    this.assertOfferRangeFeatureEnabled();
     const offer = await this.requireOfferById(offerId);
     await this.assertOrganizerAccess(offer.eventId, user);
     this.assertPendingAndNotExpired(offer);
@@ -144,8 +169,18 @@ export class OffersService {
       include: this.offerRequestInclude(),
     });
 
+    const event = await this.prisma.event.findUnique({
+      where: { id: updatedOffer.eventId },
+      select: { slug: true },
+    });
+
     await this.notificationsService.createUserNotification({
-      actionUrl: `/checkout/offer/${encodeURIComponent(updatedOffer.id)}`,
+      actionUrl:
+        `/checkout/start?eventSlug=${encodeURIComponent(event?.slug ?? "")}` +
+        `&ticketTypeId=${encodeURIComponent(updatedOffer.ticketTypeId)}` +
+        "&quantity=1" +
+        `&offerRequestId=${encodeURIComponent(updatedOffer.id)}` +
+        `&offerUnlockToken=${encodeURIComponent(updatedOffer.checkoutUnlockToken ?? "")}`,
       body: `Your offer for ${updatedOffer.ticketType.name} was accepted. Continue to checkout.`,
       metadata: {
         eventId: updatedOffer.eventId,
@@ -158,6 +193,10 @@ export class OffersService {
       userId: updatedOffer.attendeeUserId,
     });
 
+    this.logger.log(
+      `offers.request.accepted offerRequestId=${updatedOffer.id} eventId=${updatedOffer.eventId} ticketTypeId=${updatedOffer.ticketTypeId} attendeeUserId=${updatedOffer.attendeeUserId}`,
+    );
+
     return toTicketOfferRequestResponse(updatedOffer);
   }
 
@@ -166,6 +205,7 @@ export class OffersService {
     payload: ReviewTicketOfferRequestDto,
     user: AuthenticatedUser,
   ) {
+    this.assertOfferRangeFeatureEnabled();
     const offer = await this.requireOfferById(offerId);
     await this.assertOrganizerAccess(offer.eventId, user);
     this.assertPendingAndNotExpired(offer);
@@ -195,7 +235,19 @@ export class OffersService {
       userId: updatedOffer.attendeeUserId,
     });
 
+    this.logger.log(
+      `offers.request.rejected offerRequestId=${updatedOffer.id} eventId=${updatedOffer.eventId} ticketTypeId=${updatedOffer.ticketTypeId} attendeeUserId=${updatedOffer.attendeeUserId}`,
+    );
+
     return toTicketOfferRequestResponse(updatedOffer);
+  }
+
+  private assertOfferRangeFeatureEnabled() {
+    if (!isOfferRangePricingEnabled()) {
+      throw new BadRequestException(
+        "Offer-range pricing is currently disabled in this environment.",
+      );
+    }
   }
 
   private offerRequestInclude() {

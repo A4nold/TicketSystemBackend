@@ -1,6 +1,6 @@
 import { BadRequestException, ForbiddenException } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AuthenticatedUser } from "../auth/types/authenticated-user.type";
 import { EventLifecycleService } from "./event-lifecycle.service";
@@ -24,6 +24,14 @@ function createAuthenticatedUser(
     ...overrides,
   };
 }
+
+beforeEach(() => {
+  process.env.ENABLE_OFFER_RANGE_PRICING = "true";
+});
+
+afterEach(() => {
+  delete process.env.ENABLE_OFFER_RANGE_PRICING;
+});
 
 describe("EventsService.createEvent", () => {
   it("rejects users without organizer capability before touching Prisma", async () => {
@@ -429,6 +437,38 @@ describe("EventsService ticket currency", () => {
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
 
+    expect(prisma.ticketType.create).not.toHaveBeenCalled();
+  });
+
+  it("rejects offer-range ticket type when feature flag is disabled", async () => {
+    delete process.env.ENABLE_OFFER_RANGE_PRICING;
+    const prisma = {
+      event: {
+        findUnique: vi.fn().mockResolvedValue({
+          currency: "EUR",
+          endsAt: null,
+          id: "event_123",
+          startsAt: new Date("2026-05-15T20:00:00.000Z"),
+        }),
+      },
+      ticketType: {
+        create: vi.fn(),
+      },
+    };
+    const service = new EventsService(
+      prisma as never,
+      { createEvent: vi.fn(), updateEvent: vi.fn() } as never,
+    );
+
+    await expect(
+      service.createTicketType("event_123", {
+        maxOfferPrice: "100.00",
+        minOfferPrice: "20.00",
+        name: "Offer Ticket",
+        pricingMode: "OFFER_RANGE",
+        quantity: 100,
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
     expect(prisma.ticketType.create).not.toHaveBeenCalled();
   });
 });

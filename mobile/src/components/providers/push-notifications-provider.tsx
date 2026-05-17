@@ -58,6 +58,13 @@ function resolvePushActionPath(actionUrl: unknown) {
     return "/wallet";
   }
 
+  if (
+    trimmedActionUrl.startsWith("/organizer?") ||
+    trimmedActionUrl.startsWith("/checkout/start?")
+  ) {
+    return trimmedActionUrl;
+  }
+
   return trimmedActionUrl;
 }
 

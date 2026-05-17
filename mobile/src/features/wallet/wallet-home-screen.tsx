@@ -19,6 +19,7 @@ import { ActionButton, Card, Screen } from "@/components/ui";
 import { getTicketStatusMeta, groupTicketsByEvent } from "@/features/wallet/wallet-model";
 import { formatDateTime } from "@/lib/formatters";
 import { getOrderById } from "@/lib/orders/orders-client";
+import { listMyTicketOffers } from "@/lib/offers/offers-client";
 import type { OwnedTicketSummary } from "@/lib/tickets/tickets-client";
 import { listOwnedTickets } from "@/lib/tickets/tickets-client";
 import { commonStyles } from "@/styles/common";
@@ -90,6 +91,12 @@ export function WalletHomeScreen() {
     enabled: Boolean(session?.accessToken && recentOrderId),
     queryFn: () => getOrderById(recentOrderId!, session!.accessToken),
     queryKey: ["wallet-recent-order", recentOrderId, session?.accessToken],
+    retry: 1,
+  });
+  const offersQuery = useQuery({
+    enabled: Boolean(session?.accessToken),
+    queryFn: () => listMyTicketOffers(session!.accessToken),
+    queryKey: ["wallet-offers", session?.accessToken],
     retry: 1,
   });
 
@@ -207,6 +214,22 @@ export function WalletHomeScreen() {
                 variant="secondary"
               />
             )}
+          </Card>
+        ) : null}
+
+        {offersQuery.data?.length ? (
+          <Card>
+            <Text style={styles.sectionTitle}>Offer requests</Text>
+            <View style={styles.group}>
+              {offersQuery.data.slice(0, 4).map((offer) => (
+                <View key={offer.id} style={styles.purchaseMetaRow}>
+                  <Text style={styles.purchaseMetaLabel}>
+                    {offer.ticketType.name} · {offer.offeredPrice} {offer.currency}
+                  </Text>
+                  <Text style={styles.purchaseMetaValue}>{offer.status}</Text>
+                </View>
+              ))}
+            </View>
           </Card>
         ) : null}
 

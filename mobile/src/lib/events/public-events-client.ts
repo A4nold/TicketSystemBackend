@@ -13,8 +13,11 @@ type ApiEventTicketType = {
   id: string;
   isActive: boolean;
   maxPerOrder: number | null;
+  maxOfferPrice: string | null;
+  minOfferPrice: string | null;
   name: string;
   price: string;
+  pricingMode: "FIXED" | "FREE" | "OFFER_RANGE";
   quantity: number;
   saleEndsAt?: string | null;
   saleStartsAt?: string | null;
@@ -51,8 +54,12 @@ export type PublicEventTicketType = {
   id: string;
   isPurchasable: boolean;
   maxPerOrder: number | null;
+  maxOfferPriceValue: number | null;
+  minOfferPriceValue: number | null;
   name: string;
+  offerRangeLabel: string | null;
   priceLabel: string;
+  pricingMode: "FIXED" | "FREE" | "OFFER_RANGE";
   priceValue: number;
   quantityLabel: string;
   restrictionCopy: string;
@@ -169,7 +176,10 @@ function mapAvailability(ticketType: ApiEventTicketType, timezone: string) {
     availabilityLabel: "Available",
     availabilityTone: "available" as const,
     isPurchasable: true,
-    restrictionCopy: "Continue from this event into sign-in or registration.",
+    restrictionCopy:
+      ticketType.pricingMode === "OFFER_RANGE"
+        ? "Choose your offer amount and wait for organizer approval before checkout."
+        : "Continue from this event into sign-in or registration.",
   };
 }
 
@@ -182,8 +192,17 @@ function mapTicketType(ticketType: ApiEventTicketType, timezone: string): Public
     description: ticketType.description,
     id: ticketType.id,
     maxPerOrder: ticketType.maxPerOrder,
+    maxOfferPriceValue: ticketType.maxOfferPrice ? Number(ticketType.maxOfferPrice) : null,
+    minOfferPriceValue: ticketType.minOfferPrice ? Number(ticketType.minOfferPrice) : null,
     name: ticketType.name,
+    offerRangeLabel:
+      ticketType.pricingMode === "OFFER_RANGE" &&
+      ticketType.minOfferPrice &&
+      ticketType.maxOfferPrice
+        ? `${formatCurrency(ticketType.minOfferPrice, ticketType.currency)} - ${formatCurrency(ticketType.maxOfferPrice, ticketType.currency)}`
+        : null,
     priceLabel: formatCurrency(ticketType.price, ticketType.currency),
+    pricingMode: ticketType.pricingMode,
     priceValue: Number(ticketType.price),
     quantityLabel: `${ticketType.quantity} released`,
   };

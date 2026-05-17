@@ -8,6 +8,11 @@ import { Panel } from "@/components/ui/panel";
 import { TicketIssueVisibilityPanel } from "@/features/operations/ticket-issue-visibility-panel";
 import { ApiError } from "@/lib/api/client";
 import {
+  acceptOrganizerOffer,
+  listOrganizerOffers,
+  rejectOrganizerOffer,
+} from "@/lib/organizer/offers-client";
+import {
   createOrganizerTicketType,
   getOrganizerEventBySlug,
   getOrganizerManageableEventIds,
@@ -51,9 +56,13 @@ type TicketTypeFormState = {
   currency: string;
   description: string;
   isActive: boolean;
+  maxOfferPrice: string;
   maxPerOrder: string;
+  minOfferPrice: string;
   name: string;
+  offerAutoExpireMinutes: string;
   price: string;
+  pricingMode: "FIXED" | "FREE" | "OFFER_RANGE";
   quantity: string;
   saleEndsAt: string;
   saleStartsAt: string;
@@ -107,9 +116,13 @@ function blankTicketTypeForm(currency = "EUR"): TicketTypeFormState {
     currency,
     description: "",
     isActive: true,
+    maxOfferPrice: "",
     maxPerOrder: "",
+    minOfferPrice: "",
     name: "",
+    offerAutoExpireMinutes: "30",
     price: "",
+    pricingMode: "FIXED",
     quantity: "",
     saleEndsAt: "",
     saleStartsAt: "",
@@ -122,8 +135,12 @@ function toTicketTypeFormState(ticketType: {
   description: string | null;
   isActive: boolean;
   maxPerOrder: number | null;
+  maxOfferPrice: string | null;
+  minOfferPrice: string | null;
   name: string;
+  offerAutoExpireMinutes: number;
   price: string;
+  pricingMode: "FIXED" | "FREE" | "OFFER_RANGE";
   quantity: number;
   saleEndsAt?: string | null;
   saleStartsAt?: string | null;
@@ -132,9 +149,13 @@ function toTicketTypeFormState(ticketType: {
     currency: ticketType.currency,
     description: ticketType.description ?? "",
     isActive: ticketType.isActive,
+    maxOfferPrice: ticketType.maxOfferPrice ?? "",
     maxPerOrder: ticketType.maxPerOrder ? String(ticketType.maxPerOrder) : "",
+    minOfferPrice: ticketType.minOfferPrice ?? "",
     name: ticketType.name,
+    offerAutoExpireMinutes: String(ticketType.offerAutoExpireMinutes ?? 30),
     price: ticketType.price,
+    pricingMode: ticketType.pricingMode ?? "FIXED",
     quantity: String(ticketType.quantity),
     saleEndsAt: toLocalDateTime(ticketType.saleEndsAt ?? null),
     saleStartsAt: toLocalDateTime(ticketType.saleStartsAt ?? null),
@@ -209,6 +230,8 @@ export function EventManagementPanel({ refreshKey = 0 }: EventManagementPanelPro
   const [selectedTicketTypeId, setSelectedTicketTypeId] = useState<string>("");
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<"ADMIN" | "SCANNER">("SCANNER");
+  const [offerStatusFilter, setOfferStatusFilter] = useState<"PENDING" | "ACCEPTED" | "REJECTED">("PENDING");
+  const [offerNoteDrafts, setOfferNoteDrafts] = useState<Record<string, string>>({});
   const [notice, setNotice] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -237,20 +260,40 @@ export function EventManagementPanel({ refreshKey = 0 }: EventManagementPanelPro
     queryFn: () => listOrganizerStaff(selectedSummary!.id, session!.accessToken),
     queryKey: ["organizer-staff", selectedSummary?.id, session?.accessToken],
   });
+  const offersQuery = useQuery({
+    enabled: Boolean(selectedSummary && session?.accessToken),
+    queryFn: () =>
+      listOrganizerOffers(
+        selectedSummary!.id,
+        session!.accessToken,
+        offerStatusFilter,
+      ),
+    queryKey: ["organizer-offers", selectedSummary?.id, session?.accessToken, offerStatusFilter],
+  });
   const currentEventForm =
     eventDetailQuery.data && eventFormState?.eventId === eventDetailQuery.data.id
       ? eventFormState.form
       : eventDetailQuery.data
         ? toEventFormState(eventDetailQuery.data)
         : null;
-  const effectiveSelectedTicketTypeId =
-    eventDetailQuery.data?.ticketTypes.some((ticketType) => ticketType.id === selectedTicketTypeId)
-      ? selectedTicketTypeId
-      : eventDetailQuery.data?.ticketTypes[0]?.id ?? "";
+  const effectiveSelectedTicketTypeId = useMemo(() => {
+    if (selectedTicketTypeId === "new") {
+      return "new";
+    }
+
+    if (eventDetailQuery.data?.ticketTypes.some((ticketType) => ticketType.id === selectedTicketTypeId)) {
+      return selectedTicketTypeId;
+    }
+
+    return eventDetailQuery.data?.ticketTypes[0]?.id ?? "new";
+  }, [eventDetailQuery.data?.ticketTypes, selectedTicketTypeId]);
   const currentTicketType = eventDetailQuery.data?.ticketTypes.find(
     (ticketType) => ticketType.id === effectiveSelectedTicketTypeId,
   );
-  const ticketTypeDraftKey = effectiveSelectedTicketTypeId || `${selectedSummary?.id ?? "event"}-new`;
+  const ticketTypeDraftKey =
+    effectiveSelectedTicketTypeId === "new"
+      ? `${selectedSummary?.id ?? "event"}-new`
+      : effectiveSelectedTicketTypeId;
   const currentTicketTypeForm =
     ticketTypeFormState?.key === ticketTypeDraftKey
       ? ticketTypeFormState.form
@@ -374,11 +417,17 @@ export function EventManagementPanel({ refreshKey = 0 }: EventManagementPanelPro
       currency: eventDetailQuery.data?.currency ?? currentTicketTypeForm.currency,
       description: currentTicketTypeForm.description || undefined,
       isActive: currentTicketTypeForm.isActive,
+      maxOfferPrice: currentTicketTypeForm.maxOfferPrice || undefined,
       maxPerOrder: currentTicketTypeForm.maxPerOrder
         ? Number(currentTicketTypeForm.maxPerOrder)
         : undefined,
+      minOfferPrice: currentTicketTypeForm.minOfferPrice || undefined,
       name: currentTicketTypeForm.name,
-      price: currentTicketTypeForm.price,
+      offerAutoExpireMinutes: currentTicketTypeForm.offerAutoExpireMinutes
+        ? Number(currentTicketTypeForm.offerAutoExpireMinutes)
+        : undefined,
+      price: currentTicketTypeForm.price || undefined,
+      pricingMode: currentTicketTypeForm.pricingMode,
       quantity: Number(currentTicketTypeForm.quantity),
       saleEndsAt: toIsoDateTime(currentTicketTypeForm.saleEndsAt),
       saleStartsAt: toIsoDateTime(currentTicketTypeForm.saleStartsAt),
@@ -392,7 +441,7 @@ export function EventManagementPanel({ refreshKey = 0 }: EventManagementPanelPro
 
     startTransition(async () => {
       try {
-        if (effectiveSelectedTicketTypeId) {
+        if (effectiveSelectedTicketTypeId !== "new") {
           await updateOrganizerTicketType(
             selectedSummary.id,
             effectiveSelectedTicketTypeId,
@@ -505,6 +554,40 @@ export function EventManagementPanel({ refreshKey = 0 }: EventManagementPanelPro
         setNotice("Staff invite sent.");
       } catch (error) {
         setErrorMessage(getErrorText(error, "Staff invite could not be created right now."));
+      }
+    });
+  }
+
+  function handleOfferDecision(offerId: string, decision: "ACCEPT" | "REJECT") {
+    if (!session) {
+      return;
+    }
+
+    setNotice(null);
+    setErrorMessage(null);
+
+    startTransition(async () => {
+      try {
+        if (decision === "ACCEPT") {
+          await acceptOrganizerOffer(
+            offerId,
+            session.accessToken,
+            offerNoteDrafts[offerId]?.trim() || undefined,
+          );
+          setNotice("Offer request accepted.");
+        } else {
+          await rejectOrganizerOffer(
+            offerId,
+            session.accessToken,
+            offerNoteDrafts[offerId]?.trim() || undefined,
+          );
+          setNotice("Offer request rejected.");
+        }
+
+        setOfferNoteDrafts((current) => ({ ...current, [offerId]: "" }));
+        await offersQuery.refetch();
+      } catch (error) {
+        setErrorMessage(getErrorText(error, "Offer request could not be processed right now."));
       }
     });
   }
@@ -1129,7 +1212,41 @@ export function EventManagementPanel({ refreshKey = 0 }: EventManagementPanelPro
                 </label>
                 <label className="block space-y-2">
                   <span className="text-xs font-semibold uppercase tracking-[0.24em] text-muted">Price</span>
-                  <input type="text" value={currentTicketTypeForm.price} onChange={(event) => updateTicketTypeFormField(ticketTypeDraftKey, currentTicketTypeForm, setTicketTypeFormState, { price: event.target.value })} className="w-full rounded-[1.2rem] border border-border bg-black/10 px-4 py-3 text-sm text-foreground outline-hidden transition focus:border-accent-warm/50" />
+                  <input type="text" value={currentTicketTypeForm.price} onChange={(event) => updateTicketTypeFormField(ticketTypeDraftKey, currentTicketTypeForm, setTicketTypeFormState, { price: event.target.value })} disabled={currentTicketTypeForm.pricingMode === "FREE"} className="w-full rounded-[1.2rem] border border-border bg-black/10 px-4 py-3 text-sm text-foreground outline-hidden transition focus:border-accent-warm/50 disabled:cursor-not-allowed disabled:opacity-65" />
+                  {currentTicketTypeForm.pricingMode === "FREE" ? (
+                    <span className="text-xs leading-5 text-muted">Free tickets are forced to 0.00.</span>
+                  ) : null}
+                  {currentTicketTypeForm.pricingMode === "OFFER_RANGE" ? (
+                    <span className="text-xs leading-5 text-muted">Base price is optional for offer-range tickets.</span>
+                  ) : null}
+                </label>
+                <label className="block space-y-2">
+                  <span className="text-xs font-semibold uppercase tracking-[0.24em] text-muted">Pricing mode</span>
+                  <select value={currentTicketTypeForm.pricingMode} onChange={(event) => {
+                    const nextMode = event.target.value as TicketTypeFormState["pricingMode"];
+                    updateTicketTypeFormField(ticketTypeDraftKey, currentTicketTypeForm, setTicketTypeFormState, {
+                      pricingMode: nextMode,
+                      ...(nextMode === "FREE"
+                        ? {
+                            maxOfferPrice: "",
+                            minOfferPrice: "",
+                            offerAutoExpireMinutes: "30",
+                            price: "0.00",
+                          }
+                        : {}),
+                      ...(nextMode === "FIXED"
+                        ? {
+                            maxOfferPrice: "",
+                            minOfferPrice: "",
+                            offerAutoExpireMinutes: "30",
+                          }
+                        : {}),
+                    });
+                  }} className="w-full rounded-[1.2rem] border border-border bg-black/10 px-4 py-3 text-sm text-foreground outline-hidden transition focus:border-accent-warm/50">
+                    <option value="FIXED">Fixed</option>
+                    <option value="FREE">Free</option>
+                    <option value="OFFER_RANGE">Offer range</option>
+                  </select>
                 </label>
                 <label className="block space-y-2 lg:col-span-2">
                   <span className="text-xs font-semibold uppercase tracking-[0.24em] text-muted">Description</span>
@@ -1152,6 +1269,22 @@ export function EventManagementPanel({ refreshKey = 0 }: EventManagementPanelPro
                   <span className="text-xs font-semibold uppercase tracking-[0.24em] text-muted">Sort order</span>
                   <input type="number" min="0" value={currentTicketTypeForm.sortOrder} onChange={(event) => updateTicketTypeFormField(ticketTypeDraftKey, currentTicketTypeForm, setTicketTypeFormState, { sortOrder: event.target.value })} className="w-full rounded-[1.2rem] border border-border bg-black/10 px-4 py-3 text-sm text-foreground outline-hidden transition focus:border-accent-warm/50" />
                 </label>
+                {currentTicketTypeForm.pricingMode === "OFFER_RANGE" ? (
+                  <>
+                    <label className="block space-y-2">
+                      <span className="text-xs font-semibold uppercase tracking-[0.24em] text-muted">Min offer price</span>
+                      <input type="text" value={currentTicketTypeForm.minOfferPrice} onChange={(event) => updateTicketTypeFormField(ticketTypeDraftKey, currentTicketTypeForm, setTicketTypeFormState, { minOfferPrice: event.target.value })} className="w-full rounded-[1.2rem] border border-border bg-black/10 px-4 py-3 text-sm text-foreground outline-hidden transition focus:border-accent-warm/50" />
+                    </label>
+                    <label className="block space-y-2">
+                      <span className="text-xs font-semibold uppercase tracking-[0.24em] text-muted">Max offer price</span>
+                      <input type="text" value={currentTicketTypeForm.maxOfferPrice} onChange={(event) => updateTicketTypeFormField(ticketTypeDraftKey, currentTicketTypeForm, setTicketTypeFormState, { maxOfferPrice: event.target.value })} className="w-full rounded-[1.2rem] border border-border bg-black/10 px-4 py-3 text-sm text-foreground outline-hidden transition focus:border-accent-warm/50" />
+                    </label>
+                    <label className="block space-y-2">
+                      <span className="text-xs font-semibold uppercase tracking-[0.24em] text-muted">Offer expiry minutes</span>
+                      <input type="number" min="1" value={currentTicketTypeForm.offerAutoExpireMinutes} onChange={(event) => updateTicketTypeFormField(ticketTypeDraftKey, currentTicketTypeForm, setTicketTypeFormState, { offerAutoExpireMinutes: event.target.value })} className="w-full rounded-[1.2rem] border border-border bg-black/10 px-4 py-3 text-sm text-foreground outline-hidden transition focus:border-accent-warm/50" />
+                    </label>
+                  </>
+                ) : null}
                 <label className="block space-y-2">
                   <span className="text-xs font-semibold uppercase tracking-[0.24em] text-muted">Sale start</span>
                   <input type="datetime-local" value={currentTicketTypeForm.saleStartsAt} onChange={(event) => updateTicketTypeFormField(ticketTypeDraftKey, currentTicketTypeForm, setTicketTypeFormState, { saleStartsAt: event.target.value })} className="w-full rounded-[1.2rem] border border-border bg-black/10 px-4 py-3 text-sm text-foreground outline-hidden transition focus:border-accent-warm/50" />
@@ -1180,13 +1313,95 @@ export function EventManagementPanel({ refreshKey = 0 }: EventManagementPanelPro
 
               <button type="button" onClick={submitTicketType} disabled={isPending} className="inline-flex rounded-full bg-accent px-5 py-3 text-sm font-semibold text-white transition hover:bg-accent-strong disabled:cursor-not-allowed disabled:opacity-65">
                 {isPending
-                  ? effectiveSelectedTicketTypeId
+                  ? effectiveSelectedTicketTypeId !== "new"
                     ? "Saving ticket type..."
                     : "Creating ticket type..."
-                  : effectiveSelectedTicketTypeId
+                  : effectiveSelectedTicketTypeId !== "new"
                     ? "Save ticket type"
                     : "Create ticket type"}
               </button>
+            </div>
+          </Panel>
+
+          <Panel>
+            <div className="space-y-5">
+              <div className="space-y-2">
+                <h3 className="font-display text-3xl">Offer inbox</h3>
+                <p className="text-sm leading-6 text-muted">
+                  Review attendee offer requests and accept or reject them in one place.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-3">
+                {(["PENDING", "ACCEPTED", "REJECTED"] as const).map((status) => (
+                  <button
+                    key={status}
+                    type="button"
+                    onClick={() => setOfferStatusFilter(status)}
+                    className={`rounded-full border px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] transition ${
+                      offerStatusFilter === status
+                        ? "border-accent-warm/60 bg-accent-warm/15 text-foreground"
+                        : "border-border bg-surface-elevated text-muted hover:border-accent-warm/40 hover:bg-surface-soft"
+                    }`}
+                  >
+                    {status}
+                  </button>
+                ))}
+              </div>
+
+              {offersQuery.isLoading ? (
+                <p className="text-sm leading-6 text-muted">Loading pending offers…</p>
+              ) : null}
+
+              {!offersQuery.isLoading && (offersQuery.data?.length ?? 0) === 0 ? (
+                <div className="rounded-[1.2rem] border border-border bg-black/10 px-4 py-3 text-sm leading-6 text-muted">
+                  No pending offer requests right now.
+                </div>
+              ) : null}
+
+              {(offersQuery.data ?? []).map((offer) => (
+                <div key={offer.id} className="space-y-3 rounded-[1.2rem] border border-border bg-black/10 px-4 py-4">
+                  <p className="text-sm font-semibold text-foreground">
+                    {offer.ticketType.name} · {offer.offeredPrice} {offer.currency}
+                  </p>
+                  <p className="text-sm leading-6 text-muted">
+                    {offer.attendeeUser.firstName || offer.attendeeUser.lastName
+                      ? `${offer.attendeeUser.firstName ?? ""} ${offer.attendeeUser.lastName ?? ""}`.trim()
+                      : offer.attendeeUser.email}
+                    {" · "}Expires {formatReadinessDate(offer.expiresAt)}
+                  </p>
+                  {offer.status === "PENDING" ? (
+                    <textarea
+                      value={offerNoteDrafts[offer.id] ?? ""}
+                      onChange={(event) =>
+                        setOfferNoteDrafts((current) => ({
+                          ...current,
+                          [offer.id]: event.target.value,
+                        }))
+                      }
+                      rows={2}
+                      placeholder="Optional note for attendee"
+                      className="w-full rounded-[1rem] border border-border bg-black/10 px-3 py-2 text-sm text-foreground outline-hidden transition focus:border-accent-warm/50"
+                    />
+                  ) : null}
+                  {offer.organizerNote ? (
+                    <p className="text-sm leading-6 text-muted">
+                      Organizer note: {offer.organizerNote}
+                    </p>
+                  ) : null}
+                  <div className="flex flex-wrap gap-3">
+                    {offer.status === "PENDING" ? (
+                      <>
+                        <button type="button" onClick={() => handleOfferDecision(offer.id, "ACCEPT")} disabled={isPending} className="inline-flex rounded-full bg-accent px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-white transition hover:bg-accent-strong disabled:cursor-not-allowed disabled:opacity-60">
+                          Accept
+                        </button>
+                        <button type="button" onClick={() => handleOfferDecision(offer.id, "REJECT")} disabled={isPending} className="inline-flex rounded-full border border-border bg-surface-elevated px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-foreground transition hover:border-accent-warm/40 hover:bg-surface-soft disabled:cursor-not-allowed disabled:opacity-60">
+                          Reject
+                        </button>
+                      </>
+                    ) : null}
+                  </div>
+                </div>
+              ))}
             </div>
           </Panel>
         </>

@@ -16,6 +16,9 @@ type ApiEventTicketType = {
   quantity: number;
   maxPerOrder: number | null;
   isActive: boolean;
+  pricingMode: "FIXED" | "FREE" | "OFFER_RANGE";
+  minOfferPrice: string | null;
+  maxOfferPrice: string | null;
   saleStartsAt?: string | null;
   saleEndsAt?: string | null;
 };
@@ -66,6 +69,10 @@ export type PublicEventTicketType = {
   isPurchasable: boolean;
   maxPerOrder: number | null;
   name: string;
+  pricingMode: "FIXED" | "FREE" | "OFFER_RANGE";
+  minOfferPriceValue: number | null;
+  maxOfferPriceValue: number | null;
+  offerRangeLabel: string | null;
   priceLabel: string;
   priceValue: number;
   quantity: number;
@@ -203,7 +210,10 @@ function mapTicketAvailability(
     availabilityLabel: "Available",
     availabilityTone: "available" as const,
     isPurchasable: true,
-    restrictionCopy: "This ticket type can continue into checkout.",
+    restrictionCopy:
+      ticketType.pricingMode === "OFFER_RANGE"
+        ? "Choose your offer amount and wait for organizer approval before checkout."
+        : "This ticket type can continue into checkout.",
   };
 }
 
@@ -230,6 +240,15 @@ function mapPublicEventDetail(event: ApiEventDetail): PublicEventDetail {
         id: ticketType.id,
         maxPerOrder: ticketType.maxPerOrder,
         name: ticketType.name,
+        pricingMode: ticketType.pricingMode,
+        minOfferPriceValue: ticketType.minOfferPrice ? Number(ticketType.minOfferPrice) : null,
+        maxOfferPriceValue: ticketType.maxOfferPrice ? Number(ticketType.maxOfferPrice) : null,
+        offerRangeLabel:
+          ticketType.pricingMode === "OFFER_RANGE" &&
+          ticketType.minOfferPrice &&
+          ticketType.maxOfferPrice
+            ? `${formatCurrency(ticketType.minOfferPrice, ticketType.currency)} - ${formatCurrency(ticketType.maxOfferPrice, ticketType.currency)}`
+            : null,
         priceLabel: formatCurrency(ticketType.price, ticketType.currency),
         priceValue: Number(ticketType.price),
         quantity: ticketType.quantity,
@@ -265,6 +284,15 @@ function mapPublicEventSummary(event: ApiEventSummary): PublicEventSummary {
         id: ticketType.id,
         maxPerOrder: ticketType.maxPerOrder,
         name: ticketType.name,
+        pricingMode: ticketType.pricingMode,
+        minOfferPriceValue: ticketType.minOfferPrice ? Number(ticketType.minOfferPrice) : null,
+        maxOfferPriceValue: ticketType.maxOfferPrice ? Number(ticketType.maxOfferPrice) : null,
+        offerRangeLabel:
+          ticketType.pricingMode === "OFFER_RANGE" &&
+          ticketType.minOfferPrice &&
+          ticketType.maxOfferPrice
+            ? `${formatCurrency(ticketType.minOfferPrice, ticketType.currency)} - ${formatCurrency(ticketType.maxOfferPrice, ticketType.currency)}`
+            : null,
         priceLabel: formatCurrency(ticketType.price, ticketType.currency),
         priceValue: Number(ticketType.price),
         quantity: ticketType.quantity,

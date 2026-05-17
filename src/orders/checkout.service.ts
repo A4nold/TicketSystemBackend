@@ -7,6 +7,7 @@ import {
 import { OrderStatus, PaymentProvider, Prisma } from "@prisma/client";
 
 import { AuthenticatedUser } from "../auth/types/authenticated-user.type";
+import { isOfferRangePricingEnabled } from "../common/feature-flags";
 import { NotificationsService } from "../notifications/notifications.service";
 import { PaymentsService } from "../payments/payments.service";
 import { PrismaService } from "../prisma/prisma.service";
@@ -606,6 +607,12 @@ export class CheckoutService {
       return pricedItems;
     }
 
+    if (!isOfferRangePricingEnabled()) {
+      throw new BadRequestException(
+        "Offer-range pricing is currently disabled in this environment.",
+      );
+    }
+
     if (!user) {
       throw new BadRequestException(
         "Authenticated user context is required for offer-range checkout.",
@@ -664,6 +671,9 @@ export class CheckoutService {
       (item) => item.id === offerRequest.ticketTypeId,
     )!;
     pricedItem.unitPrice = offerRequest.offeredPrice;
+    this.logger.log(
+      `checkout.offer.applied offerRequestId=${offerRequest.id} eventId=${eventId} ticketTypeId=${offerRequest.ticketTypeId} attendeeUserId=${user.id} offeredPrice=${offerRequest.offeredPrice.toFixed(2)} currency=${offerRequest.currency}`,
+    );
 
     return pricedItems;
   }

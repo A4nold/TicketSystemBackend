@@ -178,6 +178,7 @@ function TicketCard({
         </div>
 
         <CheckoutStartCta
+          eventId={event.id}
           eventSlug={event.slug}
           ticketType={{
             availabilityLabel: ticketType.availabilityLabel,
@@ -185,11 +186,15 @@ function TicketCard({
             id: ticketType.id,
             isPurchasable: ticketType.isPurchasable,
             maxPerOrder: ticketType.maxPerOrder,
+            maxOfferPriceValue: ticketType.maxOfferPriceValue,
+            minOfferPriceValue: ticketType.minOfferPriceValue,
             name: ticketType.name,
+            pricingMode: ticketType.pricingMode,
             priceLabel: ticketType.priceLabel,
             priceValue: ticketType.priceValue,
             quantity: ticketType.quantity,
             restrictionCopy: ticketType.restrictionCopy,
+            offerRangeLabel: ticketType.offerRangeLabel,
           }}
         />
       </div>
