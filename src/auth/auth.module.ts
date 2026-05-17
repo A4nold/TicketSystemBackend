@@ -11,8 +11,8 @@ import { JwtAuthGuard } from "./guards/jwt-auth.guard";
 @Module({
   imports: [
     JwtModule.registerAsync({
+      global: true,
       useFactory: () => ({
-        global: true,
         secret: resolveRequiredSecret(
           "JWT_SECRET",
           "dev-insecure-jwt-secret-change-me",

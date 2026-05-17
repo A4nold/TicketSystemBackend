@@ -22,6 +22,11 @@ type EventPageProps = {
   params: Promise<{
     slug: string;
   }>;
+  searchParams?: Promise<{
+    offerPrice?: string;
+    quantity?: string;
+    ticketTypeId?: string;
+  }>;
 };
 
 async function loadEvent(slug: string) {
@@ -116,8 +121,18 @@ function TrustStrip({ event }: { event: PublicEventDetail }) {
   );
 }
 
-export default async function PublicEventPage({ params }: EventPageProps) {
+export default async function PublicEventPage({ params, searchParams }: EventPageProps) {
   const { slug } = await params;
+  const resolvedSearch = searchParams ? await searchParams : undefined;
+  const initialTicketTypeId = resolvedSearch?.ticketTypeId;
+  const parsedQuantity = Number(resolvedSearch?.quantity ?? "");
+  const parsedOfferPrice = Number(resolvedSearch?.offerPrice ?? "");
+  const initialQuantity =
+    Number.isFinite(parsedQuantity) && parsedQuantity >= 1 ? parsedQuantity : undefined;
+  const initialOfferPrice =
+    Number.isFinite(parsedOfferPrice) && parsedOfferPrice > 0
+      ? parsedOfferPrice
+      : undefined;
   const [event, resaleListings] = await Promise.all([
     loadEvent(slug),
     loadResaleListings(slug),
@@ -128,7 +143,12 @@ export default async function PublicEventPage({ params }: EventPageProps) {
     <div className="space-y-6">
       <PublicEventHero event={event} />
       {isPubliclyAvailable ? (
-        <PublicEventTicketOptions event={event} />
+        <PublicEventTicketOptions
+          event={event}
+          initialOfferPrice={initialOfferPrice}
+          initialQuantity={initialQuantity}
+          initialTicketTypeId={initialTicketTypeId}
+        />
       ) : (
         <PublicEventUnavailableState />
       )}

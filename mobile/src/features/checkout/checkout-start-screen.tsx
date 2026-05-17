@@ -1,8 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
-import * as WebBrowser from "expo-web-browser";
 import * as ExpoLinking from "expo-linking";
 import { Link, useLocalSearchParams, useRouter } from "expo-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Linking,
   Platform,
@@ -76,6 +75,7 @@ export function CheckoutStartScreen() {
   const { session } = useAuth();
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isAwaitingPaymentReturn, setIsAwaitingPaymentReturn] = useState(false);
   const [idempotencyKey] = useState(createIdempotencyKey);
   const eventSlug = typeof params.eventSlug === "string" ? params.eventSlug : "";
   const offerIntentId =
@@ -84,6 +84,10 @@ export function CheckoutStartScreen() {
       : typeof params.offerUnlockToken === "string"
         ? params.offerUnlockToken
         : undefined;
+  const offerRequestId =
+    typeof params.offerRequestId === "string" ? params.offerRequestId : undefined;
+  const legacyOfferUnlockToken =
+    typeof params.offerUnlockToken === "string" ? params.offerUnlockToken : offerIntentId;
   const ticketTypeId = typeof params.ticketTypeId === "string" ? params.ticketTypeId : "";
   const quantity = Math.max(1, Number(params.quantity ?? "1") || 1);
 
@@ -97,13 +101,46 @@ export function CheckoutStartScreen() {
     event?.ticketTypes.find((candidate) => candidate.id === ticketTypeId) ??
     event?.ticketTypes[0] ??
     null;
+  const requiresOfferIntent = selectedTicketType?.pricingMode === "OFFER_RANGE";
+  const hasRequiredOfferIntent = !requiresOfferIntent || Boolean(offerIntentId);
+
+  useEffect(() => {
+    if (!__DEV__) {
+      return;
+    }
+
+    console.info("[checkout-start] params", {
+      eventSlug,
+      hasOfferIntentId: Boolean(offerIntentId),
+      offerIntentPreview: offerIntentId ? offerIntentId.slice(0, 10) : null,
+      quantity,
+      ticketTypeId,
+    });
+  }, [eventSlug, offerIntentId, quantity, ticketTypeId]);
+
+  useEffect(() => {
+    if (!__DEV__ || !selectedTicketType) {
+      return;
+    }
+
+    console.info("[checkout-start] ticket-selection", {
+      pricingMode: selectedTicketType.pricingMode,
+      requiresOfferIntent,
+      hasRequiredOfferIntent,
+      selectedTicketTypeId: selectedTicketType.id,
+    });
+  }, [hasRequiredOfferIntent, requiresOfferIntent, selectedTicketType]);
   const quoteQuery = useQuery({
-    enabled: Boolean(session?.accessToken && event && selectedTicketType),
+    enabled: Boolean(
+      session?.accessToken && event && selectedTicketType && hasRequiredOfferIntent,
+    ),
     queryFn: () =>
       getCheckoutQuote(
         {
           eventSlug: event!.slug,
           offerIntentId,
+          offerRequestId,
+          offerUnlockToken: legacyOfferUnlockToken,
           items: [
             {
               quantity,
@@ -117,11 +154,37 @@ export function CheckoutStartScreen() {
       "mobile-checkout-quote",
       event?.slug,
       selectedTicketType?.id,
+      offerIntentId,
       quantity,
       session?.accessToken,
     ],
     retry: 1,
   });
+
+  useEffect(() => {
+    if (!__DEV__) {
+      return;
+    }
+
+    if (quoteQuery.isSuccess) {
+      console.info("[checkout-start] quote-success", {
+        currency: quoteQuery.data.currency,
+        feeAmount: quoteQuery.data.feeAmount,
+        subtotalAmount: quoteQuery.data.subtotalAmount,
+        totalAmount: quoteQuery.data.totalAmount,
+      });
+      return;
+    }
+
+    if (quoteQuery.isError) {
+      console.warn("[checkout-start] quote-error", {
+        error:
+          quoteQuery.error instanceof Error
+            ? quoteQuery.error.message
+            : String(quoteQuery.error),
+      });
+    }
+  }, [quoteQuery.data, quoteQuery.error, quoteQuery.isError, quoteQuery.isSuccess]);
 
   if (!session) {
     return (
@@ -230,8 +293,15 @@ export function CheckoutStartScreen() {
   async function beginPayment() {
     setErrorMessage(null);
     setIsSubmitting(true);
+    setIsAwaitingPaymentReturn(false);
 
     try {
+      if (requiresOfferIntent && !offerIntentId) {
+        throw new Error(
+          "This offer approval link is missing pricing context. Return to the event page and request a new approval.",
+        );
+      }
+
       const paymentProvider = quoteQuery.data
         ? getPaymentProviderForCurrency(quoteQuery.data.currency)
         : undefined;
@@ -244,6 +314,8 @@ export function CheckoutStartScreen() {
           eventSlug: resolvedEvent.slug,
           idempotencyKey,
           offerIntentId,
+          offerRequestId,
+          offerUnlockToken: legacyOfferUnlockToken,
           items: [
             {
               quantity,
@@ -285,48 +357,12 @@ export function CheckoutStartScreen() {
         return;
       }
 
-      const authResult = await WebBrowser.openAuthSessionAsync(
-        order.checkoutUrl,
-        successReturnUrl,
-      );
-
-      if (authResult.type === "success" && authResult.url) {
-        await Linking.openURL(authResult.url);
-      } else if (authResult.type === "cancel" || authResult.type === "dismiss") {
-        const latestOrder = await getOrderById(order.id, activeSession.accessToken);
-
-        if (latestOrder.status === "PAID") {
-          router.replace({
-            pathname: "/checkout/success",
-            params: { orderId: order.id },
-          });
-          return;
-        }
-
-        if (
-          latestOrder.status === "PENDING" &&
-          latestOrder.isAwaitingPaymentConfirmation
-        ) {
-          router.replace({
-            pathname: "/checkout/success",
-            params: { orderId: order.id },
-          });
-          return;
-        }
-
-        setErrorMessage("Checkout was dismissed before payment could continue.");
-      } else {
-        const fallbackResult = await WebBrowser.openBrowserAsync(order.checkoutUrl, {
-          presentationStyle: WebBrowser.WebBrowserPresentationStyle.FULL_SCREEN,
-        });
-
-        if (fallbackResult.type === "cancel") {
-          setErrorMessage("Checkout was dismissed before payment could continue.");
-        } else if (fallbackResult.type !== "opened") {
-          await Linking.openURL(cancelReturnUrl);
-        }
-      }
+      setIsAwaitingPaymentReturn(true);
+      await Linking.openURL(order.checkoutUrl);
+      setIsSubmitting(false);
+      return;
     } catch (error) {
+      setIsAwaitingPaymentReturn(false);
       setErrorMessage(error instanceof Error ? error.message : "Checkout could not start right now.");
     } finally {
       setIsSubmitting(false);
@@ -412,9 +448,28 @@ export function CheckoutStartScreen() {
               checkout attempt the latest calculation.
             </Text>
           ) : null}
+          {requiresOfferIntent && !offerIntentId ? (
+            <Text style={styles.error}>
+              This approved-offer link is incomplete. Go back to the event page and request a new
+              offer approval before checkout.
+            </Text>
+          ) : null}
+          {isAwaitingPaymentReturn ? (
+            <Card tone="accent">
+              <Text style={styles.sectionTitle}>Waiting for payment return</Text>
+              <Text style={styles.copy}>
+                Secure checkout opened in your browser. Complete payment there and you will be
+                returned here automatically for payment confirmation.
+              </Text>
+              <Link href="/checkout/cancel" style={styles.secondaryLink}>
+                I closed checkout, continue here
+              </Link>
+            </Card>
+          ) : null}
           <ActionButton
             loading={isSubmitting}
             onPress={() => void beginPayment()}
+            disabled={isAwaitingPaymentReturn}
             title="Continue to secure payment"
           />
           <Link

@@ -9,6 +9,8 @@ import { useAuth } from "@/components/providers/auth-provider";
 type CheckoutStartCtaProps = Readonly<{
   eventId: string;
   eventSlug: string;
+  initialOfferPrice?: number;
+  initialQuantity?: number;
   ticketType: {
     availabilityLabel: string;
     currency: string;
@@ -44,13 +46,17 @@ function getCheckoutStartPath(
 export function CheckoutStartCta({
   eventId,
   eventSlug,
+  initialOfferPrice,
+  initialQuantity,
   ticketType,
 }: CheckoutStartCtaProps) {
   const router = useRouter();
   const { isAuthenticated, session } = useAuth();
-  const [quantity, setQuantity] = useState(1);
+  const [quantity, setQuantity] = useState(initialQuantity ?? 1);
   const [isSubmittingOffer, setIsSubmittingOffer] = useState(false);
-  const [offeredPrice, setOfferedPrice] = useState(ticketType.minOfferPriceValue ?? 0);
+  const [offeredPrice, setOfferedPrice] = useState(
+    initialOfferPrice ?? ticketType.minOfferPriceValue ?? 0,
+  );
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const maxSelectable = useMemo(() => {
@@ -117,7 +123,13 @@ export function CheckoutStartCta({
 
   async function submitOffer() {
     if (!isAuthenticated) {
-      const nextPath = `/events/${eventSlug}`;
+      const next = new URLSearchParams({
+        ticketTypeId: ticketType.id,
+      });
+      if (offeredPrice > 0) {
+        next.set("offerPrice", offeredPrice.toFixed(2));
+      }
+      const nextPath = `/events/${eventSlug}?${next.toString()}`;
       router.push(
         `/auth?mode=login&eventSlug=${encodeURIComponent(eventSlug)}&next=${encodeURIComponent(nextPath)}`,
       );

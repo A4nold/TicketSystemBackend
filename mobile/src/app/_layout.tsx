@@ -24,31 +24,22 @@ function RootNavigator() {
   }
 
   return (
-    <Stack screenOptions={{ headerShown: false }}>
+    <Stack
+      screenOptions={{
+        animation: "slide_from_right",
+        headerShown: false,
+        presentation: "card",
+      }}
+    >
       <Stack.Screen name="index" />
       <Stack.Screen name="(public)" />
       <Stack.Screen name="(auth)" />
       <Stack.Screen name="(tabs)" />
-      <Stack.Screen
-        name="checkout/start"
-        options={{
-          presentation: "modal",
-        }}
-      />
-      <Stack.Screen
-        name="checkout/paystack-inline"
-        options={{
-          presentation: "modal",
-        }}
-      />
+      <Stack.Screen name="checkout/start" />
+      <Stack.Screen name="checkout/paystack-inline" />
       <Stack.Screen name="checkout/success" />
       <Stack.Screen name="checkout/cancel" />
-      <Stack.Screen
-        name="tickets/[serialNumber]"
-        options={{
-          presentation: "modal",
-        }}
-      />
+      <Stack.Screen name="tickets/[serialNumber]" />
       <Stack.Screen name="privacy-policy" />
     </Stack>
   );

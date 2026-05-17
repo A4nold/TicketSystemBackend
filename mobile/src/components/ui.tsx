@@ -18,7 +18,7 @@ export function Screen({
         <View style={styles.orbPrimary} />
         <View style={styles.orbSecondary} />
         <View style={styles.header}>
-          <Text style={styles.kicker}>TicketSystem Mobile</Text>
+          <Text style={styles.kicker}>Maya</Text>
           <Text style={styles.title}>{title}</Text>
           {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
         </View>

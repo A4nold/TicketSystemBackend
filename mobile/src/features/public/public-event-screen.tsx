@@ -10,7 +10,17 @@ import { getPublicEventBySlug } from "@/lib/events/public-events-client";
 import { createTicketOfferRequest } from "@/lib/offers/offers-client";
 import { palette } from "@/styles/theme";
 
-export function PublicEventScreen({ slug }: { slug: string }) {
+export function PublicEventScreen({
+  initialOfferPrice,
+  initialQuantity,
+  initialTicketTypeId,
+  slug,
+}: {
+  initialOfferPrice?: number;
+  initialQuantity?: number;
+  initialTicketTypeId?: string;
+  slug: string;
+}) {
   const { session } = useAuth();
   const [selectedTicketTypeId, setSelectedTicketTypeId] = useState("");
   const [quantity, setQuantity] = useState(1);
@@ -28,13 +38,22 @@ export function PublicEventScreen({ slug }: { slug: string }) {
     }
 
     const defaultTicketType =
+      eventQuery.data.ticketTypes.find((ticketType) => ticketType.id === initialTicketTypeId) ??
       eventQuery.data.ticketTypes.find((ticketType) => ticketType.isPurchasable) ??
       eventQuery.data.ticketTypes[0] ??
       null;
 
     setSelectedTicketTypeId((current) => current || defaultTicketType?.id || "");
-    setQuantity(1);
-    setOfferPrice(defaultTicketType?.minOfferPriceValue ?? 0);
+    setQuantity(
+      initialQuantity && Number.isFinite(initialQuantity) && initialQuantity >= 1
+        ? initialQuantity
+        : 1,
+    );
+    setOfferPrice(
+      initialOfferPrice && Number.isFinite(initialOfferPrice) && initialOfferPrice > 0
+        ? initialOfferPrice
+        : defaultTicketType?.minOfferPriceValue ?? 0,
+    );
   }, [eventQuery.data]);
 
   if (eventQuery.isLoading) {
@@ -79,6 +98,7 @@ export function PublicEventScreen({ slug }: { slug: string }) {
     null;
   const maxQuantity = selectedTicketType ? Math.max(1, selectedTicketType.maxPerOrder ?? 6) : 1;
   const isOfferRange = selectedTicketType?.pricingMode === "OFFER_RANGE";
+  const isTicketPurchasable = selectedTicketType?.isPurchasable ?? false;
 
   const checkoutHref = selectedTicketType
     ? {
@@ -187,12 +207,12 @@ export function PublicEventScreen({ slug }: { slug: string }) {
                   </View>
                 </View>
               ) : null}
-              {session && checkoutHref && !isOfferRange ? (
+              {session && checkoutHref && !isOfferRange && isTicketPurchasable ? (
                 <Link href={checkoutHref} style={styles.primaryLink}>
                   Continue to checkout
                 </Link>
               ) : null}
-              {session && isOfferRange ? (
+              {session && isOfferRange && isTicketPurchasable ? (
                 <>
                   <Text style={styles.copy}>
                     Choose an offer between {selectedTicketType.offerRangeLabel ?? "the configured range"}.
@@ -253,7 +273,7 @@ export function PublicEventScreen({ slug }: { slug: string }) {
                   />
                 </>
               ) : null}
-              {!session && checkoutHref ? (
+              {!session && checkoutHref && isTicketPurchasable ? (
                 <>
                   <Link
                     href={{
@@ -263,6 +283,12 @@ export function PublicEventScreen({ slug }: { slug: string }) {
                         eventTitle: event.title,
                         quantity: String(quantity),
                         ticketTypeId: selectedTicketType.id,
+                        ...(isOfferRange
+                          ? {
+                              flow: "offer-range",
+                              offerPrice: offerPrice.toFixed(2),
+                            }
+                          : {}),
                       },
                     }}
                     style={styles.primaryLink}
@@ -277,6 +303,12 @@ export function PublicEventScreen({ slug }: { slug: string }) {
                         eventTitle: event.title,
                         quantity: String(quantity),
                         ticketTypeId: selectedTicketType.id,
+                        ...(isOfferRange
+                          ? {
+                              flow: "offer-range",
+                              offerPrice: offerPrice.toFixed(2),
+                            }
+                          : {}),
                       },
                     }}
                     style={styles.secondaryLink}
@@ -284,6 +316,11 @@ export function PublicEventScreen({ slug }: { slug: string }) {
                     I already have an account
                   </Link>
                 </>
+              ) : null}
+              {!isTicketPurchasable ? (
+                <Text style={styles.copy}>
+                  Sales for this ticket are not active right now, so checkout is unavailable.
+                </Text>
               ) : null}
               {offerFeedback ? <Text style={styles.copy}>{offerFeedback}</Text> : null}
             </View>

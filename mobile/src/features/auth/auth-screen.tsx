@@ -28,6 +28,8 @@ export function AuthScreen({ defaultMode = "login" }: { defaultMode?: AuthMode }
   const params = useLocalSearchParams<{
     eventSlug?: string;
     eventTitle?: string;
+    flow?: string;
+    offerPrice?: string;
     quantity?: string;
     ticketTypeId?: string;
   }>();
@@ -59,6 +61,25 @@ export function AuthScreen({ defaultMode = "login" }: { defaultMode?: AuthMode }
   }, [params.eventSlug, params.eventTitle]);
 
   function goToPostAuthDestination() {
+    if (
+      params.flow === "offer-range" &&
+      typeof params.eventSlug === "string" &&
+      params.eventSlug &&
+      typeof params.ticketTypeId === "string" &&
+      params.ticketTypeId
+    ) {
+      router.replace({
+        pathname: "/(public)/events/[slug]",
+        params: {
+          slug: params.eventSlug,
+          offerPrice: typeof params.offerPrice === "string" ? params.offerPrice : undefined,
+          quantity: typeof params.quantity === "string" ? params.quantity : "1",
+          ticketTypeId: params.ticketTypeId,
+        },
+      });
+      return;
+    }
+
     if (
       typeof params.eventSlug === "string" &&
       params.eventSlug &&

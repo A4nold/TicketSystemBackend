@@ -129,9 +129,15 @@ export function PublicEventHero({ event }: { event: PublicEventDetail }) {
 
 function TicketCard({
   event,
+  initialOfferPrice,
+  initialQuantity,
+  isInitiallySelected,
   ticketType,
 }: {
   event: PublicEventDetail;
+  initialOfferPrice?: number;
+  initialQuantity?: number;
+  isInitiallySelected?: boolean;
   ticketType: PublicEventDetail["ticketTypes"][number];
 }) {
   const availabilityClasses = getAvailabilityClasses(ticketType.availabilityTone);
@@ -180,6 +186,8 @@ function TicketCard({
         <CheckoutStartCta
           eventId={event.id}
           eventSlug={event.slug}
+          initialOfferPrice={isInitiallySelected ? initialOfferPrice : undefined}
+          initialQuantity={isInitiallySelected ? initialQuantity : undefined}
           ticketType={{
             availabilityLabel: ticketType.availabilityLabel,
             currency: ticketType.currency,
@@ -202,7 +210,17 @@ function TicketCard({
   );
 }
 
-export function PublicEventTicketOptions({ event }: { event: PublicEventDetail }) {
+export function PublicEventTicketOptions({
+  event,
+  initialOfferPrice,
+  initialQuantity,
+  initialTicketTypeId,
+}: {
+  event: PublicEventDetail;
+  initialOfferPrice?: number;
+  initialQuantity?: number;
+  initialTicketTypeId?: string;
+}) {
   return (
     <Panel id="ticket-options">
       <div className="space-y-5">
@@ -218,7 +236,14 @@ export function PublicEventTicketOptions({ event }: { event: PublicEventDetail }
 
         <div className="grid gap-4 lg:grid-cols-2">
           {event.ticketTypes.map((ticketType) => (
-            <TicketCard key={ticketType.id} event={event} ticketType={ticketType} />
+            <TicketCard
+              key={ticketType.id}
+              event={event}
+              initialOfferPrice={initialOfferPrice}
+              initialQuantity={initialQuantity}
+              isInitiallySelected={ticketType.id === initialTicketTypeId}
+              ticketType={ticketType}
+            />
           ))}
         </div>
       </div>

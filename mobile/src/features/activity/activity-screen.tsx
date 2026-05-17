@@ -100,7 +100,7 @@ export function ActivityScreen() {
   const notificationCount = notificationItems.length;
   const transferCount = transfersQuery.data?.length ?? 0;
   const stickyAction = useMemo(() => {
-    if (isNotificationsExpanded && notificationsQuery.hasNextPage) {
+    if (!isNotificationsExpanded && notificationsQuery.hasNextPage) {
       return {
         label: notificationsQuery.isFetchingNextPage
           ? "Loading more"

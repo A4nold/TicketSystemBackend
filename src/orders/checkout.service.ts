@@ -34,6 +34,9 @@ export class CheckoutService {
     this.logger.log(
       `checkout.create.started userId=${user.id} eventSlug=${payload.eventSlug} items=${payload.items.length} provider=${payload.paymentProvider ?? PaymentProvider.STRIPE} idempotencyKey=${payload.idempotencyKey ?? "none"}`,
     );
+    this.logger.log(
+      `checkout.create.context eventSlug=${payload.eventSlug} userId=${user.id} ticketTypeIds=${payload.items.map((item) => item.ticketTypeId).join(",")} quantity=${payload.items.map((item) => item.quantity).join(",")} hasOfferIntentId=${Boolean(payload.offerIntentId)} hasLegacyOfferFields=${Boolean(payload.offerRequestId && payload.offerUnlockToken)}`,
+    );
 
     if (payload.idempotencyKey) {
       const existingOrder = await this.prisma.order.findFirst({
@@ -304,6 +307,10 @@ export class CheckoutService {
   }
 
   async quoteCheckout(payload: CreateCheckoutDto, user?: AuthenticatedUser) {
+    this.logger.log(
+      `checkout.quote.started eventSlug=${payload.eventSlug} ticketTypeIds=${payload.items.map((item) => item.ticketTypeId).join(",")} quantity=${payload.items.map((item) => item.quantity).join(",")} userId=${user?.id ?? "anonymous"} hasOfferIntentId=${Boolean(payload.offerIntentId)} hasLegacyOfferFields=${Boolean(payload.offerRequestId && payload.offerUnlockToken)}`,
+    );
+
     try {
       const quote = await this.prepareCheckoutQuote(payload, user);
 
@@ -656,6 +663,10 @@ export class CheckoutService {
           })
         : null;
 
+    this.logger.log(
+      `checkout.offer.lookup eventId=${eventId} userId=${user.id} requestedTicketTypeId=${requestedItem.ticketTypeId} hasOfferIntentId=${Boolean(payload.offerIntentId)} found=${Boolean(offerRequest)}`,
+    );
+
     if (!payload.offerIntentId && !(payload.offerRequestId && payload.offerUnlockToken)) {
       throw new BadRequestException(
         "offerIntentId is required for offer-range checkout.",
@@ -663,6 +674,9 @@ export class CheckoutService {
     }
 
     if (!offerRequest) {
+      this.logger.warn(
+        `checkout.offer.lookup_failed eventId=${eventId} userId=${user.id} requestedTicketTypeId=${requestedItem.ticketTypeId} hasOfferIntentId=${Boolean(payload.offerIntentId)}`,
+      );
       throw new BadRequestException("Offer intent was not found.");
     }
 

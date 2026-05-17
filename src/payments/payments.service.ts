@@ -251,12 +251,11 @@ export class PaymentsService {
       ? this.tryParseUrl(trimmedProvidedUrl)
       : null;
     const parsedFallbackUrl = this.tryParseUrl(fallbackBaseUrl);
-    const baseUrl =
-      parsedProvidedUrl?.protocol === "http:" || parsedProvidedUrl?.protocol === "https:"
-        ? trimmedProvidedUrl!
-        : parsedFallbackUrl
-          ? fallbackBaseUrl
-          : trimmedProvidedUrl || fallbackBaseUrl;
+    const baseUrl = parsedProvidedUrl
+      ? trimmedProvidedUrl!
+      : parsedFallbackUrl
+        ? fallbackBaseUrl
+        : trimmedProvidedUrl || fallbackBaseUrl;
 
     if (!baseUrl) {
       throw new NotImplementedException("A valid checkout return URL could not be resolved.");

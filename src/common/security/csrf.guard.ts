@@ -9,6 +9,12 @@ const AUTH_COOKIE_NAME = "ts_access_token";
 const CSRF_COOKIE_NAME = "ts_csrf_token";
 const CSRF_HEADER_NAME = "x-csrf-token";
 const MUTATING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+const CSRF_EXEMPT_PATHS = new Set([
+  "/api/auth/login",
+  "/api/auth/register",
+  "/api/auth/forgot-password",
+  "/api/auth/reset-password",
+]);
 
 @Injectable()
 export class CsrfGuard implements CanActivate {
@@ -16,9 +22,16 @@ export class CsrfGuard implements CanActivate {
     const request = context.switchToHttp().getRequest<{
       headers: Record<string, string | string[] | undefined>;
       method: string;
+      originalUrl?: string;
+      url?: string;
     }>();
 
     if (!MUTATING_METHODS.has(request.method.toUpperCase())) {
+      return true;
+    }
+
+    const requestPath = (request.originalUrl ?? request.url ?? "").split("?")[0] ?? "";
+    if (CSRF_EXEMPT_PATHS.has(requestPath)) {
       return true;
     }
 

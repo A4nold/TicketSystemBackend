@@ -17,7 +17,12 @@ export type PersistedScannerState = {
 };
 
 function getScannerStateKey(userId: string) {
-  return `${scannerStateKeyPrefix}:${userId}`;
+  const normalizedUserId = userId
+    .trim()
+    .replace(/[^A-Za-z0-9._-]/g, "_")
+    .replace(/_+/g, "_");
+  const safeUserId = normalizedUserId.length > 0 ? normalizedUserId : "anonymous";
+  return `${scannerStateKeyPrefix}.${safeUserId}`;
 }
 
 export function createEmptyScannerState(): PersistedScannerState {
