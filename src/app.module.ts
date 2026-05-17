@@ -4,10 +4,13 @@ import {
   NestModule,
   RequestMethod,
 } from "@nestjs/common";
+import { APP_GUARD } from "@nestjs/core";
 
 import { AppController } from "./app.controller";
 import { AuthModule } from "./auth/auth.module";
 import { RequestLoggingMiddleware } from "./common/middleware/request-logging.middleware";
+import { CsrfGuard } from "./common/security/csrf.guard";
+import { RateLimitGuard } from "./common/security/rate-limit.guard";
 import { EventsModule } from "./events/events.module";
 import { HealthModule } from "./health/health.module";
 import { OrdersModule } from "./orders/orders.module";
@@ -39,6 +42,16 @@ import { TransfersModule } from "./transfers/transfers.module";
     ResaleModule,
     ScannerModule,
     TransfersModule,
+  ],
+  providers: [
+    {
+      provide: APP_GUARD,
+      useClass: CsrfGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: RateLimitGuard,
+    },
   ],
 })
 export class AppModule implements NestModule {

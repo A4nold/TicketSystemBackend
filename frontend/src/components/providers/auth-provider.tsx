@@ -9,7 +9,8 @@ import {
   useState,
 } from "react";
 
-import { getCurrentAttendee } from "@/lib/auth/auth-client";
+import { getCurrentAttendee, logoutAttendee } from "@/lib/auth/auth-client";
+import { COOKIE_AUTH_TOKEN } from "@/lib/auth/request-auth";
 import type { AuthSession } from "@/lib/auth/types";
 import { deriveAppRoles } from "@/lib/auth/role-access";
 
@@ -74,10 +75,24 @@ export function AuthProvider({ children }: AuthProviderProps) {
         return;
       }
 
-      const rawSession = window.localStorage.getItem(SESSION_STORAGE_KEY);
+      const rawSession = window.sessionStorage.getItem(SESSION_STORAGE_KEY);
       if (!rawSession) {
-        if (isMounted) {
-          setIsHydrating(false);
+        // Attempt cookie-auth hydration when no persisted browser session exists.
+        try {
+          const user = await getCurrentAttendee();
+          if (isMounted) {
+            setSession(normalizeSession({
+              accessToken: COOKIE_AUTH_TOKEN,
+              tokenType: "Bearer",
+              user,
+            }));
+          }
+        } catch {
+          // Ignore anonymous cookie hydration failures.
+        } finally {
+          if (isMounted) {
+            setIsHydrating(false);
+          }
         }
         return;
       }
@@ -95,7 +110,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
           user,
         }));
       } catch {
-        window.localStorage.removeItem(SESSION_STORAGE_KEY);
+        window.sessionStorage.removeItem(SESSION_STORAGE_KEY);
 
         if (!isMounted) {
           return;
@@ -126,14 +141,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
 
     if (!normalizedSession) {
-      window.localStorage.removeItem(SESSION_STORAGE_KEY);
+      window.sessionStorage.removeItem(SESSION_STORAGE_KEY);
       return;
     }
 
-    window.localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(normalizedSession));
+    window.sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(normalizedSession));
   }, []);
 
   const signOut = useCallback((options?: { notice?: string }) => {
+    void logoutAttendee().catch(() => undefined);
     persistSession(null);
     setNotice(options?.notice ?? "You signed out successfully.");
   }, [persistSession]);

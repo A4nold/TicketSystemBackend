@@ -54,6 +54,7 @@ export class PurchasedTicketIssuanceService {
         const serialNumber = this.generateSerialNumber(
           eventCode,
           item.ticketType.name,
+          item.ticketTypeId,
           existingCount + index + 1,
         );
 
@@ -112,9 +113,19 @@ export class PurchasedTicketIssuanceService {
   private generateSerialNumber(
     eventCode: string,
     ticketTypeName: string,
+    ticketTypeId: string,
     sequence: number,
   ) {
-    return `${eventCode}-${this.toTicketTypeCode(ticketTypeName)}-${String(sequence).padStart(4, "0")}`;
+    return `${eventCode}-${this.toTicketTypeCode(ticketTypeName)}${this.toTicketTypeIdCode(ticketTypeId)}-${String(sequence).padStart(4, "0")}`;
+  }
+
+  private toTicketTypeIdCode(ticketTypeId: string) {
+    const compact = ticketTypeId
+      .replace(/[^a-zA-Z0-9]/g, "")
+      .slice(-4)
+      .toUpperCase();
+
+    return compact.padStart(4, "0");
   }
 
   private generateQrTokenId(serialNumber: string) {

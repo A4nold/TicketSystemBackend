@@ -14,6 +14,7 @@ import {
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { AuthenticatedUser } from "../auth/types/authenticated-user.type";
+import { RateLimit } from "../common/security/rate-limit.decorator";
 import { CancelOrderDto } from "./dto/cancel-order.dto";
 import { ConfirmPaymentDto } from "./dto/confirm-payment.dto";
 import { CreateCheckoutDto } from "./dto/create-checkout.dto";
@@ -87,6 +88,11 @@ export class OrdersController {
   @ApiBadRequestResponse({
     description: "Checkout creation failed because the event, ticket type, or requested quantities were invalid",
   })
+  @RateLimit({
+    keyPrefix: "orders:checkout",
+    maxRequests: 20,
+    windowMs: 60_000,
+  })
   createCheckout(
     @Body() payload: CreateCheckoutDto,
     @CurrentUser() user: AuthenticatedUser,
@@ -106,6 +112,11 @@ export class OrdersController {
   })
   @ApiBadRequestResponse({
     description: "Quote calculation failed because the event, ticket type, or requested quantities were invalid",
+  })
+  @RateLimit({
+    keyPrefix: "orders:quote",
+    maxRequests: 30,
+    windowMs: 60_000,
   })
   quoteCheckout(
     @Body() payload: CreateCheckoutDto,

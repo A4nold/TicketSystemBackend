@@ -20,8 +20,7 @@ type CheckoutStartReviewProps = Readonly<{
     venueLabel: string;
   };
   nextPath: string;
-  offerRequestId?: string;
-  offerUnlockToken?: string;
+  offerIntentId?: string;
   selection: {
     maxPerOrder: number | null;
     name: string;
@@ -89,8 +88,7 @@ function buildCheckoutReturnUrl(pathname: "/checkout/success" | "/checkout/cance
 export function CheckoutStartReview({
   event,
   nextPath,
-  offerRequestId,
-  offerUnlockToken,
+  offerIntentId,
   selection,
 }: CheckoutStartReviewProps) {
   const { session } = useAuth();
@@ -117,8 +115,7 @@ export function CheckoutStartReview({
       getCheckoutQuote(
         {
           eventSlug: event.slug,
-          offerRequestId,
-          offerUnlockToken,
+          offerIntentId,
           items: [
             {
               quantity: selection.quantity,
@@ -131,8 +128,7 @@ export function CheckoutStartReview({
     queryKey: [
       "checkout-quote",
       event.slug,
-      offerRequestId,
-      offerUnlockToken,
+      offerIntentId,
       selection.quantity,
       selection.ticketTypeId,
       session?.accessToken,
@@ -157,8 +153,7 @@ export function CheckoutStartReview({
             cancelReturnUrl: buildCheckoutReturnUrl("/checkout/cancel"),
             eventSlug: event.slug,
             idempotencyKey,
-            offerRequestId,
-            offerUnlockToken,
+            offerIntentId,
             items: [
               {
                 quantity: selection.quantity,

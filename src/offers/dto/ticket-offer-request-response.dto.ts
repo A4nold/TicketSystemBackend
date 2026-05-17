@@ -56,9 +56,6 @@ export class TicketOfferRequestResponseDto {
   @ApiProperty()
   expiresAt!: Date;
 
-  @ApiProperty({ nullable: true })
-  checkoutUnlockToken!: string | null;
-
   @ApiProperty()
   createdAt!: Date;
 
@@ -71,4 +68,3 @@ export class TicketOfferRequestResponseDto {
   @ApiProperty({ type: TicketOfferAttendeeDto })
   attendeeUser!: TicketOfferAttendeeDto;
 }
-

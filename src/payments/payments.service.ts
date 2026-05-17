@@ -619,6 +619,14 @@ export class PaymentsService {
 
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },
+      include: {
+        tickets: {
+          select: {
+            id: true,
+          },
+          take: 1,
+        },
+      },
     });
 
     if (!order) {
@@ -628,92 +636,64 @@ export class PaymentsService {
       throw new BadRequestException(`Order "${orderId}" was not found.`);
     }
 
-    if (order.status === OrderStatus.PAID) {
+    if (order.status === OrderStatus.PAID && order.tickets.length > 0) {
       this.logger.log(
         `payments.stripe.mark_paid.already_paid orderId=${order.id} checkoutSessionId=${session.id}`,
       );
       return;
     }
 
-    const paidAt = new Date();
+    const paidAt = order.paidAt ?? new Date();
 
     const paidOrder = await this.prisma.$transaction(async (tx) => {
-      const updatedOrder = await tx.order.update({
-        where: { id: orderId },
-        data: {
-          status: OrderStatus.PAID,
-          checkoutSessionId: session.id,
-          paymentReference:
-            typeof session.payment_intent === "string"
-              ? session.payment_intent
-              : order.paymentReference,
-          paidAt,
-        },
-        include: {
-          event: true,
-          items: {
-            include: {
-              ticketType: true,
-            },
-            orderBy: {
-              createdAt: "asc",
-            },
-          },
-          tickets: true,
-        },
-      });
+      const updatedOrder =
+        order.status === OrderStatus.PENDING
+          ? await tx.order.update({
+              where: { id: orderId },
+              data: {
+                status: OrderStatus.PAID,
+                checkoutSessionId: session.id,
+                paymentReference:
+                  typeof session.payment_intent === "string"
+                    ? session.payment_intent
+                    : order.paymentReference,
+                paidAt,
+              },
+              include: {
+                event: true,
+                items: {
+                  include: {
+                    ticketType: true,
+                  },
+                  orderBy: {
+                    createdAt: "asc",
+                  },
+                },
+                tickets: true,
+              },
+            })
+          : await tx.order.findUniqueOrThrow({
+              where: { id: orderId },
+              include: {
+                event: true,
+                items: {
+                  include: {
+                    ticketType: true,
+                  },
+                  orderBy: {
+                    createdAt: "asc",
+                  },
+                },
+                tickets: true,
+              },
+            });
 
       if (updatedOrder.tickets.length > 0) {
         return updatedOrder;
       }
 
-      const eventCode = this.toEventCode(updatedOrder.event.slug);
+      await this.issueTicketsForPaidOrder(tx, updatedOrder, paidAt);
 
-      for (const item of updatedOrder.items) {
-        const existingCount = await tx.ticket.count({
-          where: {
-            eventId: updatedOrder.eventId,
-            ticketTypeId: item.ticketTypeId,
-          },
-        });
-
-        for (let index = 0; index < item.quantity; index += 1) {
-          const serialNumber = this.generateSerialNumber(
-            eventCode,
-            item.ticketType.name,
-            existingCount + index + 1,
-          );
-
-          const ticket = await tx.ticket.create({
-            data: {
-              eventId: updatedOrder.eventId,
-              ticketTypeId: item.ticketTypeId,
-              orderId: updatedOrder.id,
-              currentOwnerId: updatedOrder.userId,
-              status: "ISSUED",
-              serialNumber,
-              qrTokenId: this.generateQrTokenId(serialNumber),
-              ownershipRevision: 1,
-              issuedAt: paidAt,
-            },
-          });
-
-          await tx.ticketOwnershipHistory.create({
-            data: {
-              ticketId: ticket.id,
-              fromUserId: null,
-              toUserId: updatedOrder.userId,
-              changeType: "PURCHASE",
-              revision: 1,
-              metadata: {
-                orderId: updatedOrder.id,
-                orderItemId: item.id,
-                serialNumber,
-              },
-            },
-          });
-        }
-      }
       return tx.order.findUniqueOrThrow({
         where: { id: updatedOrder.id },
         include: {
@@ -745,6 +725,117 @@ export class PaymentsService {
     this.logger.log(
       `payments.stripe.mark_paid.completed orderId=${paidOrder.id} checkoutSessionId=${session.id} tickets=${paidOrder.tickets.length} paymentIntent=${typeof session.payment_intent === "string" ? session.payment_intent : "none"}`,
     );
+  }
+
+  private async issueTicketsForPaidOrder(
+    tx: Prisma.TransactionClient,
+    order: {
+      event: { slug: string };
+      eventId: string;
+      id: string;
+      items: Array<{
+        id: string;
+        quantity: number;
+        ticketType: { name: string };
+        ticketTypeId: string;
+      }>;
+      userId: string;
+    },
+    paidAt: Date,
+  ) {
+    const eventCode = this.toEventCode(order.event.slug);
+
+    for (const item of order.items) {
+      const existingCount = await tx.ticket.count({
+        where: {
+          eventId: order.eventId,
+          ticketTypeId: item.ticketTypeId,
+        },
+      });
+
+      for (let index = 0; index < item.quantity; index += 1) {
+        await this.createIssuedTicketWithRetry(tx, {
+          eventCode,
+          eventId: order.eventId,
+          orderId: order.id,
+          orderItemId: item.id,
+          paidAt,
+          sequence: existingCount + index + 1,
+          ticketTypeId: item.ticketTypeId,
+          ticketTypeName: item.ticketType.name,
+          userId: order.userId,
+        });
+      }
+    }
+  }
+
+  private async createIssuedTicketWithRetry(
+    tx: Prisma.TransactionClient,
+    input: {
+      eventCode: string;
+      eventId: string;
+      orderId: string;
+      orderItemId: string;
+      paidAt: Date;
+      sequence: number;
+      ticketTypeId: string;
+      ticketTypeName: string;
+      userId: string;
+    },
+  ) {
+    const maxAttempts = 6;
+
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+      const serialNumber = this.generateSerialNumber(
+        input.eventCode,
+        input.ticketTypeName,
+        input.ticketTypeId,
+        input.sequence + attempt,
+      );
+
+      try {
+        const ticket = await tx.ticket.create({
+          data: {
+            eventId: input.eventId,
+            ticketTypeId: input.ticketTypeId,
+            orderId: input.orderId,
+            currentOwnerId: input.userId,
+            status: "ISSUED",
+            serialNumber,
+            qrTokenId: this.generateQrTokenId(serialNumber),
+            ownershipRevision: 1,
+            issuedAt: input.paidAt,
+          },
+        });
+
+        await tx.ticketOwnershipHistory.create({
+          data: {
+            ticketId: ticket.id,
+            fromUserId: null,
+            toUserId: input.userId,
+            changeType: "PURCHASE",
+            revision: 1,
+            metadata: {
+              orderId: input.orderId,
+              orderItemId: input.orderItemId,
+              serialNumber,
+            },
+          },
+        });
+
+        return;
+      } catch (error) {
+        const isSerialCollision =
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === "P2002" &&
+          Array.isArray(error.meta?.target) &&
+          error.meta.target.includes("serial_number");
+
+        if (!isSerialCollision || attempt === maxAttempts - 1) {
+          throw error;
+        }
+      }
+    }
   }
 
   private async markOrderCancelledFromStripeSession(session: any) {
@@ -1008,9 +1099,19 @@ export class PaymentsService {
   private generateSerialNumber(
     eventCode: string,
     ticketTypeName: string,
+    ticketTypeId: string,
     sequence: number,
   ) {
-    return `${eventCode}-${this.toTicketTypeCode(ticketTypeName)}-${String(sequence).padStart(4, "0")}`;
+    return `${eventCode}-${this.toTicketTypeCode(ticketTypeName)}${this.toTicketTypeIdCode(ticketTypeId)}-${String(sequence).padStart(4, "0")}`;
+  }
+
+  private toTicketTypeIdCode(ticketTypeId: string) {
+    const compact = ticketTypeId
+      .replace(/[^a-zA-Z0-9]/g, "")
+      .slice(-4)
+      .toUpperCase();
+
+    return compact.padStart(4, "0");
   }
 
   private generateQrTokenId(serialNumber: string) {

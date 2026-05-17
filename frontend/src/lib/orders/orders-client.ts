@@ -6,6 +6,7 @@ export type CreateCheckoutPayload = {
   cancelReturnUrl?: string;
   eventSlug: string;
   idempotencyKey?: string;
+  offerIntentId?: string;
   offerRequestId?: string;
   offerUnlockToken?: string;
   items: Array<{
@@ -103,7 +104,7 @@ export async function getCheckoutQuote(
     {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${accessToken}`,
+        ...(accessToken && accessToken !== "__cookie_auth__" ? { Authorization: `Bearer ${accessToken}` } : {}),
         "Content-Type": "application/json",
       },
       body: JSON.stringify(payload),
@@ -120,7 +121,7 @@ export async function createCheckoutOrder(
     {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${accessToken}`,
+        ...(accessToken && accessToken !== "__cookie_auth__" ? { Authorization: `Bearer ${accessToken}` } : {}),
         "Content-Type": "application/json",
       },
       body: JSON.stringify(payload),
@@ -131,7 +132,7 @@ export async function createCheckoutOrder(
 export async function getOrderById(orderId: string, accessToken: string) {
   return apiFetch<OrderResponse>(`/api/orders/${orderId}`, {
     headers: {
-      Authorization: `Bearer ${accessToken}`,
+      ...(accessToken && accessToken !== "__cookie_auth__" ? { Authorization: `Bearer ${accessToken}` } : {}),
     },
   });
 }

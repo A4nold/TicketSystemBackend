@@ -304,7 +304,7 @@ describe("CheckoutService", () => {
         groupBy: vi.fn().mockResolvedValue([]),
       },
       ticketOfferRequest: {
-        findUnique: vi.fn().mockResolvedValue({
+        findFirst: vi.fn().mockResolvedValue({
           id: "offer_1",
           eventId: "event_1",
           ticketTypeId: "tt_offer",
@@ -329,8 +329,7 @@ describe("CheckoutService", () => {
         {
           eventSlug: "campus-neon",
           items: [{ ticketTypeId: "tt_offer", quantity: 1 }],
-          offerRequestId: "offer_1",
-          offerUnlockToken: "tok_1",
+          offerIntentId: "tok_1",
         },
         createAuthenticatedUser(),
       ),
@@ -380,8 +379,7 @@ describe("CheckoutService", () => {
         {
           eventSlug: "campus-neon",
           items: [{ ticketTypeId: "tt_offer", quantity: 1 }],
-          offerRequestId: "offer_1",
-          offerUnlockToken: "tok_1",
+          offerIntentId: "tok_1",
         },
         createAuthenticatedUser(),
       ),

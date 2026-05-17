@@ -96,7 +96,7 @@ export async function getOperationalTicketIssue(
     `/api/tickets/events/${eventId}/${serialNumber}/issue`,
     {
       headers: {
-        Authorization: `Bearer ${accessToken}`,
+        ...(accessToken && accessToken !== "__cookie_auth__" ? { Authorization: `Bearer ${accessToken}` } : {}),
       },
     },
   );

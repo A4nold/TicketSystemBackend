@@ -70,8 +70,19 @@ export class CreateCheckoutDto {
   idempotencyKey?: string;
 
   @ApiPropertyOptional({
+    example: "ofr_intent_abc123",
+    description:
+      "Single-use offer intent id issued on organizer acceptance, required for OFFER_RANGE ticket checkout.",
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(180)
+  offerIntentId?: string;
+
+  @ApiPropertyOptional({
     example: "cm_offer_request_123",
-    description: "Offer request id required for OFFER_RANGE ticket checkout.",
+    description:
+      "Legacy compatibility field. Prefer offerIntentId for OFFER_RANGE checkout.",
   })
   @IsOptional()
   @IsString()
@@ -80,7 +91,8 @@ export class CreateCheckoutDto {
 
   @ApiPropertyOptional({
     example: "ofr_tok_abc123",
-    description: "Unlock token issued on organizer acceptance, required for OFFER_RANGE checkout.",
+    description:
+      "Legacy compatibility field. Prefer offerIntentId for OFFER_RANGE checkout.",
   })
   @IsOptional()
   @IsString()

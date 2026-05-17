@@ -38,7 +38,7 @@ export async function listOrganizerOffers(
     `/api/events/${eventId}/offers`,
     {
       headers: {
-        Authorization: `Bearer ${accessToken}`,
+        ...(accessToken && accessToken !== "__cookie_auth__" ? { Authorization: `Bearer ${accessToken}` } : {}),
       },
     },
     {
@@ -55,7 +55,7 @@ export async function acceptOrganizerOffer(
   return apiFetch<OrganizerOfferRequest>(`/api/offers/${offerId}/accept`, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${accessToken}`,
+      ...(accessToken && accessToken !== "__cookie_auth__" ? { Authorization: `Bearer ${accessToken}` } : {}),
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
@@ -72,7 +72,7 @@ export async function rejectOrganizerOffer(
   return apiFetch<OrganizerOfferRequest>(`/api/offers/${offerId}/reject`, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${accessToken}`,
+      ...(accessToken && accessToken !== "__cookie_auth__" ? { Authorization: `Bearer ${accessToken}` } : {}),
       "Content-Type": "application/json",
     },
     body: JSON.stringify({

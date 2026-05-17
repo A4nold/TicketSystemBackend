@@ -24,7 +24,7 @@ describe("getInAppPathFromNotification", () => {
   });
 
   it("passes through checkout-offer deep links", () => {
-    const path = "/checkout/start?eventSlug=campus-neon&ticketTypeId=tt_1&quantity=1&offerRequestId=of_1&offerUnlockToken=tok_1";
+    const path = "/checkout/start?eventSlug=campus-neon&ticketTypeId=tt_1&quantity=1&offerIntentId=ofr_intent_1";
     expect(getInAppPathFromNotification(createNotification(path))).toBe(path);
   });
 

@@ -68,10 +68,18 @@ export function resetPassword(payload: ResetPasswordPayload) {
   });
 }
 
-export function getCurrentAttendee(accessToken: string) {
-  return apiFetch<AuthUser>("/api/auth/me", {
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-    },
+export function getCurrentAttendee(accessToken?: string | null) {
+  return apiFetch<AuthUser>("/api/auth/me", accessToken
+    ? {
+        headers: {
+          ...(accessToken && accessToken !== "__cookie_auth__" ? { Authorization: `Bearer ${accessToken}` } : {}),
+        },
+      }
+    : undefined);
+}
+
+export function logoutAttendee() {
+  return apiFetch<{ message: string }>("/api/auth/logout", {
+    method: "POST",
   });
 }

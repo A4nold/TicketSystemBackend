@@ -18,17 +18,15 @@ export class JwtAuthGuard implements CanActivate {
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest();
     const authorization = request.headers.authorization;
+    const bearerToken =
+      typeof authorization === "string" ? this.parseBearerToken(authorization) : null;
+    const cookieToken = this.readCookieToken(request.headers.cookie);
+    const token = bearerToken ?? cookieToken;
 
-    if (!authorization || typeof authorization !== "string") {
+    if (!token) {
       throw new UnauthorizedException(
-        'Missing required "Authorization: Bearer <token>" header.',
+        'Missing required "Authorization: Bearer <token>" header or auth cookie.',
       );
-    }
-
-    const [scheme, token] = authorization.split(" ");
-
-    if (scheme !== "Bearer" || !token) {
-      throw new UnauthorizedException("Invalid bearer token format.");
     }
 
     try {
@@ -41,6 +39,39 @@ export class JwtAuthGuard implements CanActivate {
       return true;
     } catch {
       throw new UnauthorizedException("Invalid or expired access token.");
+    }
+  }
+
+  private parseBearerToken(authorization: string) {
+    const [scheme, token] = authorization.split(" ");
+
+    if (scheme !== "Bearer" || !token) {
+      throw new UnauthorizedException("Invalid bearer token format.");
+    }
+
+    return token;
+  }
+
+  private readCookieToken(cookieHeader: unknown) {
+    if (typeof cookieHeader !== "string" || cookieHeader.trim().length === 0) {
+      return null;
+    }
+
+    const targetKey = "ts_access_token=";
+    const value = cookieHeader
+      .split(";")
+      .map((part) => part.trim())
+      .find((part) => part.startsWith(targetKey))
+      ?.slice(targetKey.length);
+
+    if (!value) {
+      return null;
+    }
+
+    try {
+      return decodeURIComponent(value);
+    } catch {
+      return value;
     }
   }
 }

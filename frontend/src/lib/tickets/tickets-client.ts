@@ -106,7 +106,7 @@ export async function listOwnedTickets(
     "/api/me/tickets",
     {
       headers: {
-        Authorization: `Bearer ${accessToken}`,
+        ...(accessToken && accessToken !== "__cookie_auth__" ? { Authorization: `Bearer ${accessToken}` } : {}),
       },
     },
     query,
@@ -119,7 +119,7 @@ export async function getOwnedTicketBySerialNumber(
 ) {
   return apiFetch<OwnedTicketDetail>(`/api/me/tickets/${serialNumber}`, {
     headers: {
-      Authorization: `Bearer ${accessToken}`,
+      ...(accessToken && accessToken !== "__cookie_auth__" ? { Authorization: `Bearer ${accessToken}` } : {}),
     },
   });
 }
@@ -130,7 +130,7 @@ export async function getOwnedTicketQrPayload(
 ) {
   return apiFetch<OwnedTicketQrPayload>(`/api/me/tickets/${serialNumber}/qr`, {
     headers: {
-      Authorization: `Bearer ${accessToken}`,
+      ...(accessToken && accessToken !== "__cookie_auth__" ? { Authorization: `Bearer ${accessToken}` } : {}),
     },
   });
 }

@@ -54,7 +54,7 @@ export async function createResaleListing(
   return apiFetch<ResaleResponse>(`/api/me/tickets/${serialNumber}/resale`, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${accessToken}`,
+      ...(accessToken && accessToken !== "__cookie_auth__" ? { Authorization: `Bearer ${accessToken}` } : {}),
       "Content-Type": "application/json",
     },
     body: JSON.stringify(payload),
@@ -74,7 +74,7 @@ export async function buyResaleListing(
   return apiFetch<ResaleResponse>(`/api/tickets/${serialNumber}/buy-resale`, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${accessToken}`,
+      ...(accessToken && accessToken !== "__cookie_auth__" ? { Authorization: `Bearer ${accessToken}` } : {}),
       "Content-Type": "application/json",
     },
     body: JSON.stringify({}),

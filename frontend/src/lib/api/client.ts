@@ -17,6 +17,10 @@ type ApiErrorBody = {
   timestamp?: string;
 };
 
+const CSRF_COOKIE_NAME = "ts_csrf_token";
+const CSRF_HEADER_NAME = "x-csrf-token";
+const MUTATING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -58,10 +62,19 @@ export async function apiFetch<T>(
   init?: ApiFetchInit,
   query?: Record<string, QueryValue>,
 ) {
+  const method = (init?.method ?? "GET").toUpperCase();
+  const csrfToken = readCookie(CSRF_COOKIE_NAME);
+  const includeCsrfHeader =
+    MUTATING_METHODS.has(method) &&
+    Boolean(csrfToken) &&
+    !(init?.headers && hasHeader(init.headers, CSRF_HEADER_NAME));
+
   const response = await fetch(buildUrl(path, query), {
     ...init,
+    credentials: init?.credentials ?? "include",
     headers: {
       Accept: "application/json",
+      ...(includeCsrfHeader ? { [CSRF_HEADER_NAME]: csrfToken! } : {}),
       ...(init?.headers ?? {}),
     },
   });
@@ -94,4 +107,41 @@ export async function apiFetch<T>(
   }
 
   return responseBody as T;
+}
+
+function readCookie(name: string) {
+  if (typeof document === "undefined") {
+    return null;
+  }
+
+  const target = `${name}=`;
+  const value = document.cookie
+    .split(";")
+    .map((part) => part.trim())
+    .find((part) => part.startsWith(target))
+    ?.slice(target.length);
+
+  if (!value) {
+    return null;
+  }
+
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+function hasHeader(headers: HeadersInit, headerName: string) {
+  if (headers instanceof Headers) {
+    return headers.has(headerName);
+  }
+
+  if (Array.isArray(headers)) {
+    return headers.some(([name]) => name.toLowerCase() === headerName.toLowerCase());
+  }
+
+  return Object.keys(headers).some(
+    (name) => name.toLowerCase() === headerName.toLowerCase(),
+  );
 }

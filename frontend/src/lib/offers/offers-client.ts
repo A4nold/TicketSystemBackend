@@ -40,7 +40,7 @@ export async function createTicketOfferRequest(
     {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${accessToken}`,
+        ...(accessToken && accessToken !== "__cookie_auth__" ? { Authorization: `Bearer ${accessToken}` } : {}),
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ offeredPrice }),
@@ -56,7 +56,7 @@ export async function listMyTicketOffers(
     "/api/offers/mine",
     {
       headers: {
-        Authorization: `Bearer ${accessToken}`,
+        ...(accessToken && accessToken !== "__cookie_auth__" ? { Authorization: `Bearer ${accessToken}` } : {}),
       },
     },
     {

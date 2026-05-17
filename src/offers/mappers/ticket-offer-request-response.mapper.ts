@@ -12,7 +12,6 @@ type TicketOfferRequestResponseSource = {
   reviewedByUserId: string | null;
   reviewedAt: Date | null;
   expiresAt: Date;
-  checkoutUnlockToken: string | null;
   createdAt: Date;
   updatedAt: Date;
   attendeeUser: {
@@ -44,7 +43,6 @@ export function toTicketOfferRequestResponse(
     reviewedByUserId: offerRequest.reviewedByUserId,
     reviewedAt: offerRequest.reviewedAt,
     expiresAt: offerRequest.expiresAt,
-    checkoutUnlockToken: offerRequest.checkoutUnlockToken,
     createdAt: offerRequest.createdAt,
     updatedAt: offerRequest.updatedAt,
     ticketType: {
@@ -59,4 +57,3 @@ export function toTicketOfferRequestResponse(
     },
   };
 }
-

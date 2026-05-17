@@ -24,7 +24,7 @@ export async function listWalletNotifications(accessToken: string) {
     "/api/me/notifications",
     {
       headers: {
-        Authorization: `Bearer ${accessToken}`,
+        ...(accessToken && accessToken !== "__cookie_auth__" ? { Authorization: `Bearer ${accessToken}` } : {}),
       },
     },
   );
@@ -41,7 +41,7 @@ export async function listWalletNotificationsPage(accessToken: string) {
     "/api/me/notifications",
     {
       headers: {
-        Authorization: `Bearer ${accessToken}`,
+        ...(accessToken && accessToken !== "__cookie_auth__" ? { Authorization: `Bearer ${accessToken}` } : {}),
       },
     },
   );
@@ -66,7 +66,7 @@ export async function markWalletNotificationAsRead(
   return apiFetch<WalletNotification>(`/api/me/notifications/${notificationId}/read`, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${accessToken}`,
+      ...(accessToken && accessToken !== "__cookie_auth__" ? { Authorization: `Bearer ${accessToken}` } : {}),
       "Content-Type": "application/json",
     },
     body: JSON.stringify({}),

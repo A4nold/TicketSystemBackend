@@ -179,8 +179,7 @@ export class OffersService {
         `/checkout/start?eventSlug=${encodeURIComponent(event?.slug ?? "")}` +
         `&ticketTypeId=${encodeURIComponent(updatedOffer.ticketTypeId)}` +
         "&quantity=1" +
-        `&offerRequestId=${encodeURIComponent(updatedOffer.id)}` +
-        `&offerUnlockToken=${encodeURIComponent(updatedOffer.checkoutUnlockToken ?? "")}`,
+        `&offerIntentId=${encodeURIComponent(updatedOffer.checkoutUnlockToken ?? "")}`,
       body: `Your offer for ${updatedOffer.ticketType.name} was accepted. Continue to checkout.`,
       metadata: {
         eventId: updatedOffer.eventId,

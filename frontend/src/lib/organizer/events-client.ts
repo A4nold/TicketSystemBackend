@@ -160,7 +160,7 @@ export async function createOrganizerEvent(
   return apiFetch<OrganizerEventResponse>("/api/events", {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${accessToken}`,
+      ...(accessToken && accessToken !== "__cookie_auth__" ? { Authorization: `Bearer ${accessToken}` } : {}),
       "Content-Type": "application/json",
     },
     body: JSON.stringify(payload),
@@ -185,7 +185,7 @@ export async function updateOrganizerEvent(
   return apiFetch<OrganizerEventResponse>(`/api/events/${eventId}`, {
     method: "PATCH",
     headers: {
-      Authorization: `Bearer ${accessToken}`,
+      ...(accessToken && accessToken !== "__cookie_auth__" ? { Authorization: `Bearer ${accessToken}` } : {}),
       "Content-Type": "application/json",
     },
     body: JSON.stringify(payload),
@@ -200,7 +200,7 @@ export async function createOrganizerTicketType(
   return apiFetch<OrganizerTicketTypeResponse>(`/api/events/${eventId}/ticket-types`, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${accessToken}`,
+      ...(accessToken && accessToken !== "__cookie_auth__" ? { Authorization: `Bearer ${accessToken}` } : {}),
       "Content-Type": "application/json",
     },
     body: JSON.stringify(payload),
@@ -218,7 +218,7 @@ export async function updateOrganizerTicketType(
     {
       method: "PATCH",
       headers: {
-        Authorization: `Bearer ${accessToken}`,
+        ...(accessToken && accessToken !== "__cookie_auth__" ? { Authorization: `Bearer ${accessToken}` } : {}),
         "Content-Type": "application/json",
       },
       body: JSON.stringify(payload),
@@ -232,7 +232,7 @@ export async function listOrganizerStaff(
 ) {
   return apiFetch<OrganizerStaffMembership[]>(`/api/events/${eventId}/staff`, {
     headers: {
-      Authorization: `Bearer ${accessToken}`,
+      ...(accessToken && accessToken !== "__cookie_auth__" ? { Authorization: `Bearer ${accessToken}` } : {}),
     },
   });
 }
@@ -248,7 +248,7 @@ export async function inviteOrganizerStaff(
   return apiFetch<OrganizerStaffMembership>(`/api/events/${eventId}/staff/invite`, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${accessToken}`,
+      ...(accessToken && accessToken !== "__cookie_auth__" ? { Authorization: `Bearer ${accessToken}` } : {}),
       "Content-Type": "application/json",
     },
     body: JSON.stringify(payload),
@@ -262,7 +262,7 @@ export async function acceptOrganizerStaffInvite(
   return apiFetch<OrganizerStaffMembership>(`/api/events/${eventId}/staff/accept`, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${accessToken}`,
+      ...(accessToken && accessToken !== "__cookie_auth__" ? { Authorization: `Bearer ${accessToken}` } : {}),
       "Content-Type": "application/json",
     },
     body: JSON.stringify({}),
@@ -282,7 +282,7 @@ export async function updateOrganizerStaffRole(
     {
       method: "PATCH",
       headers: {
-        Authorization: `Bearer ${accessToken}`,
+        ...(accessToken && accessToken !== "__cookie_auth__" ? { Authorization: `Bearer ${accessToken}` } : {}),
         "Content-Type": "application/json",
       },
       body: JSON.stringify(payload),
@@ -300,7 +300,7 @@ export async function revokeOrganizerStaff(
     {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${accessToken}`,
+        ...(accessToken && accessToken !== "__cookie_auth__" ? { Authorization: `Bearer ${accessToken}` } : {}),
         "Content-Type": "application/json",
       },
       body: JSON.stringify({}),

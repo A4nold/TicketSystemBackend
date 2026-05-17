@@ -9,6 +9,7 @@ type CheckoutStartPageProps = {
     eventSlug?: string;
     offerRequestId?: string;
     offerUnlockToken?: string;
+    offerIntentId?: string;
     quantity?: string;
     ticketTypeId?: string;
   }>;
@@ -45,8 +46,7 @@ export default async function CheckoutStartPage({
 }: CheckoutStartPageProps) {
   const resolved = searchParams ? await searchParams : undefined;
   const eventSlug = resolved?.eventSlug;
-  const offerRequestId = resolved?.offerRequestId;
-  const offerUnlockToken = resolved?.offerUnlockToken;
+  const offerIntentId = resolved?.offerIntentId ?? resolved?.offerUnlockToken;
   const ticketTypeId = resolved?.ticketTypeId;
   const quantity = Number(resolved?.quantity ?? "0");
 
@@ -80,9 +80,8 @@ export default async function CheckoutStartPage({
     quantity: String(quantity),
     ticketTypeId,
   });
-  if (offerRequestId && offerUnlockToken) {
-    search.set("offerRequestId", offerRequestId);
-    search.set("offerUnlockToken", offerUnlockToken);
+  if (offerIntentId) {
+    search.set("offerIntentId", offerIntentId);
   }
   const nextPath = `/tickets/checkout/start?${search.toString()}`;
 
@@ -96,8 +95,7 @@ export default async function CheckoutStartPage({
         venueLabel: event.venueLabel,
       }}
       nextPath={nextPath}
-      offerRequestId={offerRequestId}
-      offerUnlockToken={offerUnlockToken}
+      offerIntentId={offerIntentId}
       selection={{
         maxPerOrder: ticketType.maxPerOrder,
         name: ticketType.name,

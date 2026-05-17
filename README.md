@@ -144,8 +144,24 @@ CHECKOUT_FEE_FIXED_APPLICATION=PER_TICKET
 CHECKOUT_FEE_RESPONSIBILITY=BUYER
 POST_EVENT_NOTIFICATION_SWEEP_INTERVAL_MS=300000
 ENABLE_OFFER_RANGE_PRICING=false
+SECURITY_RELAXED_LOCAL=false
+RATE_LIMIT_ENABLED=true
 PORT=3000
 ```
+
+Local-safe security mode:
+
+- Keep your real local secrets in `.env` (already gitignored).
+- Keep `.env.example` as placeholders only.
+- `SECURITY_RELAXED_LOCAL=true` is allowed only for local/dev to unblock startup while secrets are being wired.
+- In production, `SECURITY_RELAXED_LOCAL` must remain `false` or unset; the API will refuse to boot otherwise.
+- `RATE_LIMIT_ENABLED=false` can be used temporarily in local development when doing high-volume manual or scripted testing.
+
+Cookie auth + CSRF notes:
+
+- Web auth now also uses secure cookies (`ts_access_token`) for browser sessions.
+- Mutating browser requests (`POST`, `PUT`, `PATCH`, `DELETE`) send `x-csrf-token` automatically from the `ts_csrf_token` cookie.
+- Mobile/native bearer-token flows remain supported and are not blocked by CSRF checks.
 
 Frontend uses [`.env.example`](/Users/arnoldekechi/RiderProjects/ticketsystem/frontend/.env.example):
 
@@ -173,6 +189,29 @@ For real-device mobile testing against Railway, point `EXPO_PUBLIC_API_BASE_URL`
 Mobile push registration can also use `EXPO_PUBLIC_EXPO_PROJECT_ID` when you want Expo push tokens to resolve cleanly in EAS and local development-build environments. For `expo-notifications`, use a development build instead of Expo Go.
 
 `ENABLE_OFFER_RANGE_PRICING` controls whether offer-range pricing mode is active. Default is disabled (`false`) when not set. Set `true` (or `1`/`yes`/`on`) to enable by environment for staged rollout.
+
+## Security Operations
+
+### Secret scanning
+
+Run the repository secret scanner before commits or deployments:
+
+```bash
+npm run security:scan-secrets
+```
+
+The scanner checks for common key/token/password patterns and fails if potential secrets are found outside local ignored env files.
+
+### Secret rotation checklist (production)
+
+When a secret is exposed or suspected compromised:
+
+1. Rotate provider secrets immediately (Stripe, Paystack, Resend, JWT, DB passwords).
+2. Update Railway environment variables for the affected service(s).
+3. Redeploy backend/frontend after variable updates.
+4. Invalidate old sessions/tokens where applicable (JWT cookie + bearer sessions).
+5. Re-run smoke tests for auth, checkout, webhook verification, and offer checkout.
+6. Run `npm run security:scan-secrets` and verify no tracked files contain live secrets.
 
 ### 3. Run the backend
 

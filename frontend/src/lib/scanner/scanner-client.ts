@@ -87,7 +87,7 @@ export async function getScannerManifest(
 ) {
   return apiFetch<ScannerManifestResponse>(`/api/scanner/events/${eventId}/manifest`, {
     headers: {
-      Authorization: `Bearer ${accessToken}`,
+      ...(accessToken && accessToken !== "__cookie_auth__" ? { Authorization: `Bearer ${accessToken}` } : {}),
     },
   });
 }
@@ -102,7 +102,7 @@ export async function validateScannerTicket(
     {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${accessToken}`,
+        ...(accessToken && accessToken !== "__cookie_auth__" ? { Authorization: `Bearer ${accessToken}` } : {}),
         "Content-Type": "application/json",
       },
       body: JSON.stringify(payload),
@@ -124,7 +124,7 @@ export async function syncScannerAttempts(
   return apiFetch<ScannerSyncResponse>(`/api/scanner/events/${eventId}/sync`, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${accessToken}`,
+      ...(accessToken && accessToken !== "__cookie_auth__" ? { Authorization: `Bearer ${accessToken}` } : {}),
       "Content-Type": "application/json",
     },
     body: JSON.stringify(payload),

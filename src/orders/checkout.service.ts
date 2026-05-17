@@ -66,12 +66,28 @@ export class CheckoutService {
     const { event, feePolicy, requestedItems, pricedItems, totals } = quote;
     const paymentProvider =
       payload.paymentProvider ?? this.resolveDefaultPaymentProvider(totals.currency);
-    if (payload.offerRequestId && payload.offerUnlockToken) {
+    if (payload.offerIntentId) {
+      const consumed = await (this.prisma as any).ticketOfferRequest.updateMany({
+        where: {
+          checkoutUnlockToken: payload.offerIntentId,
+          status: "ACCEPTED",
+          attendeeUserId: user.id,
+        },
+        data: {
+          checkoutUnlockToken: null,
+        },
+      });
+
+      if (consumed.count === 0) {
+        throw new BadRequestException("Offer intent is invalid or has already been used.");
+      }
+    } else if (payload.offerRequestId && payload.offerUnlockToken) {
       const consumed = await (this.prisma as any).ticketOfferRequest.updateMany({
         where: {
           id: payload.offerRequestId,
           checkoutUnlockToken: payload.offerUnlockToken,
           status: "ACCEPTED",
+          attendeeUserId: user.id,
         },
         data: {
           checkoutUnlockToken: null,
@@ -619,12 +635,6 @@ export class CheckoutService {
       );
     }
 
-    if (!payload.offerRequestId || !payload.offerUnlockToken) {
-      throw new BadRequestException(
-        "offerRequestId and offerUnlockToken are required for offer-range checkout.",
-      );
-    }
-
     if (offerRangeTypes.length > 1 || requestedItems.length > 1) {
       throw new BadRequestException(
         "Offer-range checkout currently supports a single ticket type per order.",
@@ -632,15 +642,34 @@ export class CheckoutService {
     }
 
     const requestedItem = requestedItems[0]!;
-    const offerRequest = await (this.prisma as any).ticketOfferRequest.findUnique({
-      where: { id: payload.offerRequestId },
-    });
+    const offerRequest = payload.offerIntentId
+      ? await (this.prisma as any).ticketOfferRequest.findFirst({
+          where: {
+            checkoutUnlockToken: payload.offerIntentId,
+            status: "ACCEPTED",
+            attendeeUserId: user.id,
+          },
+        })
+      : payload.offerRequestId && payload.offerUnlockToken
+        ? await (this.prisma as any).ticketOfferRequest.findUnique({
+            where: { id: payload.offerRequestId },
+          })
+        : null;
 
-    if (!offerRequest) {
-      throw new BadRequestException("Offer request was not found.");
+    if (!payload.offerIntentId && !(payload.offerRequestId && payload.offerUnlockToken)) {
+      throw new BadRequestException(
+        "offerIntentId is required for offer-range checkout.",
+      );
     }
 
-    if (offerRequest.checkoutUnlockToken !== payload.offerUnlockToken) {
+    if (!offerRequest) {
+      throw new BadRequestException("Offer intent was not found.");
+    }
+
+    if (
+      !payload.offerIntentId &&
+      offerRequest.checkoutUnlockToken !== payload.offerUnlockToken
+    ) {
       throw new BadRequestException("Offer unlock token is invalid.");
     }
 

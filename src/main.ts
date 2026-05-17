@@ -4,12 +4,15 @@ import "dotenv/config";
 import { Logger, ValidationPipe } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
+import helmet from "helmet";
 
 import { AppModule } from "./app.module";
+import { assertSecurityModeConsistency } from "./common/env-security";
 import { GlobalHttpExceptionFilter } from "./common/filters/http-exception.filter";
 
 async function bootstrap() {
   const bootstrapLogger = new Logger("Bootstrap");
+  assertSecurityModeConsistency();
 
   process.on("unhandledRejection", (reason) => {
     const message =
@@ -28,6 +31,37 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
     rawBody: true,
   });
+  app.getHttpAdapter().getInstance().set("trust proxy", 1);
+  app.use(
+    helmet({
+      // Swagger UI at /docs requires inline assets to render.
+      contentSecurityPolicy: {
+        directives: {
+          defaultSrc: ["'self'"],
+          baseUri: ["'self'"],
+          connectSrc: ["'self'"],
+          fontSrc: ["'self'", "data:"],
+          frameAncestors: ["'none'"],
+          imgSrc: ["'self'", "data:"],
+          objectSrc: ["'none'"],
+          scriptSrc: ["'self'", "'unsafe-inline'"],
+          styleSrc: ["'self'", "'unsafe-inline'"],
+          upgradeInsecureRequests: [],
+        },
+      },
+      crossOriginEmbedderPolicy: false,
+      referrerPolicy: {
+        policy: "no-referrer",
+      },
+      hsts: process.env.NODE_ENV === "production"
+        ? {
+            maxAge: 31536000,
+            includeSubDomains: true,
+            preload: true,
+          }
+        : false,
+    }),
+  );
   const port = Number(process.env.PORT ?? 3000);
   const allowedOrigins = (
     process.env.CORS_ORIGINS ??
@@ -40,6 +74,7 @@ async function bootstrap() {
   app.setGlobalPrefix("api");
   app.enableCors({
     origin: allowedOrigins,
+    credentials: true,
     methods: ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization", "Accept"],
   });

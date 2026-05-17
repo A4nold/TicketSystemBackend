@@ -69,6 +69,7 @@ export function CheckoutStartScreen() {
     eventSlug?: string;
     offerRequestId?: string;
     offerUnlockToken?: string;
+    offerIntentId?: string;
     quantity?: string;
     ticketTypeId?: string;
   }>();
@@ -77,10 +78,12 @@ export function CheckoutStartScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [idempotencyKey] = useState(createIdempotencyKey);
   const eventSlug = typeof params.eventSlug === "string" ? params.eventSlug : "";
-  const offerRequestId =
-    typeof params.offerRequestId === "string" ? params.offerRequestId : undefined;
-  const offerUnlockToken =
-    typeof params.offerUnlockToken === "string" ? params.offerUnlockToken : undefined;
+  const offerIntentId =
+    typeof params.offerIntentId === "string"
+      ? params.offerIntentId
+      : typeof params.offerUnlockToken === "string"
+        ? params.offerUnlockToken
+        : undefined;
   const ticketTypeId = typeof params.ticketTypeId === "string" ? params.ticketTypeId : "";
   const quantity = Math.max(1, Number(params.quantity ?? "1") || 1);
 
@@ -100,8 +103,7 @@ export function CheckoutStartScreen() {
       getCheckoutQuote(
         {
           eventSlug: event!.slug,
-          offerRequestId,
-          offerUnlockToken,
+          offerIntentId,
           items: [
             {
               quantity,
@@ -137,6 +139,7 @@ export function CheckoutStartScreen() {
                   pathname: "/(auth)/login",
                   params: {
                     eventSlug,
+                    offerIntentId,
                     quantity: String(quantity),
                     ticketTypeId,
                   },
@@ -150,6 +153,7 @@ export function CheckoutStartScreen() {
                   pathname: "/(auth)/register",
                   params: {
                     eventSlug,
+                    offerIntentId,
                     quantity: String(quantity),
                     ticketTypeId,
                   },
@@ -239,8 +243,7 @@ export function CheckoutStartScreen() {
             : buildAppReturnUrl("/checkout/cancel"),
           eventSlug: resolvedEvent.slug,
           idempotencyKey,
-          offerRequestId,
-          offerUnlockToken,
+          offerIntentId,
           items: [
             {
               quantity,

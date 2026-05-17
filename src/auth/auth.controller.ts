@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Post, Res, UseGuards } from "@nestjs/common";
 import {
   ApiBearerAuth,
   ApiBadRequestResponse,
@@ -21,6 +21,12 @@ import { RegisterDto } from "./dto/register.dto";
 import { JwtAuthGuard } from "./guards/jwt-auth.guard";
 import { AuthenticatedUser } from "./types/authenticated-user.type";
 import { AuthService } from "./auth.service";
+import { RateLimit } from "../common/security/rate-limit.decorator";
+import { Response } from "express";
+import { randomBytes } from "crypto";
+
+const ACCESS_COOKIE_NAME = "ts_access_token";
+const CSRF_COOKIE_NAME = "ts_csrf_token";
 
 @ApiTags("auth")
 @Controller("auth")
@@ -38,8 +44,18 @@ export class AuthController {
   @ApiBadRequestResponse({
     description: "The registration payload is invalid or the email already exists",
   })
-  register(@Body() payload: RegisterDto) {
-    return this.authService.register(payload);
+  @RateLimit({
+    keyPrefix: "auth:register",
+    maxRequests: 10,
+    windowMs: 60_000,
+  })
+  async register(
+    @Body() payload: RegisterDto,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const authResponse = await this.authService.register(payload);
+    this.setAccessCookie(response, authResponse.accessToken);
+    return authResponse;
   }
 
   @Post("login")
@@ -53,8 +69,18 @@ export class AuthController {
   @ApiUnauthorizedResponse({
     description: "Email/password was invalid or the account is inactive",
   })
-  login(@Body() payload: LoginDto) {
-    return this.authService.login(payload);
+  @RateLimit({
+    keyPrefix: "auth:login",
+    maxRequests: 10,
+    windowMs: 60_000,
+  })
+  async login(
+    @Body() payload: LoginDto,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const authResponse = await this.authService.login(payload);
+    this.setAccessCookie(response, authResponse.accessToken);
+    return authResponse;
   }
 
   @Post("forgot-password")
@@ -64,6 +90,11 @@ export class AuthController {
   @ApiOkResponse({
     description: "Password reset request accepted",
     type: PasswordResetResponseDto,
+  })
+  @RateLimit({
+    keyPrefix: "auth:forgot-password",
+    maxRequests: 5,
+    windowMs: 60_000,
   })
   forgotPassword(@Body() payload: ForgotPasswordDto) {
     return this.authService.requestPasswordReset(payload);
@@ -79,6 +110,11 @@ export class AuthController {
   })
   @ApiBadRequestResponse({
     description: "Reset token is invalid, expired, or the new password is invalid",
+  })
+  @RateLimit({
+    keyPrefix: "auth:reset-password",
+    maxRequests: 10,
+    windowMs: 60_000,
   })
   resetPassword(@Body() payload: ResetPasswordDto) {
     return this.authService.resetPassword(payload);
@@ -114,7 +150,66 @@ export class AuthController {
   @ApiUnauthorizedResponse({
     description: "Bearer token was missing, invalid, expired, or tied to an inactive user",
   })
-  deleteMe(@CurrentUser() user: AuthenticatedUser) {
-    return this.authService.deleteAccount(user.id);
+  async deleteMe(
+    @CurrentUser() user: AuthenticatedUser,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const result = await this.authService.deleteAccount(user.id);
+    response.clearCookie(ACCESS_COOKIE_NAME, this.getCookieOptions());
+    response.clearCookie(CSRF_COOKIE_NAME, this.getCookieOptions());
+    return result;
+  }
+
+  @Post("logout")
+  @ApiOperation({
+    summary: "Log out the current browser session",
+  })
+  @ApiOkResponse({
+    description: "Auth cookie cleared",
+    type: PasswordResetResponseDto,
+  })
+  logout(@Res({ passthrough: true }) response: Response) {
+    response.clearCookie(ACCESS_COOKIE_NAME, this.getCookieOptions());
+    response.clearCookie(CSRF_COOKIE_NAME, this.getCookieOptions());
+    return {
+      message: "You have been logged out.",
+    };
+  }
+
+  private setAccessCookie(response: Response, accessToken: string) {
+    const csrfToken = randomBytes(24).toString("hex");
+
+    response.cookie(ACCESS_COOKIE_NAME, accessToken, {
+      ...this.getCookieOptions(),
+      maxAge: this.resolveCookieMaxAgeMs(),
+    });
+    response.cookie(CSRF_COOKIE_NAME, csrfToken, {
+      ...this.getCookieOptions(),
+      httpOnly: false,
+      maxAge: this.resolveCookieMaxAgeMs(),
+    });
+  }
+
+  private getCookieOptions() {
+    const isProduction = process.env.NODE_ENV === "production";
+
+    return {
+      httpOnly: true,
+      path: "/",
+      sameSite: isProduction ? ("none" as const) : ("lax" as const),
+      secure: isProduction,
+    };
+  }
+
+  private resolveCookieMaxAgeMs() {
+    const fallbackMs = 24 * 60 * 60 * 1000;
+    const raw = process.env.JWT_COOKIE_MAX_AGE_MS?.trim();
+
+    if (!raw) {
+      return fallbackMs;
+    }
+
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : fallbackMs;
   }
 }

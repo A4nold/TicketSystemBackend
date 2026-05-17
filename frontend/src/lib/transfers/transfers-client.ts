@@ -61,7 +61,7 @@ export async function createTransfer(
   return apiFetch<TransferResponse>(`/api/me/tickets/${serialNumber}/transfer`, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${accessToken}`,
+      ...(accessToken && accessToken !== "__cookie_auth__" ? { Authorization: `Bearer ${accessToken}` } : {}),
       "Content-Type": "application/json",
     },
     body: JSON.stringify(payload),
@@ -75,7 +75,7 @@ export async function acceptTransfer(
   return apiFetch<TransferResponse>(`/api/tickets/${serialNumber}/accept-transfer`, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${accessToken}`,
+      ...(accessToken && accessToken !== "__cookie_auth__" ? { Authorization: `Bearer ${accessToken}` } : {}),
       "Content-Type": "application/json",
     },
     body: JSON.stringify({}),
@@ -85,7 +85,7 @@ export async function acceptTransfer(
 export async function listIncomingTransfers(accessToken: string) {
   return apiFetch<IncomingTransfer[]>("/api/me/transfer-inbox", {
     headers: {
-      Authorization: `Bearer ${accessToken}`,
+      ...(accessToken && accessToken !== "__cookie_auth__" ? { Authorization: `Bearer ${accessToken}` } : {}),
     },
   });
 }
@@ -97,7 +97,7 @@ export async function cancelTransfer(
   return apiFetch<TransferResponse>(`/api/me/tickets/${serialNumber}/cancel-transfer`, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${accessToken}`,
+      ...(accessToken && accessToken !== "__cookie_auth__" ? { Authorization: `Bearer ${accessToken}` } : {}),
       "Content-Type": "application/json",
     },
     body: JSON.stringify({}),
@@ -111,7 +111,7 @@ export async function remindTransfer(
   return apiFetch<TransferResponse>(`/api/me/tickets/${serialNumber}/remind-transfer`, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${accessToken}`,
+      ...(accessToken && accessToken !== "__cookie_auth__" ? { Authorization: `Bearer ${accessToken}` } : {}),
       "Content-Type": "application/json",
     },
     body: JSON.stringify({}),

@@ -9,6 +9,7 @@ import {
 import { ApiExcludeController } from "@nestjs/swagger";
 import { Request } from "express";
 
+import { RateLimit } from "../common/security/rate-limit.decorator";
 import { PaymentsService } from "./payments.service";
 
 @ApiExcludeController()
@@ -18,6 +19,11 @@ export class PaymentsController {
 
   @Post("stripe")
   @HttpCode(200)
+  @RateLimit({
+    keyPrefix: "webhook:stripe",
+    maxRequests: 120,
+    windowMs: 60_000,
+  })
   async handleStripeWebhook(
     @Req() request: Request & { rawBody?: Buffer },
     @Headers("stripe-signature") signature?: string,
@@ -37,6 +43,11 @@ export class PaymentsController {
 
   @Post("paystack")
   @HttpCode(200)
+  @RateLimit({
+    keyPrefix: "webhook:paystack",
+    maxRequests: 120,
+    windowMs: 60_000,
+  })
   async handlePaystackWebhook(
     @Req() request: Request & { rawBody?: Buffer },
     @Headers("x-paystack-signature") signature?: string,
