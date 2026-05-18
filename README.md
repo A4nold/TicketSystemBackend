@@ -130,6 +130,7 @@ JWT_EXPIRES_IN=1d
 QR_TOKEN_SECRET=
 QR_TOKEN_EXPIRES_IN=15m
 FRONTEND_APP_URL=http://localhost:3001
+BACKEND_PUBLIC_URL=http://localhost:3000
 CORS_ORIGINS=http://localhost:3001
 PUBLIC_APP_URL=http://localhost:3001
 STRIPE_SECRET_KEY=
@@ -258,7 +259,7 @@ cd mobile
 npx expo start --tunnel
 ```
 
-If mobile checkout is started from the app, Stripe can now return into the app via the `ticketsystem://` scheme on success or cancel. Web checkout continues to return to `FRONTEND_APP_URL`.
+If mobile checkout is started from the app, Stripe can return into the app via the `ticketsystem://` scheme on success or cancel. Set `BACKEND_PUBLIC_URL` to your public backend origin so Stripe can use `/api/payments/stripe/return` as an HTTPS bridge back into the app deep link. Web checkout continues to return to `FRONTEND_APP_URL`.
 
 ## Checkout Fee Policy
 

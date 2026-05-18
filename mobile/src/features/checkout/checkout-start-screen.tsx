@@ -15,6 +15,7 @@ import { useAuth } from "@/components/providers/auth-provider";
 import { SupportCard } from "@/components/support/support-card";
 import { ActionButton, Card, Screen } from "@/components/ui";
 import { getPublicEventBySlug } from "@/lib/events/public-events-client";
+import { reportMobileRuntimeIssue } from "@/lib/monitoring/runtime-monitoring";
 import {
   createCheckoutOrder,
   getCheckoutQuote,
@@ -377,6 +378,19 @@ export function CheckoutStartScreen() {
 
       const normalizedCheckoutUrl = normalizeCheckoutUrl(order.checkoutUrl);
       if (!normalizedCheckoutUrl) {
+        void reportMobileRuntimeIssue({
+          component: "checkout-start-screen",
+          message: "Invalid checkout URL returned by backend.",
+          metadata: {
+            eventSlug: resolvedEvent.slug,
+            orderId: order.id,
+            paymentProvider: order.paymentProvider,
+            rawCheckoutUrl: order.checkoutUrl,
+            selectedTicketTypeId: resolvedTicketType.id,
+          },
+          route: "/checkout/start",
+          type: "checkout-invalid-url",
+        });
         throw new Error(
           "Checkout session returned an invalid payment URL. Please retry checkout.",
         );
@@ -384,6 +398,19 @@ export function CheckoutStartScreen() {
 
       const canOpenCheckoutUrl = await Linking.canOpenURL(normalizedCheckoutUrl);
       if (!canOpenCheckoutUrl) {
+        void reportMobileRuntimeIssue({
+          component: "checkout-start-screen",
+          message: "Device rejected checkout URL open attempt.",
+          metadata: {
+            eventSlug: resolvedEvent.slug,
+            normalizedCheckoutUrl,
+            orderId: order.id,
+            paymentProvider: order.paymentProvider,
+            selectedTicketTypeId: resolvedTicketType.id,
+          },
+          route: "/checkout/start",
+          type: "checkout-url-open-rejected",
+        });
         throw new Error(
           "Your device could not open the payment URL right now. Please retry checkout.",
         );
@@ -395,6 +422,21 @@ export function CheckoutStartScreen() {
       return;
     } catch (error) {
       setIsAwaitingPaymentReturn(false);
+      void reportMobileRuntimeIssue({
+        component: "checkout-start-screen",
+        message:
+          error instanceof Error
+            ? error.message
+            : "Checkout failed before opening payment URL.",
+        metadata: {
+          eventSlug: resolvedEvent.slug,
+          offerIntentIdPresent: Boolean(offerIntentId),
+          selectedTicketTypeId: resolvedTicketType.id,
+        },
+        route: "/checkout/start",
+        stack: error instanceof Error ? error.stack : undefined,
+        type: "checkout-start-failed",
+      });
       setErrorMessage(error instanceof Error ? error.message : "Checkout could not start right now.");
     } finally {
       setIsSubmitting(false);

@@ -80,7 +80,7 @@ export class PaymentsService {
       `payments.stripe.checkout_session.started orderId=${order.id} userId=${order.userId} total=${order.totalAmount.toFixed(2)} currency=${order.currency}`,
     );
     const stripe = this.getStripeClient();
-    const frontendUrl = process.env.FRONTEND_APP_URL;
+    const frontendUrl = this.normalizeUrlInput(process.env.FRONTEND_APP_URL);
 
     if (!frontendUrl && (!order.successReturnUrl || !order.cancelReturnUrl)) {
       throw new NotImplementedException(
@@ -89,13 +89,17 @@ export class PaymentsService {
     }
 
     const successUrl = this.buildCheckoutReturnUrl({
+      allowCustomScheme: false,
       fallbackBaseUrl: `${frontendUrl?.replace(/\/$/, "") ?? ""}/checkout/success`,
+      bridgeBaseUrl: this.resolveStripeReturnBridgeUrl(),
       orderId: order.id,
       providedUrl: order.successReturnUrl,
       sessionPlaceholder: true,
     });
     const cancelUrl = this.buildCheckoutReturnUrl({
+      allowCustomScheme: false,
       fallbackBaseUrl: `${frontendUrl?.replace(/\/$/, "") ?? ""}/checkout/cancel`,
+      bridgeBaseUrl: this.resolveStripeReturnBridgeUrl(),
       orderId: order.id,
       providedUrl: order.cancelReturnUrl,
       sessionPlaceholder: false,
@@ -171,7 +175,7 @@ export class PaymentsService {
       `payments.paystack.transaction_initialize.started orderId=${order.id} userId=${order.userId} total=${order.totalAmount.toFixed(2)} currency=${order.currency}`,
     );
 
-    const frontendUrl = process.env.FRONTEND_APP_URL;
+    const frontendUrl = this.normalizeUrlInput(process.env.FRONTEND_APP_URL);
 
     if (!frontendUrl && !order.successReturnUrl) {
       throw new NotImplementedException(
@@ -237,25 +241,58 @@ export class PaymentsService {
 
   private buildCheckoutReturnUrl({
     fallbackBaseUrl,
+    bridgeBaseUrl,
     orderId,
     providedUrl,
     sessionPlaceholder,
+    allowCustomScheme = true,
   }: {
     fallbackBaseUrl: string;
+    bridgeBaseUrl?: string | null;
     orderId: string;
     providedUrl?: string;
     sessionPlaceholder: boolean;
+    allowCustomScheme?: boolean;
   }) {
-    const trimmedProvidedUrl = providedUrl?.trim();
+    const trimmedProvidedUrl = this.normalizeUrlInput(providedUrl);
     const parsedProvidedUrl = trimmedProvidedUrl
       ? this.tryParseUrl(trimmedProvidedUrl)
       : null;
-    const parsedFallbackUrl = this.tryParseUrl(fallbackBaseUrl);
-    const baseUrl = parsedProvidedUrl
+    const normalizedFallbackBaseUrl = this.normalizeUrlInput(fallbackBaseUrl) ?? fallbackBaseUrl;
+    const parsedFallbackUrl = this.tryParseUrl(normalizedFallbackBaseUrl);
+    const providedUrlIsHttp =
+      parsedProvidedUrl?.protocol === "http:" || parsedProvidedUrl?.protocol === "https:";
+    const providedUrlIsAllowed = allowCustomScheme
+      ? Boolean(parsedProvidedUrl)
+      : providedUrlIsHttp;
+    const shouldUseBridgeUrl =
+      !allowCustomScheme &&
+      Boolean(parsedProvidedUrl) &&
+      !providedUrlIsHttp &&
+      Boolean(bridgeBaseUrl);
+
+    let baseUrl = providedUrlIsAllowed
       ? trimmedProvidedUrl!
       : parsedFallbackUrl
-        ? fallbackBaseUrl
-        : trimmedProvidedUrl || fallbackBaseUrl;
+        ? normalizedFallbackBaseUrl
+        : trimmedProvidedUrl || normalizedFallbackBaseUrl;
+
+    if (shouldUseBridgeUrl) {
+      const bridgeUrl = new URL(bridgeBaseUrl!);
+      const mobileScheme = parsedProvidedUrl?.protocol.replace(":", "");
+      const mobilePath = this.normalizeMobileReturnPath(parsedProvidedUrl);
+
+      if (mobileScheme) {
+        bridgeUrl.searchParams.set("scheme", mobileScheme);
+      }
+      bridgeUrl.searchParams.set("path", mobilePath);
+
+      if (parsedFallbackUrl) {
+        bridgeUrl.searchParams.set("fallback", normalizedFallbackBaseUrl);
+      }
+
+      baseUrl = bridgeUrl.toString();
+    }
 
     if (!baseUrl) {
       throw new NotImplementedException("A valid checkout return URL could not be resolved.");
@@ -269,7 +306,15 @@ export class PaymentsService {
         url.searchParams.set("session_id", "{CHECKOUT_SESSION_ID}");
       }
 
-      return url.toString();
+      let result = url.toString();
+      if (sessionPlaceholder) {
+        result = result.replace(
+          encodeURIComponent("{CHECKOUT_SESSION_ID}"),
+          "{CHECKOUT_SESSION_ID}",
+        );
+      }
+
+      return result;
     } catch {
       const separator = baseUrl.includes("?") ? "&" : "?";
       const sessionSuffix = sessionPlaceholder
@@ -280,12 +325,61 @@ export class PaymentsService {
     }
   }
 
+  private resolveStripeReturnBridgeUrl() {
+    const configuredBaseUrl =
+      this.normalizeUrlInput(process.env.BACKEND_PUBLIC_URL) ||
+      this.normalizeUrlInput(process.env.PUBLIC_API_URL) ||
+      null;
+
+    if (!configuredBaseUrl) {
+      return null;
+    }
+
+    try {
+      const url = new URL(configuredBaseUrl);
+      url.pathname = `${url.pathname.replace(/\/$/, "")}/api/payments/stripe/return`;
+      url.search = "";
+      return url.toString();
+    } catch {
+      return null;
+    }
+  }
+
   private tryParseUrl(value: string) {
     try {
       return new URL(value);
     } catch {
       return null;
     }
+  }
+
+  private normalizeMobileReturnPath(parsedProvidedUrl: URL | null) {
+    if (!parsedProvidedUrl) {
+      return "/checkout/success";
+    }
+
+    const hostPart = parsedProvidedUrl.host ? `/${parsedProvidedUrl.host}` : "";
+    const pathname = parsedProvidedUrl.pathname || "";
+    const combined = `${hostPart}${pathname}`.replace(/\/{2,}/g, "/");
+
+    return combined.startsWith("/") ? combined : `/${combined}`;
+  }
+
+  private normalizeUrlInput(value?: string | null) {
+    if (!value) {
+      return null;
+    }
+
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    const quoted =
+      (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+      (trimmed.startsWith("'") && trimmed.endsWith("'"));
+
+    return quoted ? trimmed.slice(1, -1).trim() : trimmed;
   }
 
   async handleStripeWebhook(rawBody: Buffer, signature: string) {
