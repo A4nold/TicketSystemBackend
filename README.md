@@ -69,7 +69,6 @@ The app is currently organized around four main product surfaces:
 ├── prisma/             # Prisma schema and seed scripts
 ├── frontend/           # Next.js frontend
 ├── mobile/             # Expo React Native public, attendee, organizer, and scanner app
-└── _bmad-output/       # planning and story artifacts
 ```
 
 ## Architecture Notes
