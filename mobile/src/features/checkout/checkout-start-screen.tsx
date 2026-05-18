@@ -46,6 +46,24 @@ function getPaymentProviderForCurrency(currency: string) {
   return currency.toUpperCase() === "NGN" ? "PAYSTACK" : "STRIPE";
 }
 
+function normalizeCheckoutUrl(rawUrl: string) {
+  const trimmed = rawUrl.trim();
+
+  if (!trimmed) {
+    return null;
+  }
+
+  if (/^https?:\/\//i.test(trimmed)) {
+    return trimmed;
+  }
+
+  if (trimmed.startsWith("//")) {
+    return `https:${trimmed}`;
+  }
+
+  return null;
+}
+
 function describeFeePolicy(policy: {
   fixedAmount: string;
   fixedFeeApplication: "PER_ORDER" | "PER_TICKET";
@@ -357,8 +375,22 @@ export function CheckoutStartScreen() {
         return;
       }
 
+      const normalizedCheckoutUrl = normalizeCheckoutUrl(order.checkoutUrl);
+      if (!normalizedCheckoutUrl) {
+        throw new Error(
+          "Checkout session returned an invalid payment URL. Please retry checkout.",
+        );
+      }
+
+      const canOpenCheckoutUrl = await Linking.canOpenURL(normalizedCheckoutUrl);
+      if (!canOpenCheckoutUrl) {
+        throw new Error(
+          "Your device could not open the payment URL right now. Please retry checkout.",
+        );
+      }
+
       setIsAwaitingPaymentReturn(true);
-      await Linking.openURL(order.checkoutUrl);
+      await Linking.openURL(normalizedCheckoutUrl);
       setIsSubmitting(false);
       return;
     } catch (error) {
