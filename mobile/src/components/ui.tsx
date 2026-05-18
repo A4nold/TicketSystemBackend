@@ -1,7 +1,7 @@
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { palette } from "@/styles/theme";
+import { elevation, palette, radius, spacing, typography } from "@/styles/theme";
 
 export function Screen({
   children,
@@ -87,14 +87,14 @@ export function ActionButton({
 const styles = StyleSheet.create({
   body: {
     flex: 1,
-    gap: 16,
+    gap: spacing.md,
   },
   button: {
     alignItems: "center",
-    borderRadius: 999,
+    borderRadius: radius.pill,
     justifyContent: "center",
-    minHeight: 52,
-    paddingHorizontal: 18,
+    minHeight: 48,
+    paddingHorizontal: spacing.md,
   },
   buttonDisabled: {
     opacity: 0.55,
@@ -104,43 +104,34 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     color: "#ffffff",
-    fontSize: 15,
+    fontSize: typography.body.fontSize,
     fontWeight: "700",
   },
   card: {
-    borderRadius: 24,
+    borderRadius: radius.xl,
     borderWidth: 1,
-    gap: 12,
+    gap: spacing.sm,
     overflow: "hidden",
-    padding: 18,
-    shadowColor: palette.black,
-    shadowOffset: {
-      height: 14,
-      width: 0,
-    },
-    shadowOpacity: 0.08,
-    shadowRadius: 28,
+    padding: spacing.md,
+    ...elevation.card,
   },
   cardUnpadded: {
     padding: 0,
   },
   chrome: {
     overflow: "hidden",
-    paddingBottom: 10,
+    paddingBottom: spacing.xs,
     position: "relative",
   },
   header: {
-    gap: 8,
-    paddingHorizontal: 20,
-    paddingTop: 12,
+    gap: spacing.xs,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.sm,
     zIndex: 1,
   },
   kicker: {
     color: palette.accentDeep,
-    fontSize: 12,
-    fontWeight: "800",
-    letterSpacing: 1.4,
-    textTransform: "uppercase",
+    ...typography.labelXs,
   },
   orbPrimary: {
     backgroundColor: "#f0cfab",
@@ -179,14 +170,12 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     color: palette.muted,
-    fontSize: 15,
-    lineHeight: 22,
+    ...typography.body,
     maxWidth: 360,
   },
   title: {
     color: palette.ink,
-    fontSize: 36,
-    fontWeight: "800",
+    ...typography.headingLg,
   },
 });
 

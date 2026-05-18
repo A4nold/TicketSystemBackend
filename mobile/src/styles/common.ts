@@ -1,22 +1,20 @@
 import { StyleSheet } from "react-native";
 
-import { palette } from "@/styles/theme";
+import { palette, radius, spacing, typography } from "@/styles/theme";
 
 export const commonStyles = StyleSheet.create({
   bodyCopy: {
     color: palette.muted,
-    fontSize: 15,
-    lineHeight: 22,
+    ...typography.body,
   },
   contentContainer: {
-    gap: 18,
-    padding: 20,
+    gap: spacing.md,
+    padding: spacing.lg,
     paddingBottom: 48,
   },
   headingLg: {
     color: palette.ink,
-    fontSize: 22,
-    fontWeight: "800",
+    ...typography.headingMd,
   },
   headingMd: {
     color: palette.ink,
@@ -25,20 +23,18 @@ export const commonStyles = StyleSheet.create({
   },
   heroDarkEyebrow: {
     color: "#ffe0bf",
-    fontSize: 12,
-    fontWeight: "800",
+    ...typography.labelXs,
     letterSpacing: 1.5,
-    textTransform: "uppercase",
   },
   heroDarkMetricCard: {
     backgroundColor: "rgba(255,255,255,0.08)",
     borderColor: "rgba(255,255,255,0.12)",
-    borderRadius: 18,
+    borderRadius: radius.md,
     borderWidth: 1,
     flex: 1,
-    gap: 6,
+    gap: spacing.xs,
     minHeight: 84,
-    padding: 14,
+    padding: spacing.sm,
   },
   heroDarkMetricLabel: {
     color: "#dbc7b6",
@@ -49,18 +45,18 @@ export const commonStyles = StyleSheet.create({
   },
   heroDarkMetricRow: {
     flexDirection: "row",
-    gap: 12,
-    marginTop: 8,
+    gap: spacing.sm,
+    marginTop: spacing.xs,
   },
   heroDarkShell: {
     backgroundColor: palette.black,
-    gap: 14,
-    padding: 22,
+    gap: spacing.sm,
+    padding: spacing.lg,
   },
   neutralPill: {
     backgroundColor: palette.backgroundMuted,
     borderColor: palette.divider,
-    borderRadius: 999,
+    borderRadius: radius.pill,
     borderWidth: 1,
     paddingHorizontal: 10,
     paddingVertical: 7,
@@ -73,7 +69,7 @@ export const commonStyles = StyleSheet.create({
     textTransform: "uppercase",
   },
   pillBase: {
-    borderRadius: 999,
+    borderRadius: radius.pill,
     borderWidth: 1,
     paddingHorizontal: 10,
     paddingVertical: 7,
@@ -81,21 +77,21 @@ export const commonStyles = StyleSheet.create({
   rowBetweenCenterGap12: {
     alignItems: "center",
     flexDirection: "row",
-    gap: 12,
+    gap: spacing.sm,
     justifyContent: "space-between",
   },
   sectionHeaderMeta: {
     alignItems: "flex-end",
-    gap: 8,
+    gap: spacing.xs,
   },
   sectionShell: {
-    gap: 14,
-    padding: 18,
+    gap: spacing.sm,
+    padding: spacing.md,
   },
   sectionStatusPill: {
     backgroundColor: palette.backgroundMuted,
     borderColor: palette.divider,
-    borderRadius: 999,
+    borderRadius: radius.pill,
     borderWidth: 1,
     paddingHorizontal: 10,
     paddingVertical: 7,
@@ -103,7 +99,7 @@ export const commonStyles = StyleSheet.create({
   sectionHeaderRow: {
     alignItems: "flex-start",
     flexDirection: "row",
-    gap: 12,
+    gap: spacing.sm,
     justifyContent: "space-between",
   },
   sectionStatusPillText: {
@@ -116,17 +112,17 @@ export const commonStyles = StyleSheet.create({
   softCard: {
     backgroundColor: palette.card,
     borderColor: palette.divider,
-    borderRadius: 22,
+    borderRadius: radius.lg,
     borderWidth: 1,
-    gap: 10,
-    padding: 16,
+    gap: spacing.xs,
+    padding: spacing.md,
   },
   subtleEmptyCard: {
     backgroundColor: palette.backgroundMuted,
     borderColor: palette.divider,
-    borderRadius: 20,
+    borderRadius: radius.lg,
     borderWidth: 1,
-    gap: 8,
-    padding: 16,
+    gap: spacing.xs,
+    padding: spacing.md,
   },
 });

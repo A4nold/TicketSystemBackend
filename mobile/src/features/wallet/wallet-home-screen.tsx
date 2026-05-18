@@ -216,10 +216,29 @@ export function WalletHomeScreen() {
         ) : null}
 
         {walletQuery.isLoading ? (
-          <Card>
-            <Text style={styles.sectionTitle}>Loading your tickets</Text>
-            <Text style={styles.copy}>Fetching the latest ticket status.</Text>
-          </Card>
+          <>
+            <Card>
+              <Text style={styles.sectionTitle}>Preparing your wallet</Text>
+              <Text style={styles.copy}>Fetching your latest tickets and readiness state.</Text>
+            </Card>
+            <Card padded={false}>
+              <View style={styles.skeletonCard}>
+                <View style={styles.skeletonLineLg} />
+                <View style={styles.skeletonLineMd} />
+                <View style={styles.skeletonRow}>
+                  <View style={styles.skeletonPill} />
+                  <View style={styles.skeletonPill} />
+                </View>
+                <View style={styles.skeletonButton} />
+              </View>
+            </Card>
+            <Card padded={false}>
+              <View style={styles.skeletonListCard}>
+                <View style={styles.skeletonLineMd} />
+                <View style={styles.skeletonLineSm} />
+              </View>
+            </Card>
+          </>
         ) : null}
 
         {walletQuery.isError ? (
@@ -241,8 +260,22 @@ export function WalletHomeScreen() {
 
         {!walletQuery.isLoading && !walletQuery.isError && !primaryTicket ? (
           <Card>
-            <Text style={styles.sectionTitle}>No tickets yet</Text>
-            <Text style={styles.copy}>You don't have any tickets on this account yet.</Text>
+            <Text style={styles.sectionTitle}>Your wallet is ready</Text>
+            <Text style={styles.copy}>
+              You do not have tickets yet. Discover upcoming experiences and your next pass will
+              appear here automatically after checkout.
+            </Text>
+            <View style={styles.emptyStateActions}>
+              <ActionButton
+                onPress={() => router.push("/(public)")}
+                title="Explore events"
+              />
+              <ActionButton
+                onPress={() => router.push("/(tabs)/activity" as never)}
+                title="Open activity center"
+                variant="secondary"
+              />
+            </View>
           </Card>
         ) : null}
 
@@ -386,6 +419,10 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "700",
   },
+  emptyStateActions: {
+    gap: 10,
+    marginTop: 12,
+  },
   eyebrow: {
     color: palette.successDeep,
     fontSize: 12,
@@ -516,6 +553,58 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     ...commonStyles.headingLg,
+  },
+  skeletonButton: {
+    backgroundColor: "#eadcca",
+    borderRadius: 999,
+    height: 44,
+    marginTop: 6,
+    width: "62%",
+  },
+  skeletonCard: {
+    backgroundColor: "#fff7eb",
+    borderColor: palette.divider,
+    borderRadius: 22,
+    borderWidth: 1,
+    gap: 12,
+    padding: 18,
+  },
+  skeletonLineLg: {
+    backgroundColor: "#e9dac7",
+    borderRadius: 8,
+    height: 20,
+    width: "72%",
+  },
+  skeletonLineMd: {
+    backgroundColor: "#eee1d0",
+    borderRadius: 8,
+    height: 14,
+    width: "88%",
+  },
+  skeletonLineSm: {
+    backgroundColor: "#eee1d0",
+    borderRadius: 8,
+    height: 12,
+    width: "60%",
+  },
+  skeletonListCard: {
+    backgroundColor: "#fff7eb",
+    borderColor: palette.divider,
+    borderRadius: 18,
+    borderWidth: 1,
+    gap: 10,
+    padding: 16,
+  },
+  skeletonPill: {
+    backgroundColor: "#e8d8c5",
+    borderRadius: 999,
+    height: 26,
+    width: 110,
+  },
+  skeletonRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 4,
   },
   serial: {
     color: palette.ink,

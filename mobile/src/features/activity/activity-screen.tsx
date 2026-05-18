@@ -202,7 +202,20 @@ export function ActivityScreen() {
             subtitle="Requests that still need your response."
             title="Transfer requests"
           >
-            {transfersQuery.data?.length ? (
+            {transfersQuery.isLoading ? (
+              <>
+                <View style={styles.skeletonCard}>
+                  <View style={styles.skeletonLineLg} />
+                  <View style={styles.skeletonLineMd} />
+                  <View style={styles.skeletonLineSm} />
+                </View>
+                <View style={styles.skeletonCard}>
+                  <View style={styles.skeletonLineLg} />
+                  <View style={styles.skeletonLineMd} />
+                  <View style={styles.skeletonLineSm} />
+                </View>
+              </>
+            ) : transfersQuery.data?.length ? (
               transfersQuery.data.map((transfer) => (
                 <Pressable
                   key={transfer.id}
@@ -230,8 +243,18 @@ export function ActivityScreen() {
               ))
             ) : (
               <View style={styles.emptyCard}>
-                <Text style={styles.emptyTitle}>No pending incoming transfers</Text>
-                <Text style={styles.copy}>You're all caught up.</Text>
+                <Text style={styles.emptyTitle}>No transfer requests waiting</Text>
+                <Text style={styles.copy}>
+                  You are all caught up. New incoming tickets and transfer approvals will appear
+                  here.
+                </Text>
+                <View style={styles.emptyStateActions}>
+                  <ActionButton
+                    onPress={() => router.push("/(public)" as never)}
+                    title="Explore events"
+                    variant="secondary"
+                  />
+                </View>
               </View>
             )}
           </ActivitySection>
@@ -246,7 +269,20 @@ export function ActivityScreen() {
             subtitle="Recent updates from your wallet activity."
             title="Notifications"
           >
-            {notificationItems.length ? (
+            {notificationsQuery.isLoading ? (
+              <>
+                <View style={styles.skeletonCard}>
+                  <View style={styles.skeletonLineLg} />
+                  <View style={styles.skeletonLineMd} />
+                  <View style={styles.skeletonLineSm} />
+                </View>
+                <View style={styles.skeletonCard}>
+                  <View style={styles.skeletonLineLg} />
+                  <View style={styles.skeletonLineMd} />
+                  <View style={styles.skeletonLineSm} />
+                </View>
+              </>
+            ) : notificationItems.length ? (
               notificationItems.map((notification) => (
                 <Pressable
                   key={notification.id}
@@ -278,8 +314,21 @@ export function ActivityScreen() {
               ))
             ) : (
               <View style={styles.emptyCard}>
-                <Text style={styles.emptyTitle}>No wallet notifications yet</Text>
-                <Text style={styles.copy}>New activity will appear here.</Text>
+                <Text style={styles.emptyTitle}>No notifications yet</Text>
+                <Text style={styles.copy}>
+                  Important updates like purchases, offer reviews, and transfers will show up
+                  here.
+                </Text>
+                <View style={styles.emptyStateActions}>
+                  <ActionButton
+                    onPress={async () => {
+                      await notificationsQuery.refetch();
+                      setActivityMessage("Notifications refreshed.");
+                    }}
+                    title="Refresh notifications"
+                    variant="secondary"
+                  />
+                </View>
               </View>
             )}
 
@@ -342,6 +391,9 @@ const styles = StyleSheet.create({
     color: palette.ink,
     fontSize: 17,
     fontWeight: "700",
+  },
+  emptyStateActions: {
+    marginTop: 12,
   },
   feedBody: {
     color: palette.ink,
@@ -450,6 +502,32 @@ const styles = StyleSheet.create({
   },
   sectionHeaderMeta: {
     ...commonStyles.sectionHeaderMeta,
+  },
+  skeletonCard: {
+    backgroundColor: "#fff7eb",
+    borderColor: palette.divider,
+    borderRadius: 18,
+    borderWidth: 1,
+    gap: 10,
+    padding: 16,
+  },
+  skeletonLineLg: {
+    backgroundColor: "#e9dac7",
+    borderRadius: 8,
+    height: 17,
+    width: "70%",
+  },
+  skeletonLineMd: {
+    backgroundColor: "#eee1d0",
+    borderRadius: 8,
+    height: 13,
+    width: "88%",
+  },
+  skeletonLineSm: {
+    backgroundColor: "#eee1d0",
+    borderRadius: 8,
+    height: 12,
+    width: "52%",
   },
   sectionShell: {
     ...commonStyles.sectionShell,
