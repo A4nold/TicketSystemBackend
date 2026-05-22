@@ -81,7 +81,7 @@ jobs:
         run: npm run build
         env:
           JWT_SECRET: ci-jwt-secret
-          DATABASE_URL: postgresql://placeholder:placeholder@localhost:5432/placeholder
+          DATABASE_URL: postgresql://localhost:5432/placeholder
 
   frontend-build:
     name: Frontend Build
