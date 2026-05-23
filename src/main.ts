@@ -4,7 +4,9 @@ import "dotenv/config";
 import { Logger, ValidationPipe } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
+import { static as serveStatic } from "express";
 import helmet from "helmet";
+import { join } from "path";
 
 import { AppModule } from "./app.module";
 import { assertSecurityModeConsistency } from "./common/env-security";
@@ -87,6 +89,7 @@ async function bootstrap() {
     }),
   );
   app.useGlobalFilters(new GlobalHttpExceptionFilter());
+  app.use("/media", serveStatic(join(process.cwd(), "uploads")));
 
   const swaggerConfig = new DocumentBuilder()
     .setTitle("Private Event Smart Ticketing API")

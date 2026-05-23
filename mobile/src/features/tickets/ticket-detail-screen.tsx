@@ -15,6 +15,7 @@ import {
 
 import { useAuth } from "@/components/providers/auth-provider";
 import { useWalletSync } from "@/components/providers/wallet-sync-provider";
+import { CollapsibleSection } from "@/components/section-primitives";
 import { ActionButton, Card, Screen } from "@/components/ui";
 import { formatDateTime, formatMoney } from "@/lib/formatters";
 import {
@@ -49,66 +50,6 @@ function isValidEmail(value: string) {
 
 function isValidPrice(value: string) {
   return /^\d+(\.\d{1,2})?$/.test(value.trim());
-}
-
-function SectionCard({
-  title,
-  subtitle,
-  status,
-  expanded,
-  onToggle,
-  children,
-}: {
-  children: React.ReactNode;
-  expanded: boolean;
-  onToggle: () => void;
-  status?: "attention" | "default" | "saving" | "saved";
-  subtitle: string;
-  title: string;
-}) {
-  return (
-    <Card padded={false}>
-      <View style={styles.sectionShell}>
-        <Pressable onPress={onToggle} style={styles.sectionHeaderButton}>
-          <View style={styles.sectionHeaderCopy}>
-            <Text style={styles.sectionTitle}>{title}</Text>
-            <Text style={styles.copy}>{subtitle}</Text>
-          </View>
-          <View style={styles.sectionHeaderMeta}>
-            {status ? (
-              <View
-                style={[
-                  styles.sectionStatePill,
-                  status === "attention" ? styles.sectionStateAttention : null,
-                  status === "saving" ? styles.sectionStateSaving : null,
-                  status === "saved" ? styles.sectionStateSaved : null,
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.sectionStatePillText,
-                    status === "attention" ? styles.sectionStateAttentionText : null,
-                    status === "saving" ? styles.sectionStateSavingText : null,
-                    status === "saved" ? styles.sectionStateSavedText : null,
-                  ]}
-                >
-                  {status === "attention"
-                    ? "Needs review"
-                    : status === "saving"
-                      ? "Saving"
-                      : status === "saved"
-                        ? "Saved"
-                        : "Ready"}
-                </Text>
-              </View>
-            ) : null}
-            <Text style={styles.sectionChevron}>{expanded ? "Hide" : "Open"}</Text>
-          </View>
-        </Pressable>
-        {expanded ? children : null}
-      </View>
-    </Card>
-  );
 }
 
 export function TicketDetailScreen({ serialNumber }: { serialNumber: string }) {
@@ -303,23 +244,22 @@ export function TicketDetailScreen({ serialNumber }: { serialNumber: string }) {
   return (
     <Screen
       title="Ticket detail"
-      subtitle="View your ticket, show your QR code, or manage ticket actions."
+      subtitle="Entry, transfer, resale."
+      compactHeader
     >
       <>
       <ScrollView contentContainerStyle={styles.content}>
         {ticketQuery.isLoading ? (
           <Card>
             <Text style={styles.sectionTitle}>Loading ticket</Text>
-            <Text style={styles.copy}>Fetching the latest ticket details.</Text>
+            <Text style={styles.copy}>Fetching latest details.</Text>
           </Card>
         ) : null}
 
         {ticketQuery.isError ? (
           <Card tone="warning">
             <Text style={styles.sectionTitle}>Ticket unavailable</Text>
-            <Text style={styles.copy}>
-              We couldn't load this ticket right now. Try again or go back to your wallet.
-            </Text>
+            <Text style={styles.copy}>We couldn't load this ticket right now.</Text>
             <ActionButton onPress={() => void ticketQuery.refetch()} title="Retry ticket" />
           </Card>
         ) : null}
@@ -332,8 +272,8 @@ export function TicketDetailScreen({ serialNumber }: { serialNumber: string }) {
                   <View style={styles.heroHeaderCopy}>
                     <Text style={styles.heroEyebrow}>Live ticket</Text>
                     <Text style={styles.sectionTitle}>{ticket.event.title}</Text>
-                    <Text style={styles.copy}>
-                      {ticket.ticketType.name} · {formatDateTime(ticket.event.startsAt)}
+                    <Text style={styles.copy} numberOfLines={1}>
+                      🎟 {ticket.ticketType.name} · 🗓 {formatDateTime(ticket.event.startsAt)}
                     </Text>
                   </View>
                   <View style={styles.statusPill}>
@@ -354,17 +294,15 @@ export function TicketDetailScreen({ serialNumber }: { serialNumber: string }) {
               </View>
             </Card>
 
-            <SectionCard
+            <CollapsibleSection
               expanded={expandedSections.qr}
               onToggle={() => toggleSection("qr")}
               status={showQr ? "saved" : "default"}
-              subtitle="Open your scan-ready QR only when you need it."
+              subtitle="Open only when you're about to scan."
               title="Entry QR"
             >
               {!canShowQr ? (
-                <Text style={styles.copy}>
-                  This ticket isn't available for entry right now, so the QR code is hidden.
-                </Text>
+                <Text style={styles.copy}>This ticket isn't entry-ready yet, so QR is hidden.</Text>
               ) : null}
               {canShowQr && !showQr ? (
                 <ActionButton
@@ -376,7 +314,7 @@ export function TicketDetailScreen({ serialNumber }: { serialNumber: string }) {
                 />
               ) : null}
               {showQr && qrQuery.isLoading ? (
-                <Text style={styles.copy}>Preparing your QR code.</Text>
+                <Text style={styles.copy}>Preparing QR code.</Text>
               ) : null}
               {showQr && qrQuery.isError ? (
                 <View style={styles.stack}>
@@ -405,9 +343,9 @@ export function TicketDetailScreen({ serialNumber }: { serialNumber: string }) {
                   </View>
                 </View>
               ) : null}
-            </SectionCard>
+            </CollapsibleSection>
 
-            <SectionCard
+            <CollapsibleSection
               expanded={expandedSections.transfer}
               onToggle={() => toggleSection("transfer")}
               status={
@@ -419,7 +357,7 @@ export function TicketDetailScreen({ serialNumber }: { serialNumber: string }) {
                       ? "saved"
                       : "default"
               }
-              subtitle="Send this ticket to someone else. Ownership only changes after they accept."
+              subtitle="Send to another attendee."
               title="Transfer ticket"
             >
               <TextInput
@@ -473,9 +411,9 @@ export function TicketDetailScreen({ serialNumber }: { serialNumber: string }) {
                 title="Send reminder"
                 variant="secondary"
               />
-            </SectionCard>
+            </CollapsibleSection>
 
-            <SectionCard
+            <CollapsibleSection
               expanded={expandedSections.resale}
               onToggle={() => toggleSection("resale")}
               status={
@@ -488,7 +426,7 @@ export function TicketDetailScreen({ serialNumber }: { serialNumber: string }) {
                       : "default"
               }
               subtitle={resaleSummary}
-              title="Resale listing"
+              title="Resale"
             >
               <TextInput
                 keyboardType="numeric"
@@ -529,7 +467,7 @@ export function TicketDetailScreen({ serialNumber }: { serialNumber: string }) {
                 title="Cancel listing"
                 variant="secondary"
               />
-            </SectionCard>
+            </CollapsibleSection>
           </>
         ) : null}
 
@@ -548,7 +486,7 @@ export function TicketDetailScreen({ serialNumber }: { serialNumber: string }) {
               <Text style={styles.stickyHint}>
                 {stickyAction.disabled
                   ? "Finish the required fields to continue."
-                  : "You can complete this action now."}
+                  : "Ready to submit."}
               </Text>
             </View>
             <View style={styles.stickyActionWrap}>
@@ -668,53 +606,6 @@ const styles = StyleSheet.create({
   },
   qrWrap: {
     gap: 14,
-  },
-  sectionShell: {
-    ...commonStyles.sectionShell,
-  },
-  sectionChevron: {
-    color: palette.muted,
-    fontSize: 12,
-    fontWeight: "800",
-    letterSpacing: 0.5,
-    textTransform: "uppercase",
-  },
-  sectionHeaderButton: {
-    ...commonStyles.sectionHeaderRow,
-  },
-  sectionHeaderCopy: {
-    flex: 1,
-    gap: 6,
-  },
-  sectionHeaderMeta: {
-    ...commonStyles.sectionHeaderMeta,
-  },
-  sectionStateAttention: {
-    backgroundColor: palette.warningSoft,
-    borderColor: "#ead39a",
-  },
-  sectionStateAttentionText: {
-    color: palette.warning,
-  },
-  sectionStatePill: {
-    ...commonStyles.sectionStatusPill,
-  },
-  sectionStatePillText: {
-    ...commonStyles.sectionStatusPillText,
-  },
-  sectionStateSaved: {
-    backgroundColor: palette.successSoft,
-    borderColor: "#b8d9ca",
-  },
-  sectionStateSavedText: {
-    color: palette.successDeep,
-  },
-  sectionStateSaving: {
-    backgroundColor: palette.accentSoft,
-    borderColor: "#e7b98f",
-  },
-  sectionStateSavingText: {
-    color: palette.accentDeep,
   },
   sectionTitle: {
     ...commonStyles.headingLg,

@@ -102,6 +102,30 @@ export class CreateEventDto {
   coverImageUrl?: string;
 
   @ApiPropertyOptional({
+    example: "Ada invited you to Campus Neon Takeover",
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(180)
+  shareHeadline?: string;
+
+  @ApiPropertyOptional({
+    example: "Get your ticket on Maya",
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(320)
+  shareDescription?: string;
+
+  @ApiPropertyOptional({
+    example: "https://example.com/event-share-card.jpg",
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  shareImageUrl?: string;
+
+  @ApiPropertyOptional({
     example: "2026-04-01T10:00:00.000Z",
   })
   @IsOptional()

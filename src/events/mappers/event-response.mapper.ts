@@ -54,6 +54,9 @@ export type EventSummarySource = {
   endsAt: Date | null;
   status: string;
   coverImageUrl: string | null;
+  shareHeadline?: string | null;
+  shareDescription?: string | null;
+  shareImageUrl?: string | null;
   allowResale: boolean;
   resaleStartsAt: Date | null;
   resaleEndsAt: Date | null;
@@ -130,6 +133,9 @@ export function toEventSummaryResponse(event: EventSummarySource) {
     endsAt: event.endsAt,
     status: event.status,
     coverImageUrl: event.coverImageUrl,
+    shareHeadline: event.shareHeadline ?? null,
+    shareDescription: event.shareDescription ?? null,
+    shareImageUrl: event.shareImageUrl ?? null,
     allowResale: event.allowResale,
     resaleWindow: {
       startsAt: event.resaleStartsAt,

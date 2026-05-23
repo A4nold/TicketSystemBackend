@@ -23,11 +23,24 @@ type EventPageProps = {
     slug: string;
   }>;
   searchParams?: Promise<{
+    inviterName?: string;
     offerPrice?: string;
     quantity?: string;
     ticketTypeId?: string;
   }>;
 };
+
+function buildAbsoluteUrl(pathOrUrl: string) {
+  if (/^https?:\/\//i.test(pathOrUrl)) {
+    return pathOrUrl;
+  }
+
+  const baseUrl = process.env.PUBLIC_APP_URL ?? "http://localhost:3001";
+  const normalizedBase = baseUrl.replace(/\/$/, "");
+  const normalizedPath = pathOrUrl.startsWith("/") ? pathOrUrl : `/${pathOrUrl}`;
+
+  return `${normalizedBase}${normalizedPath}`;
+}
 
 async function loadEvent(slug: string) {
   try {
@@ -51,27 +64,51 @@ async function loadResaleListings(slug: string) {
 
 export async function generateMetadata({
   params,
+  searchParams,
 }: EventPageProps): Promise<Metadata> {
   const { slug } = await params;
+  const resolvedSearchParams = searchParams ? await searchParams : undefined;
+  const inviterName = resolvedSearchParams?.inviterName?.trim() || null;
 
   try {
     const event = await getPublicEventBySlug(slug);
+    const canonicalPath = `/events/${event.slug}`;
+    const canonicalUrl = buildAbsoluteUrl(canonicalPath);
+    const previewTitle = inviterName
+      ? `${inviterName} invited you to ${event.title}`
+      : (event.shareHeadline ?? event.title);
+    const previewDescription = inviterName
+      ? "Get your ticket on Maya"
+      : (event.shareDescription ??
+        event.description ??
+        `View ticket options, event timing, and access details for ${event.title}.`);
+    const previewImageUrl =
+      event.shareImageUrl ?? event.coverImageUrl ?? "/next.svg";
+    const absolutePreviewImageUrl = buildAbsoluteUrl(previewImageUrl);
 
     return {
-      title: `${event.title} | Events`,
-      description:
-        event.description ??
-        `View ticket options, event timing, and access details for ${event.title}.`,
+      title: `${previewTitle} | Maya`,
+      description: previewDescription,
       alternates: {
-        canonical: `/events/${event.slug}`,
+        canonical: canonicalPath,
       },
       openGraph: {
-        title: event.title,
-        description:
-          event.description ??
-          `Browse event details and ticket options for ${event.title}.`,
+        title: previewTitle,
+        description: previewDescription,
+        images: [
+          {
+            alt: `${event.title} event card`,
+            url: absolutePreviewImageUrl,
+          },
+        ],
         type: "website",
-        url: `/events/${event.slug}`,
+        url: canonicalUrl,
+      },
+      twitter: {
+        card: "summary_large_image",
+        title: previewTitle,
+        description: previewDescription,
+        images: [absolutePreviewImageUrl],
       },
     };
   } catch (error) {

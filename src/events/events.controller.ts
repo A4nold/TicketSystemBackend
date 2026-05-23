@@ -1,12 +1,15 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
   Post,
   Query,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from "@nestjs/common";
 import {
   ApiBadRequestResponse,
@@ -43,7 +46,15 @@ import { UpdateStaffRoleDto } from "./dto/update-staff-role.dto";
 import { UpdateEventDto } from "./dto/update-event.dto";
 import { UpdateTicketTypeDto } from "./dto/update-ticket-type.dto";
 import { EventQueryService } from "./event-query.service";
+import { EventShareAnalyticsService } from "./event-share-analytics.service";
 import { EventsService } from "./events.service";
+import { CaptureEventShareAnalyticsDto } from "./dto/capture-event-share-analytics.dto";
+import { RateLimit } from "../common/security/rate-limit.decorator";
+import { FileInterceptor } from "@nestjs/platform-express";
+import multer from "multer";
+import { EventMediaService } from "./event-media.service";
+import { EventFlyerService } from "./event-flyer.service";
+import { GenerateEventFlyerDto } from "./dto/generate-event-flyer.dto";
 
 @ApiTags("events")
 @Controller("events")
@@ -51,6 +62,9 @@ export class EventsController {
   constructor(
     private readonly eventQueryService: EventQueryService,
     private readonly eventsService: EventsService,
+    private readonly eventShareAnalyticsService: EventShareAnalyticsService,
+    private readonly eventMediaService: EventMediaService,
+    private readonly eventFlyerService: EventFlyerService,
   ) {}
 
   @Get()
@@ -97,6 +111,112 @@ export class EventsController {
   })
   getEvent(@Param("slug") slug: string) {
     return this.eventQueryService.getEventBySlug(slug);
+  }
+
+  @Post(":eventId/share/analytics")
+  @ApiOperation({
+    summary: "Capture event share/public engagement analytics",
+    description:
+      "Captures share and public-event engagement actions for product analytics.",
+  })
+  @ApiParam({
+    name: "eventId",
+    description: "Event identifier",
+  })
+  @ApiCreatedResponse({
+    description: "Analytics event accepted",
+  })
+  @ApiNotFoundResponse({
+    description: "Event was not found",
+  })
+  @RateLimit({
+    keyPrefix: "events:share-analytics",
+    maxRequests: 240,
+    windowMs: 60_000,
+  })
+  captureShareAnalytics(
+    @Param("eventId") eventId: string,
+    @Body() payload: CaptureEventShareAnalyticsDto,
+  ) {
+    return this.eventShareAnalyticsService.capture(eventId, payload);
+  }
+
+  @Post(":eventId/media/header")
+  @ApiBearerAuth("bearer")
+  @UseGuards(JwtAuthGuard, EventMembershipGuard)
+  @RequireEventRoles(StaffRole.OWNER, StaffRole.ADMIN)
+  @UseInterceptors(
+    FileInterceptor("file", {
+      storage: multer.memoryStorage(),
+      limits: {
+        fileSize: 5 * 1024 * 1024,
+      },
+    }),
+  )
+  @ApiOperation({
+    summary: "Upload event header image",
+    description:
+      "Uploads organizer-managed event header media for public/share surfaces.",
+  })
+  @ApiParam({
+    name: "eventId",
+    description: "Event identifier",
+  })
+  @ApiCreatedResponse({
+    description: "Updated event media URLs",
+  })
+  uploadHeaderMedia(
+    @Param("eventId") eventId: string,
+    @UploadedFile() file?: Express.Multer.File,
+  ) {
+    return this.eventMediaService.uploadEventHeaderMedia(eventId, file as Express.Multer.File);
+  }
+
+  @Delete(":eventId/media/header")
+  @ApiBearerAuth("bearer")
+  @UseGuards(JwtAuthGuard, EventMembershipGuard)
+  @RequireEventRoles(StaffRole.OWNER, StaffRole.ADMIN)
+  @ApiOperation({
+    summary: "Remove event header image",
+    description: "Clears the organizer-managed event header media.",
+  })
+  @ApiParam({
+    name: "eventId",
+    description: "Event identifier",
+  })
+  @ApiOkResponse({
+    description: "Updated event media URLs",
+  })
+  removeHeaderMedia(@Param("eventId") eventId: string) {
+    return this.eventMediaService.removeEventHeaderMedia(eventId);
+  }
+
+  @Post(":eventId/share/flyer")
+  @ApiOperation({
+    summary: "Generate event share flyer",
+    description:
+      "Generates an event flyer asset for share/download. MVP currently enables 4x5 only.",
+  })
+  @ApiParam({
+    name: "eventId",
+    description: "Event identifier",
+  })
+  @ApiCreatedResponse({
+    description: "Generated flyer metadata",
+  })
+  @ApiNotFoundResponse({
+    description: "Event was not found",
+  })
+  @RateLimit({
+    keyPrefix: "events:share-flyer",
+    maxRequests: 60,
+    windowMs: 60_000,
+  })
+  generateShareFlyer(
+    @Param("eventId") eventId: string,
+    @Body() payload: GenerateEventFlyerDto,
+  ) {
+    return this.eventFlyerService.generate(eventId, payload.size);
   }
 
   @Post()

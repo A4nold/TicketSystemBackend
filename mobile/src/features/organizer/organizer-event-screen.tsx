@@ -1,7 +1,9 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import * as ImagePicker from "expo-image-picker";
 import { useEffect, useMemo, useState } from "react";
 import {
+  Image,
   LayoutAnimation,
   Platform,
   Pressable,
@@ -15,6 +17,7 @@ import {
 } from "react-native";
 
 import { useAuth } from "@/components/providers/auth-provider";
+import { CollapsibleSection } from "@/components/section-primitives";
 import { ActionButton, Card, Screen } from "@/components/ui";
 import { hasOrganizerSurfaceAccess } from "@/features/auth/organizer-access";
 import {
@@ -39,7 +42,9 @@ import {
   inviteOrganizerStaff,
   listOrganizerEvents,
   listOrganizerStaff,
+  removeOrganizerEventHeaderMedia,
   revokeOrganizerStaff,
+  uploadOrganizerEventHeaderMedia,
   updateOrganizerEvent,
   updateOrganizerStaffRole,
   updateOrganizerTicketType,
@@ -156,67 +161,6 @@ function SegmentedControl<T extends string>({
   );
 }
 
-function SectionCard({
-  title,
-  subtitle,
-  status,
-  expanded,
-  onToggle,
-  children,
-}: {
-  children: React.ReactNode;
-  expanded: boolean;
-  onToggle: () => void;
-  status?: "attention" | "default" | "saving" | "saved";
-  subtitle: string;
-  title: string;
-}) {
-  return (
-    <Card padded={false}>
-      <View style={styles.sectionShell}>
-        <Pressable onPress={onToggle} style={styles.sectionHeaderButton}>
-          <View style={styles.sectionHeaderCopy}>
-            <Text style={styles.sectionTitle}>{title}</Text>
-            <Text style={styles.copy}>{subtitle}</Text>
-          </View>
-          <View style={styles.sectionHeaderMeta}>
-            {status ? (
-              <View
-                style={[
-                  styles.sectionStatePill,
-                  status === "attention" ? styles.sectionStateAttention : null,
-                  status === "saving" ? styles.sectionStateSaving : null,
-                  status === "saved" ? styles.sectionStateSaved : null,
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.sectionStatePillText,
-                    status === "attention" ? styles.sectionStateAttentionText : null,
-                    status === "saving" ? styles.sectionStateSavingText : null,
-                    status === "saved" ? styles.sectionStateSavedText : null,
-                  ]}
-                >
-                  {status === "attention"
-                    ? "Needs review"
-                    : status === "saving"
-                      ? "Saving"
-                      : status === "saved"
-                        ? "Saved"
-                        : "Ready"}
-                </Text>
-              </View>
-            ) : null}
-            <Text style={styles.sectionChevron}>{expanded ? "Hide" : "Open"}</Text>
-          </View>
-        </Pressable>
-
-        {expanded ? children : null}
-      </View>
-    </Card>
-  );
-}
-
 export function OrganizerEventScreen() {
   const { slug } = useLocalSearchParams<{ slug: string }>();
   const router = useRouter();
@@ -234,13 +178,15 @@ export function OrganizerEventScreen() {
   const [notice, setNotice] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSavingEvent, setIsSavingEvent] = useState(false);
+  const [isSavingMedia, setIsSavingMedia] = useState(false);
   const [isSavingTicketType, setIsSavingTicketType] = useState(false);
   const [isSavingStaff, setIsSavingStaff] = useState(false);
   const [isSavingOffers, setIsSavingOffers] = useState(false);
   const [expandedSections, setExpandedSections] = useState({
-    event: true,
+    event: false,
+    offers: false,
     staff: false,
-    ticketTypes: false,
+    ticketTypes: true,
   });
 
   const hasSurfaceAccess = hasOrganizerSurfaceAccess(session?.user);
@@ -465,6 +411,113 @@ export function OrganizerEventScreen() {
     }
   }
 
+  async function handleUploadHeaderMedia() {
+    if (!session?.accessToken || !selectedSummary || !eventForm) {
+      return;
+    }
+
+    setIsSavingMedia(true);
+    setNotice(null);
+    setErrorMessage(null);
+
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        allowsEditing: false,
+        mediaTypes: ["images"],
+        quality: 0.9,
+      });
+
+      if (result.canceled || !result.assets[0]) {
+        return;
+      }
+
+      const selectedAsset = result.assets[0];
+      const selectedMimeType = (selectedAsset.mimeType ?? "").toLowerCase();
+      const supportedMimeTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
+      const isHeic =
+        selectedMimeType.includes("heic") || selectedMimeType.includes("heif");
+
+      if (isHeic || (selectedMimeType && !supportedMimeTypes.has(selectedMimeType))) {
+        setErrorMessage(
+          "Unsupported image format. Please choose JPEG, PNG, or WEBP.",
+        );
+        return;
+      }
+
+      if (typeof selectedAsset.fileSize === "number" && selectedAsset.fileSize > 5 * 1024 * 1024) {
+        setErrorMessage("Image must be 5MB or smaller.");
+        return;
+      }
+
+      // Show immediate local preview while upload completes.
+      setEventForm((current) =>
+        current
+          ? {
+              ...current,
+              coverImageUrl: selectedAsset.uri ?? current.coverImageUrl,
+            }
+          : current,
+      );
+
+      const uploaded = await uploadOrganizerEventHeaderMedia(
+        selectedSummary.id,
+        {
+          fileName: selectedAsset.fileName,
+          mimeType: selectedAsset.mimeType,
+          uri: selectedAsset.uri,
+        },
+        session.accessToken,
+      );
+
+      setEventForm((current) =>
+        current
+          ? {
+              ...current,
+              coverImageUrl: uploaded.coverImageUrl ?? "",
+            }
+          : current,
+      );
+      await refreshOrganizerQueries();
+      setNotice("Header image uploaded.");
+    } catch (error) {
+      setErrorMessage(
+        getErrorMessage(error, "Header image couldn't be uploaded right now."),
+      );
+    } finally {
+      setIsSavingMedia(false);
+    }
+  }
+
+  async function handleRemoveHeaderMedia() {
+    if (!session?.accessToken || !selectedSummary || !eventForm?.coverImageUrl) {
+      return;
+    }
+
+    setIsSavingMedia(true);
+    setNotice(null);
+    setErrorMessage(null);
+
+    try {
+      await removeOrganizerEventHeaderMedia(selectedSummary.id, session.accessToken);
+      setEventForm((current) =>
+        current
+          ? {
+              ...current,
+              coverImageUrl: "",
+            }
+          : current,
+      );
+      await refreshOrganizerQueries();
+      setNotice("Header image removed.");
+    } catch (error) {
+      setErrorMessage(
+        getErrorMessage(error, "Header image couldn't be removed right now."),
+      );
+    } finally {
+      setIsSavingMedia(false);
+    }
+  }
+
   async function handleTicketTypeSave() {
     if (!session?.accessToken || !selectedSummary || !ticketTypeValidation.isValid) {
       return;
@@ -629,7 +682,7 @@ export function OrganizerEventScreen() {
     router.replace("/organizer" as never);
   }
 
-  function toggleSection(section: "event" | "staff" | "ticketTypes") {
+  function toggleSection(section: "event" | "offers" | "staff" | "ticketTypes") {
     animateLayout();
     setExpandedSections((current) => ({
       ...current,
@@ -640,7 +693,8 @@ export function OrganizerEventScreen() {
   return (
     <Screen
       title="Event"
-      subtitle="Make fast updates to event details, ticket inventory, and staff access."
+      subtitle="Edit event setup."
+      compactHeader
     >
       <>
       <ScrollView contentContainerStyle={styles.content}>
@@ -654,10 +708,7 @@ export function OrganizerEventScreen() {
           <Card padded={false}>
             <View style={styles.sectionShell}>
               <Text style={styles.sectionTitle}>Organizer access isn't available</Text>
-              <Text style={styles.copy}>
-                This account can use the attendee experience, but it does not have organizer mobile
-                access.
-              </Text>
+              <Text style={styles.copy}>This account does not have organizer access.</Text>
             </View>
           </Card>
         ) : null}
@@ -666,7 +717,7 @@ export function OrganizerEventScreen() {
           <Card padded={false}>
             <View style={styles.sectionShell}>
               <Text style={styles.sectionTitle}>Loading event</Text>
-              <Text style={styles.copy}>Checking your organizer access for this event.</Text>
+              <Text style={styles.copy}>Checking access.</Text>
             </View>
           </Card>
         ) : null}
@@ -675,9 +726,7 @@ export function OrganizerEventScreen() {
           <Card tone="warning" padded={false}>
             <View style={styles.sectionShell}>
               <Text style={styles.sectionTitle}>This event isn't manageable here</Text>
-              <Text style={styles.copy}>
-                The event could not be found in your accepted owner or admin memberships.
-              </Text>
+              <Text style={styles.copy}>Not found in your owner/admin memberships.</Text>
             </View>
           </Card>
         ) : null}
@@ -728,14 +777,14 @@ export function OrganizerEventScreen() {
           <Card padded={false}>
             <View style={styles.sectionShell}>
               <Text style={styles.sectionTitle}>Loading event detail</Text>
-              <Text style={styles.copy}>Pulling the latest event setup and ticket type data.</Text>
+              <Text style={styles.copy}>Syncing latest event data.</Text>
             </View>
           </Card>
         ) : null}
 
         {eventForm && eventDetailQuery.data ? (
           <>
-            <SectionCard
+            <CollapsibleSection
               expanded={expandedSections.event}
               onToggle={() => toggleSection("event")}
               status={
@@ -747,7 +796,7 @@ export function OrganizerEventScreen() {
                       ? "saved"
                       : "default"
               }
-              subtitle="Keep the headline details current so attendees and staff see the right information."
+              subtitle="Title, media, schedule."
               title="Core event details"
             >
                 {!eventValidation?.isValid ? (
@@ -774,6 +823,36 @@ export function OrganizerEventScreen() {
                   placeholder="What makes this event worth showing up for?"
                   value={eventForm.description}
                 />
+                <View style={styles.field}>
+                  <Text style={styles.fieldLabel}>Header image</Text>
+                  {eventForm.coverImageUrl ? (
+                    <Image
+                      source={{ uri: eventForm.coverImageUrl }}
+                      style={styles.headerPreviewImage}
+                    />
+                  ) : (
+                    <View style={styles.headerPreviewPlaceholder}>
+                      <Text style={styles.hintText}>
+                        Add a header image to improve event sharing previews.
+                      </Text>
+                    </View>
+                  )}
+                  <View style={styles.mediaActionRow}>
+                    <ActionButton
+                      loading={isSavingMedia}
+                      onPress={() => void handleUploadHeaderMedia()}
+                      title={eventForm.coverImageUrl ? "Replace image" : "Upload image"}
+                    />
+                    {eventForm.coverImageUrl ? (
+                      <ActionButton
+                        loading={isSavingMedia}
+                        onPress={() => void handleRemoveHeaderMedia()}
+                        title="Remove image"
+                        variant="secondary"
+                      />
+                    ) : null}
+                  </View>
+                </View>
                 <View style={styles.row}>
                   <View style={styles.rowItem}>
                     <Field
@@ -876,9 +955,9 @@ export function OrganizerEventScreen() {
                   onPress={() => void handleEventSave()}
                   title={eventIsDirty ? "Save details" : "Details up to date"}
                 />
-            </SectionCard>
+            </CollapsibleSection>
 
-            <SectionCard
+            <CollapsibleSection
               expanded={expandedSections.ticketTypes}
               onToggle={() => toggleSection("ticketTypes")}
               status={
@@ -890,7 +969,7 @@ export function OrganizerEventScreen() {
                       ? "saved"
                       : "default"
               }
-              subtitle="Keep pricing and inventory aligned with what is live right now."
+              subtitle="Pricing and inventory."
               title="Ticket types"
             >
                 {!ticketTypeValidation.isValid ? (
@@ -1144,9 +1223,9 @@ export function OrganizerEventScreen() {
                         : "Ticket type up to date"
                   }
                 />
-            </SectionCard>
+            </CollapsibleSection>
 
-            <SectionCard
+            <CollapsibleSection
               expanded={expandedSections.staff}
               onToggle={() => toggleSection("staff")}
               status={
@@ -1160,7 +1239,7 @@ export function OrganizerEventScreen() {
                       ? "saved"
                       : "default"
               }
-              subtitle="Keep the event team current and make role changes without leaving mobile."
+              subtitle="Invite and roles."
               title="Staff management"
             >
 
@@ -1200,7 +1279,7 @@ export function OrganizerEventScreen() {
                             ? `${membership.user.firstName ?? ""} ${membership.user.lastName ?? ""}`.trim()
                             : membership.user.email}
                         </Text>
-                        <Text style={styles.copy}>{membership.user.email}</Text>
+                        <Text style={styles.copy} numberOfLines={1}>{membership.user.email}</Text>
                       </View>
                       <View style={styles.neutralPill}>
                         <Text style={styles.neutralPillText}>
@@ -1210,7 +1289,7 @@ export function OrganizerEventScreen() {
                     </View>
 
                     <Text style={styles.staffMeta}>
-                      Current role: {membership.role}
+                      🛡 {membership.role}
                       {membership.invitedAt ? ` · invited ${formatDateTime(membership.invitedAt)}` : ""}
                     </Text>
 
@@ -1245,11 +1324,11 @@ export function OrganizerEventScreen() {
                     ) : null}
                   </View>
                 ))}
-            </SectionCard>
+            </CollapsibleSection>
 
-            <SectionCard
-              expanded={true}
-              onToggle={() => undefined}
+            <CollapsibleSection
+              expanded={expandedSections.offers}
+              onToggle={() => toggleSection("offers")}
               status={
                 isSavingOffers
                   ? "saving"
@@ -1257,7 +1336,7 @@ export function OrganizerEventScreen() {
                     ? "saved"
                     : "default"
               }
-              subtitle="Review attendee offer-range requests and decide quickly."
+              subtitle="Attendee offers."
               title="Offer inbox"
             >
               {offersQuery.isLoading ? (
@@ -1296,12 +1375,11 @@ export function OrganizerEventScreen() {
                   <Text style={styles.staffName}>
                     {offer.ticketType.name} · {offer.offeredPrice} {offer.currency}
                   </Text>
-                  <Text style={styles.copy}>
+                  <Text style={styles.copy} numberOfLines={1}>
                     {offer.attendeeUser.firstName || offer.attendeeUser.lastName
                       ? `${offer.attendeeUser.firstName ?? ""} ${offer.attendeeUser.lastName ?? ""}`.trim()
                       : offer.attendeeUser.email}
-                    {" · "}
-                    expires {formatDateTime(offer.expiresAt)}
+                    {" · "}⏳ {formatDateTime(offer.expiresAt)}
                   </Text>
                   {offer.status === "PENDING" ? (
                     <Field
@@ -1336,7 +1414,7 @@ export function OrganizerEventScreen() {
                   </View>
                 </View>
               ))}
-            </SectionCard>
+            </CollapsibleSection>
           </>
         ) : null}
         <View style={styles.bottomSpacer} />
@@ -1412,6 +1490,24 @@ const styles = StyleSheet.create({
   },
   field: {
     gap: 6,
+  },
+  headerPreviewImage: {
+    borderColor: palette.divider,
+    borderRadius: 14,
+    borderWidth: 1,
+    height: 180,
+    width: "100%",
+  },
+  headerPreviewPlaceholder: {
+    alignItems: "center",
+    backgroundColor: palette.backgroundMuted,
+    borderColor: palette.divider,
+    borderRadius: 14,
+    borderWidth: 1,
+    justifyContent: "center",
+    minHeight: 100,
+    paddingHorizontal: 14,
+    paddingVertical: 16,
   },
   fieldLabel: {
     color: palette.mutedSoft,
@@ -1585,6 +1681,9 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: "700",
   },
+  mediaActionRow: {
+    gap: 10,
+  },
   neutralPill: {
     backgroundColor: palette.backgroundMuted,
     borderColor: palette.divider,
@@ -1606,64 +1705,6 @@ const styles = StyleSheet.create({
   },
   rowItem: {
     flex: 1,
-  },
-  sectionChevron: {
-    color: palette.muted,
-    fontSize: 12,
-    fontWeight: "800",
-    letterSpacing: 0.5,
-    textTransform: "uppercase",
-  },
-  sectionHeaderButton: {
-    alignItems: "flex-start",
-    flexDirection: "row",
-    gap: 12,
-    justifyContent: "space-between",
-  },
-  sectionHeaderCopy: {
-    flex: 1,
-    gap: 6,
-  },
-  sectionHeaderMeta: {
-    alignItems: "flex-end",
-    gap: 8,
-  },
-  sectionStateAttention: {
-    backgroundColor: palette.warningSoft,
-    borderColor: "#ead39a",
-  },
-  sectionStateAttentionText: {
-    color: palette.warning,
-  },
-  sectionStateDefault: {},
-  sectionStatePill: {
-    backgroundColor: palette.backgroundMuted,
-    borderColor: palette.divider,
-    borderRadius: 999,
-    borderWidth: 1,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-  },
-  sectionStatePillText: {
-    color: palette.muted,
-    fontSize: 10,
-    fontWeight: "800",
-    letterSpacing: 0.8,
-    textTransform: "uppercase",
-  },
-  sectionStateSaved: {
-    backgroundColor: palette.successSoft,
-    borderColor: "#b8d9ca",
-  },
-  sectionStateSavedText: {
-    color: palette.successDeep,
-  },
-  sectionStateSaving: {
-    backgroundColor: palette.accentSoft,
-    borderColor: "#e7b98f",
-  },
-  sectionStateSavingText: {
-    color: palette.accentDeep,
   },
   sectionShell: {
     gap: 14,

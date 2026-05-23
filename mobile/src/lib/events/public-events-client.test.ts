@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { getPublicEventBySlug, listPublicEvents } from "@/lib/events/public-events-client";
+import {
+  capturePublicEventShareAnalytics,
+  generatePublicEventFlyer,
+  getPublicEventBySlug,
+  listPublicEvents,
+} from "@/lib/events/public-events-client";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -95,5 +100,52 @@ describe("public-events-client", () => {
 
     expect(event.ticketTypes[0]?.availabilityTone).toBe("unavailable");
     expect(event.venueLabel).toBe("Venue details to be confirmed");
+  });
+
+  it("generates flyers for a selected size", async () => {
+    const fetchSpy = vi.spyOn(global, "fetch").mockResolvedValue({
+      json: async () => ({
+        imageUrl: "http://localhost:3000/media/flyers/event-1-9x16.svg",
+        size: "9x16",
+      }),
+      ok: true,
+    } as Response);
+
+    const flyer = await generatePublicEventFlyer("event-1", "9x16");
+
+    expect(flyer.size).toBe("9x16");
+    expect(fetchSpy).toHaveBeenCalledWith(
+      expect.stringContaining("/api/events/event-1/share/flyer"),
+      expect.objectContaining({
+        body: JSON.stringify({ size: "9x16" }),
+        method: "POST",
+      }),
+    );
+  });
+
+  it("captures share analytics with mobile default source", async () => {
+    const fetchSpy = vi.spyOn(global, "fetch").mockResolvedValue({
+      json: async () => ({ accepted: true }),
+      ok: true,
+    } as Response);
+
+    const result = await capturePublicEventShareAnalytics("event-2", {
+      eventAction: "EVENT_LINK_COPIED",
+      metadata: { method: "clipboard" },
+    });
+
+    expect(result.accepted).toBe(true);
+    expect(fetchSpy).toHaveBeenCalledWith(
+      expect.stringContaining("/api/events/event-2/share/analytics"),
+      expect.objectContaining({
+        body: JSON.stringify({
+          eventAction: "EVENT_LINK_COPIED",
+          metadata: { method: "clipboard" },
+          sessionId: undefined,
+          sourceSurface: "mobile",
+        }),
+        method: "POST",
+      }),
+    );
   });
 });

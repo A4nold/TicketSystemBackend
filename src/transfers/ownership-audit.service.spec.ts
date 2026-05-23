@@ -19,7 +19,7 @@ describe("Transfer ownership audit hardening", () => {
             update: vi.fn().mockResolvedValue({
               acceptedAt: new Date("2026-05-01T12:00:00.000Z"),
               cancelledAt: null,
-              expiresAt: new Date("2026-05-02T12:00:00.000Z"),
+              expiresAt: new Date("2026-12-02T12:00:00.000Z"),
               id: "transfer_1",
               message: null,
               recipientEmail: "recipient@student.ie",
@@ -59,7 +59,7 @@ describe("Transfer ownership audit hardening", () => {
         serialNumber: "CNT-GA-0001",
         transferRequests: [
           {
-            expiresAt: new Date("2026-05-02T12:00:00.000Z"),
+            expiresAt: new Date("2026-12-02T12:00:00.000Z"),
             id: "transfer_1",
             recipientEmail: "recipient@student.ie",
             recipientUserId: null,
@@ -106,7 +106,7 @@ describe("Transfer ownership audit hardening", () => {
     const updateTransfer = vi.fn().mockResolvedValue({
       acceptedAt: null,
       cancelledAt: new Date("2026-05-01T12:00:00.000Z"),
-      expiresAt: new Date("2026-05-02T12:00:00.000Z"),
+      expiresAt: new Date("2026-12-02T12:00:00.000Z"),
       id: "transfer_1",
       message: null,
       recipientEmail: "recipient@student.ie",
@@ -146,7 +146,7 @@ describe("Transfer ownership audit hardening", () => {
         id: "ticket_1",
         transferRequests: [
           {
-            expiresAt: new Date("2026-05-02T12:00:00.000Z"),
+            expiresAt: new Date("2026-12-02T12:00:00.000Z"),
             id: "transfer_1",
             recipientUserId: null,
             senderUserId: "user_1",

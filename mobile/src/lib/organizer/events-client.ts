@@ -1,5 +1,6 @@
 import { apiFetch } from "@/lib/api/client";
 import type { AuthMembership } from "@/lib/auth/types";
+import { getApiBaseUrl } from "@/lib/config/env";
 
 export type OrganizerRole = "OWNER" | "ADMIN" | "SCANNER";
 
@@ -260,6 +261,85 @@ export async function acceptOrganizerStaffInvite(eventId: string, accessToken: s
     },
     body: JSON.stringify({}),
   });
+}
+
+export async function uploadOrganizerEventHeaderMedia(
+  eventId: string,
+  asset: {
+    fileName?: string | null;
+    mimeType?: string | null;
+    uri: string;
+  },
+  accessToken: string,
+) {
+  const form = new FormData();
+  form.append("file", {
+    name: asset.fileName ?? `event-header-${Date.now()}.jpg`,
+    type: asset.mimeType ?? "image/jpeg",
+    uri: asset.uri,
+  } as unknown as Blob);
+
+  const response = await apiFetch<{ coverImageUrl: string | null; shareImageUrl: string | null }>(
+    `/api/events/${eventId}/media/header`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: form,
+    },
+  );
+
+  return {
+    coverImageUrl: toClientReachableMediaUrl(response.coverImageUrl),
+    shareImageUrl: toClientReachableMediaUrl(response.shareImageUrl),
+  };
+}
+
+export async function removeOrganizerEventHeaderMedia(
+  eventId: string,
+  accessToken: string,
+) {
+  const response = await apiFetch<{ coverImageUrl: string | null; shareImageUrl: string | null }>(
+    `/api/events/${eventId}/media/header`,
+    {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    },
+  );
+
+  return {
+    coverImageUrl: toClientReachableMediaUrl(response.coverImageUrl),
+    shareImageUrl: toClientReachableMediaUrl(response.shareImageUrl),
+  };
+}
+
+function toClientReachableMediaUrl(url: string | null) {
+  if (!url) {
+    return null;
+  }
+
+  const apiBase = getApiBaseUrl();
+
+  if (url.startsWith("/")) {
+    return `${apiBase}${url}`;
+  }
+
+  try {
+    const parsed = new URL(url);
+    if (parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1") {
+      const apiBaseUrl = new URL(apiBase);
+      parsed.protocol = apiBaseUrl.protocol;
+      parsed.hostname = apiBaseUrl.hostname;
+      parsed.port = apiBaseUrl.port;
+      return parsed.toString();
+    }
+    return url;
+  } catch {
+    return url;
+  }
 }
 
 export async function updateOrganizerStaffRole(

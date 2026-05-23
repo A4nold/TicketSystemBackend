@@ -89,7 +89,7 @@ describe("RemindTransferService", () => {
         update: vi.fn().mockResolvedValue({
           acceptedAt: null,
           cancelledAt: null,
-          expiresAt: new Date("2026-05-02T21:00:00.000Z"),
+          expiresAt: new Date("2026-12-02T21:00:00.000Z"),
           id: "transfer_1",
           message: null,
           recipientEmail: "tobi@student.ie",
@@ -126,7 +126,7 @@ describe("RemindTransferService", () => {
         },
         transferRequests: [
           {
-            expiresAt: new Date("2026-05-02T21:00:00.000Z"),
+            expiresAt: new Date("2026-12-02T21:00:00.000Z"),
             id: "transfer_1",
             recipientEmail: "tobi@student.ie",
             recipientUserId: "user_2",

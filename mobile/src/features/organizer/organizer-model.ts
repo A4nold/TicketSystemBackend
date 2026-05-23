@@ -6,6 +6,7 @@ import type {
 } from "@/lib/organizer/events-client";
 
 export type EventEditorState = {
+  coverImageUrl: string;
   currency: "EUR" | "NGN";
   description: string;
   endsAt: string;
@@ -57,6 +58,7 @@ export function toIsoDateTime(value: string) {
 
 export function toEventEditorState(event: OrganizerEventResponse): EventEditorState {
   return {
+    coverImageUrl: event.coverImageUrl ?? "",
     currency: event.currency as EventEditorState["currency"],
     description: event.description ?? "",
     endsAt: toLocalDateTime(event.endsAt),

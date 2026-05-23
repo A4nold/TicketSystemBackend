@@ -4,6 +4,7 @@ import { PublicEventScreen } from "@/features/public/public-event-screen";
 
 export default function PublicEventRoute() {
   const params = useLocalSearchParams<{
+    authReturn?: string;
     offerPrice?: string;
     quantity?: string;
     slug?: string;
@@ -14,6 +15,7 @@ export default function PublicEventRoute() {
 
   return (
     <PublicEventScreen
+      authReturn={params.authReturn === "1"}
       initialOfferPrice={
         Number.isFinite(initialOfferPrice) && initialOfferPrice > 0
           ? initialOfferPrice

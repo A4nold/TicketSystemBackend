@@ -87,6 +87,19 @@ export type PublicEventDetail = Omit<PublicEventSummary, "issuedTicketsCount"> &
   trustCopy: string;
 };
 
+export type GeneratedEventFlyer = {
+  imageUrl: string;
+  size: "4x5" | "A4" | "9x16";
+};
+
+export type PublicEventShareAction =
+  | "EVENT_SHARE_CLICKED"
+  | "EVENT_LINK_COPIED"
+  | "EVENT_FLYER_GENERATED"
+  | "EVENT_FLYER_DOWNLOADED"
+  | "PUBLIC_EVENT_PAGE_VIEWED"
+  | "GET_TICKET_FROM_PUBLIC_PAGE_CLICKED";
+
 function formatCurrency(price: string, currency: string) {
   const amount = Number(price);
 
@@ -261,4 +274,40 @@ export async function listPublicEvents() {
 export async function getPublicEventBySlug(slug: string) {
   const response = await apiFetch<ApiEventDetail>(`/api/events/${slug}`);
   return mapDetail(response);
+}
+
+export async function generatePublicEventFlyer(
+  eventId: string,
+  size: "4x5" | "A4" | "9x16" = "4x5",
+) {
+  return apiFetch<GeneratedEventFlyer>(`/api/events/${eventId}/share/flyer`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ size }),
+  });
+}
+
+export async function capturePublicEventShareAnalytics(
+  eventId: string,
+  payload: {
+    eventAction: PublicEventShareAction;
+    metadata?: Record<string, unknown>;
+    sessionId?: string;
+    sourceSurface?: "mobile" | "web";
+  },
+) {
+  return apiFetch<{ accepted: true }>(`/api/events/${eventId}/share/analytics`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      eventAction: payload.eventAction,
+      metadata: payload.metadata,
+      sessionId: payload.sessionId,
+      sourceSurface: payload.sourceSurface ?? "mobile",
+    }),
+  });
 }

@@ -40,22 +40,46 @@ export const radius = {
 } as const;
 
 export const typography = {
+  bodySm: {
+    fontSize: 13,
+    lineHeight: 19,
+  },
   body: {
     fontSize: 15,
     lineHeight: 22,
+  },
+  bodyLg: {
+    fontSize: 16,
+    lineHeight: 24,
   },
   headingLg: {
     fontSize: 36,
     fontWeight: "800" as const,
   },
+  headingXl: {
+    fontSize: 30,
+    fontWeight: "800" as const,
+    lineHeight: 34,
+  },
   headingMd: {
     fontSize: 22,
     fontWeight: "800" as const,
+  },
+  headingSm: {
+    fontSize: 18,
+    fontWeight: "700" as const,
+    lineHeight: 24,
   },
   labelXs: {
     fontSize: 12,
     fontWeight: "800" as const,
     letterSpacing: 1.2,
+    textTransform: "uppercase" as const,
+  },
+  labelXxs: {
+    fontSize: 10,
+    fontWeight: "800" as const,
+    letterSpacing: 0.8,
     textTransform: "uppercase" as const,
   },
 } as const;

@@ -18,8 +18,11 @@ export const commonStyles = StyleSheet.create({
   },
   headingMd: {
     color: palette.ink,
-    fontSize: 20,
-    fontWeight: "800",
+    ...typography.headingSm,
+  },
+  labelMeta: {
+    color: palette.mutedSoft,
+    ...typography.labelXxs,
   },
   heroDarkEyebrow: {
     color: "#ffe0bf",
@@ -63,10 +66,7 @@ export const commonStyles = StyleSheet.create({
   },
   neutralPillText: {
     color: palette.ink,
-    fontSize: 10,
-    fontWeight: "800",
-    letterSpacing: 0.8,
-    textTransform: "uppercase",
+    ...typography.labelXxs,
   },
   pillBase: {
     borderRadius: radius.pill,
@@ -104,10 +104,7 @@ export const commonStyles = StyleSheet.create({
   },
   sectionStatusPillText: {
     color: palette.muted,
-    fontSize: 10,
-    fontWeight: "800",
-    letterSpacing: 0.8,
-    textTransform: "uppercase",
+    ...typography.labelXxs,
   },
   softCard: {
     backgroundColor: palette.card,

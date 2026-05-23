@@ -30,16 +30,15 @@ export function OrganizerHomeScreen() {
   return (
     <Screen
       title="Organizer"
-      subtitle="Your event operations space for quick updates, ticket controls, and staff access."
+      subtitle="Manage your events."
+      compactHeader
     >
       <ScrollView contentContainerStyle={styles.content}>
         <Card tone="accent" padded={false}>
           <View style={styles.heroShell}>
             <Text style={styles.heroEyebrow}>Organizer tools</Text>
             <Text style={styles.heroTitle}>Keep event operations moving.</Text>
-            <Text style={styles.heroCopy}>
-              Jump into any event you manage, make the important changes, and get back out fast.
-            </Text>
+            <Text style={styles.heroCopy}>Open an event and update fast.</Text>
 
             <View style={styles.metricRow}>
               <View style={styles.metricCard}>
@@ -93,21 +92,16 @@ export function OrganizerHomeScreen() {
           <Card padded={false}>
             <View style={styles.sectionShell}>
               <Text style={styles.sectionTitle}>No manageable events yet</Text>
-              <Text style={styles.copy}>
-                Organizer access is active, but there are no accepted owner or admin memberships to
-                manage yet.
-              </Text>
+              <Text style={styles.copy}>No owner/admin events yet.</Text>
             </View>
           </Card>
         ) : null}
 
         {manageableEvents.length ? (
-          <Card padded={false}>
+          <Card density="dense" padded={false}>
             <View style={styles.sectionShell}>
               <Text style={styles.sectionTitle}>Your events</Text>
-              <Text style={styles.copy}>
-                Open an event to update essentials, sales setup, and team access.
-              </Text>
+              <Text style={styles.copy}>Open any event to manage it.</Text>
 
               {manageableEvents.map((event) => (
                 <View key={event.id} style={styles.eventCard}>
@@ -117,16 +111,16 @@ export function OrganizerHomeScreen() {
                       <Text style={styles.statusPillText}>{event.status}</Text>
                     </View>
                   </View>
-                  <Text style={styles.eventMeta}>{formatDateTime(event.startsAt)}</Text>
+                  <Text style={styles.eventMeta} numberOfLines={1}>🗓 {formatDateTime(event.startsAt)}</Text>
                   <View style={styles.metaStrip}>
                     <View style={styles.metaChip}>
                       <Text style={styles.metaChipText}>
-                        {event.ticketTypes.length} ticket type{event.ticketTypes.length === 1 ? "" : "s"}
+                        🎟 {event.ticketTypes.length} type{event.ticketTypes.length === 1 ? "" : "s"}
                       </Text>
                     </View>
                     {event.venueName ? (
                       <View style={styles.metaChip}>
-                        <Text style={styles.metaChipText}>{event.venueName}</Text>
+                        <Text style={styles.metaChipText}>📍 {event.venueName}</Text>
                       </View>
                     ) : null}
                   </View>
@@ -160,8 +154,8 @@ const styles = StyleSheet.create({
     borderColor: palette.divider,
     borderRadius: 22,
     borderWidth: 1,
-    gap: 10,
-    padding: 14,
+    gap: 8,
+    padding: 12,
   },
   eventHeader: {
     alignItems: "center",
@@ -177,7 +171,7 @@ const styles = StyleSheet.create({
   eventTitle: {
     color: palette.ink,
     flex: 1,
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: "800",
   },
   heroCopy: {

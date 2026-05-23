@@ -5,22 +5,33 @@ import { elevation, palette, radius, spacing, typography } from "@/styles/theme"
 
 export function Screen({
   children,
+  compactHeader = false,
   title,
   subtitle,
 }: {
   children: React.ReactNode;
+  compactHeader?: boolean;
   subtitle?: string;
   title: string;
 }) {
   return (
     <SafeAreaView style={styles.safeArea} edges={["top"]}>
       <View style={styles.chrome}>
-        <View style={styles.orbPrimary} />
-        <View style={styles.orbSecondary} />
-        <View style={styles.header}>
-          <Text style={styles.kicker}>Maya</Text>
-          <Text style={styles.title}>{title}</Text>
-          {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+        {!compactHeader ? <View style={styles.orbPrimary} /> : null}
+        {!compactHeader ? <View style={styles.orbSecondary} /> : null}
+        <View style={[styles.header, compactHeader ? styles.headerCompact : null]}>
+          {!compactHeader ? <Text style={styles.kicker}>Maya</Text> : null}
+          <Text
+            style={[styles.title, compactHeader ? styles.titleCompact : null]}
+            numberOfLines={2}
+          >
+            {title}
+          </Text>
+          {subtitle ? (
+            <Text style={styles.subtitle} numberOfLines={2}>
+              {subtitle}
+            </Text>
+          ) : null}
         </View>
       </View>
       <View style={styles.body}>{children}</View>
@@ -30,15 +41,24 @@ export function Screen({
 
 export function Card({
   children,
+  density = "comfortable",
   tone = "default",
   padded = true,
 }: {
   children: React.ReactNode;
+  density?: "comfortable" | "dense";
   padded?: boolean;
   tone?: "accent" | "default" | "success" | "warning";
 }) {
   return (
-    <View style={[styles.card, toneStyles[tone], !padded ? styles.cardUnpadded : null]}>
+    <View
+      style={[
+        styles.card,
+        density === "dense" ? styles.cardDense : null,
+        toneStyles[tone],
+        !padded ? styles.cardUnpadded : null,
+      ]}
+    >
       {children}
     </View>
   );
@@ -84,6 +104,48 @@ export function ActionButton({
   );
 }
 
+export function LoadingStateCard({
+  title = "Loading",
+  subtitle,
+}: {
+  subtitle?: string;
+  title?: string;
+}) {
+  return (
+    <Card>
+      <Text style={styles.stateTitle}>{title}</Text>
+      {subtitle ? <Text style={styles.stateSubtitle}>{subtitle}</Text> : null}
+    </Card>
+  );
+}
+
+export function EmptyStateCard({
+  title,
+  subtitle,
+  action,
+  actionTitle,
+  secondaryAction,
+  secondaryActionTitle,
+}: {
+  action?: () => void;
+  actionTitle?: string;
+  secondaryAction?: () => void;
+  secondaryActionTitle?: string;
+  subtitle?: string;
+  title: string;
+}) {
+  return (
+    <Card>
+      <Text style={styles.stateTitle}>{title}</Text>
+      {subtitle ? <Text style={styles.stateSubtitle}>{subtitle}</Text> : null}
+      {action && actionTitle ? <ActionButton onPress={action} title={actionTitle} /> : null}
+      {secondaryAction && secondaryActionTitle ? (
+        <ActionButton onPress={secondaryAction} title={secondaryActionTitle} variant="secondary" />
+      ) : null}
+    </Card>
+  );
+}
+
 const styles = StyleSheet.create({
   body: {
     flex: 1,
@@ -108,6 +170,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   card: {
+    alignSelf: "stretch",
     borderRadius: radius.xl,
     borderWidth: 1,
     gap: spacing.sm,
@@ -117,6 +180,10 @@ const styles = StyleSheet.create({
   },
   cardUnpadded: {
     padding: 0,
+  },
+  cardDense: {
+    gap: spacing.xs,
+    padding: spacing.sm,
   },
   chrome: {
     overflow: "hidden",
@@ -128,6 +195,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.sm,
     zIndex: 1,
+  },
+  headerCompact: {
+    gap: spacing.xxs,
+    paddingBottom: spacing.xs,
+    paddingTop: spacing.xs,
   },
   kicker: {
     color: palette.accentDeep,
@@ -173,9 +245,21 @@ const styles = StyleSheet.create({
     ...typography.body,
     maxWidth: 360,
   },
+  stateSubtitle: {
+    color: palette.muted,
+    ...typography.body,
+  },
+  stateTitle: {
+    color: palette.ink,
+    ...typography.headingSm,
+  },
   title: {
     color: palette.ink,
     ...typography.headingLg,
+  },
+  titleCompact: {
+    fontSize: 28,
+    lineHeight: 32,
   },
 });
 

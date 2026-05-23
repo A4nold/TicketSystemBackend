@@ -15,6 +15,8 @@ const CSRF_EXEMPT_PATHS = new Set([
   "/api/auth/forgot-password",
   "/api/auth/reset-password",
 ]);
+const CSRF_EXEMPT_EVENT_SHARE_ROUTE_PATTERN =
+  /^\/api\/events\/[^/]+\/share\/(analytics|flyer)$/;
 
 @Injectable()
 export class CsrfGuard implements CanActivate {
@@ -31,7 +33,10 @@ export class CsrfGuard implements CanActivate {
     }
 
     const requestPath = (request.originalUrl ?? request.url ?? "").split("?")[0] ?? "";
-    if (CSRF_EXEMPT_PATHS.has(requestPath)) {
+    if (
+      CSRF_EXEMPT_PATHS.has(requestPath) ||
+      CSRF_EXEMPT_EVENT_SHARE_ROUTE_PATTERN.test(requestPath)
+    ) {
       return true;
     }
 

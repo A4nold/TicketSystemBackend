@@ -53,6 +53,9 @@ export class EventLifecycleService {
           endsAt,
           status: payload.status,
           coverImageUrl: payload.coverImageUrl?.trim(),
+          shareHeadline: payload.shareHeadline?.trim(),
+          shareDescription: payload.shareDescription?.trim(),
+          shareImageUrl: payload.shareImageUrl?.trim(),
           salesStartAt: payload.salesStartAt
             ? new Date(payload.salesStartAt)
             : null,
@@ -157,6 +160,15 @@ export class EventLifecycleService {
         ...(payload.status !== undefined ? { status: payload.status } : {}),
         ...(payload.coverImageUrl !== undefined
           ? { coverImageUrl: payload.coverImageUrl?.trim() ?? null }
+          : {}),
+        ...(payload.shareHeadline !== undefined
+          ? { shareHeadline: payload.shareHeadline?.trim() ?? null }
+          : {}),
+        ...(payload.shareDescription !== undefined
+          ? { shareDescription: payload.shareDescription?.trim() ?? null }
+          : {}),
+        ...(payload.shareImageUrl !== undefined
+          ? { shareImageUrl: payload.shareImageUrl?.trim() ?? null }
           : {}),
         ...(payload.salesStartAt !== undefined
           ? {

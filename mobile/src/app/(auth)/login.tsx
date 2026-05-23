@@ -26,6 +26,7 @@ export default function LoginRoute() {
           href={{
             pathname: "/(public)/events/[slug]",
             params: {
+              authReturn: "1",
               slug: params.eventSlug,
               offerPrice: typeof params.offerPrice === "string" ? params.offerPrice : undefined,
               quantity: typeof params.quantity === "string" ? params.quantity : "1",
@@ -47,6 +48,7 @@ export default function LoginRoute() {
           href={{
             pathname: "/checkout/start",
             params: {
+              authReturn: "1",
               eventSlug: params.eventSlug,
               quantity: typeof params.quantity === "string" ? params.quantity : "1",
               ticketTypeId: params.ticketTypeId,

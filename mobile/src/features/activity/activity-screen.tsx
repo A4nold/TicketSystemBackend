@@ -13,6 +13,7 @@ import {
 } from "react-native";
 
 import { useAuth } from "@/components/providers/auth-provider";
+import { CollapsibleSection } from "@/components/section-primitives";
 import { ActionButton, Card, Screen } from "@/components/ui";
 import { formatDateTime } from "@/lib/formatters";
 import {
@@ -31,44 +32,6 @@ if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental
 
 function animateLayout() {
   LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-}
-
-function ActivitySection({
-  title,
-  subtitle,
-  statusLabel,
-  expanded,
-  onToggle,
-  children,
-}: {
-  children: React.ReactNode;
-  expanded: boolean;
-  onToggle: () => void;
-  statusLabel?: string;
-  subtitle: string;
-  title: string;
-}) {
-  return (
-    <Card padded={false}>
-      <View style={styles.sectionShell}>
-        <Pressable onPress={onToggle} style={styles.sectionHeaderButton}>
-          <View style={styles.sectionHeaderCopy}>
-            <Text style={styles.sectionTitle}>{title}</Text>
-            <Text style={styles.copy}>{subtitle}</Text>
-          </View>
-          <View style={styles.sectionHeaderMeta}>
-            {statusLabel ? (
-              <View style={styles.sectionStatePill}>
-                <Text style={styles.sectionStatePillText}>{statusLabel}</Text>
-              </View>
-            ) : null}
-            <Text style={styles.sectionChevron}>{expanded ? "Hide" : "Open"}</Text>
-          </View>
-        </Pressable>
-        {expanded ? children : null}
-      </View>
-    </Card>
-  );
 }
 
 export function ActivityScreen() {
@@ -165,19 +128,16 @@ export function ActivityScreen() {
   return (
     <Screen
       title="Activity"
-      subtitle="Updates, requests, and account activity."
+      subtitle="Requests and updates."
+      compactHeader
     >
       <>
         <ScrollView contentContainerStyle={styles.content}>
           <Card tone="accent" padded={false}>
             <View style={styles.heroShell}>
               <Text style={styles.heroEyebrow}>Live activity</Text>
-              <Text style={styles.heroTitle}>
-                Stay on top of what's happening with your tickets.
-              </Text>
-              <Text style={styles.heroCopy}>
-                Review transfer requests and important updates in one place.
-              </Text>
+              <Text style={styles.heroTitle}>Stay on top of your tickets.</Text>
+              <Text style={styles.heroCopy}>Requests and updates in one feed.</Text>
 
               <View style={styles.metricRow}>
                 <View style={styles.metricCard}>
@@ -192,14 +152,14 @@ export function ActivityScreen() {
             </View>
           </Card>
 
-          <ActivitySection
+          <CollapsibleSection
             expanded={isTransfersExpanded}
             onToggle={() => {
               animateLayout();
               setIsTransfersExpanded((current) => !current);
             }}
             statusLabel={transferCount ? `${transferCount} waiting` : "Clear"}
-            subtitle="Requests that still need your response."
+            subtitle="Needs your response."
             title="Transfer requests"
           >
             {transfersQuery.isLoading ? (
@@ -230,9 +190,9 @@ export function ActivityScreen() {
                       <Text style={styles.feedPillText}>{transfer.status}</Text>
                     </View>
                   </View>
-                  <Text style={styles.feedBody}>From {transfer.senderEmail}</Text>
+                  <Text numberOfLines={1} style={styles.feedBody}>From {transfer.senderEmail}</Text>
                   <Text style={styles.feedMeta}>
-                    Expires {formatDateTime(transfer.expiresAt)}
+                    ⏳ {formatDateTime(transfer.expiresAt)}
                   </Text>
                   <View style={styles.transferActionRow}>
                     <View style={styles.actionPill}>
@@ -244,10 +204,7 @@ export function ActivityScreen() {
             ) : (
               <View style={styles.emptyCard}>
                 <Text style={styles.emptyTitle}>No transfer requests waiting</Text>
-                <Text style={styles.copy}>
-                  You are all caught up. New incoming tickets and transfer approvals will appear
-                  here.
-                </Text>
+                <Text style={styles.copy}>You're all caught up.</Text>
                 <View style={styles.emptyStateActions}>
                   <ActionButton
                     onPress={() => router.push("/(public)" as never)}
@@ -257,16 +214,16 @@ export function ActivityScreen() {
                 </View>
               </View>
             )}
-          </ActivitySection>
+          </CollapsibleSection>
 
-          <ActivitySection
+          <CollapsibleSection
             expanded={isNotificationsExpanded}
             onToggle={() => {
               animateLayout();
               setIsNotificationsExpanded((current) => !current);
             }}
             statusLabel={notificationsQuery.hasNextPage ? "More available" : `${notificationCount} loaded`}
-            subtitle="Recent updates from your wallet activity."
+            subtitle="Recent wallet updates."
             title="Notifications"
           >
             {notificationsQuery.isLoading ? (
@@ -308,17 +265,14 @@ export function ActivityScreen() {
                       </View>
                     </View>
                   </View>
-                  <Text style={styles.feedBody}>{notification.body}</Text>
-                  <Text style={styles.feedMeta}>{formatDateTime(notification.createdAt)}</Text>
+                  <Text numberOfLines={2} style={styles.feedBody}>{notification.body}</Text>
+                  <Text style={styles.feedMeta}>🕒 {formatDateTime(notification.createdAt)}</Text>
                 </Pressable>
               ))
             ) : (
               <View style={styles.emptyCard}>
                 <Text style={styles.emptyTitle}>No notifications yet</Text>
-                <Text style={styles.copy}>
-                  Important updates like purchases, offer reviews, and transfers will show up
-                  here.
-                </Text>
+                <Text style={styles.copy}>Purchases, offers, and transfers will show up here.</Text>
                 <View style={styles.emptyStateActions}>
                   <ActionButton
                     onPress={async () => {
@@ -343,7 +297,7 @@ export function ActivityScreen() {
                 variant="secondary"
               />
             ) : null}
-          </ActivitySection>
+          </CollapsibleSection>
 
           {activityMessage ? (
             <Card tone="success">
@@ -359,9 +313,7 @@ export function ActivityScreen() {
             <View style={styles.stickyBar}>
               <View style={styles.stickyCopy}>
                 <Text style={styles.stickyTitle}>Activity quick action</Text>
-                <Text style={styles.stickyHint}>
-                  Keep moving without jumping back through the feed.
-                </Text>
+                <Text style={styles.stickyHint}>Keep moving without scrolling back.</Text>
               </View>
               <View style={styles.stickyActionWrap}>
                 <ActionButton onPress={() => void stickyAction.onPress()} title={stickyAction.label} />
@@ -486,23 +438,6 @@ const styles = StyleSheet.create({
   neutralPillText: {
     ...commonStyles.neutralPillText,
   },
-  sectionChevron: {
-    color: palette.muted,
-    fontSize: 12,
-    fontWeight: "800",
-    letterSpacing: 0.5,
-    textTransform: "uppercase",
-  },
-  sectionHeaderButton: {
-    ...commonStyles.sectionHeaderRow,
-  },
-  sectionHeaderCopy: {
-    flex: 1,
-    gap: 6,
-  },
-  sectionHeaderMeta: {
-    ...commonStyles.sectionHeaderMeta,
-  },
   skeletonCard: {
     backgroundColor: "#fff7eb",
     borderColor: palette.divider,
@@ -528,15 +463,6 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     height: 12,
     width: "52%",
-  },
-  sectionShell: {
-    ...commonStyles.sectionShell,
-  },
-  sectionStatePill: {
-    ...commonStyles.sectionStatusPill,
-  },
-  sectionStatePillText: {
-    ...commonStyles.sectionStatusPillText,
   },
   sectionTitle: {
     ...commonStyles.headingLg,

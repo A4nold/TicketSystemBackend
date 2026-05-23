@@ -8,7 +8,7 @@ The current mobile app now spans the main product journey from public discovery 
 
 - public discovery home for signed-out browsing
 - public event detail with ticket selection and checkout entry
-- attendee sign-in and attendee account creation
+- sign-in and account creation (checkout-aware auth continuation)
 - attendee sign-in with secure session persistence
 - wallet home with next-ticket prioritization
 - ticket detail with QR retrieval
@@ -21,6 +21,13 @@ The current mobile app now spans the main product journey from public discovery 
 - scanner event setup, manifest readiness, live validation, and degraded recovery
 
 Organizer resale policy, post-event publishing, and deeper issue operations still stay on the web for now.
+
+Recent UX updates:
+
+- image-first discover cards with cleaner metadata density
+- refined event details ticket picker with compact selectable rows
+- contextual event action sheet focused on flyer generation options
+- 2-step auth (email-first) with preserved checkout intent through auth redirects
 
 ## Local development
 

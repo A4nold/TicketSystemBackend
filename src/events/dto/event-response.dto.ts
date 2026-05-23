@@ -162,6 +162,15 @@ export class EventSummaryResponseDto {
   @ApiProperty({ nullable: true })
   coverImageUrl!: string | null;
 
+  @ApiProperty({ nullable: true })
+  shareHeadline!: string | null;
+
+  @ApiProperty({ nullable: true })
+  shareDescription!: string | null;
+
+  @ApiProperty({ nullable: true })
+  shareImageUrl!: string | null;
+
   @ApiProperty()
   allowResale!: boolean;
 

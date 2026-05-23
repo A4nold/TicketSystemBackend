@@ -14,8 +14,9 @@ import {
 
 import { useAuth } from "@/components/providers/auth-provider";
 import { useWalletSync } from "@/components/providers/wallet-sync-provider";
+import { CollapsibleSection } from "@/components/section-primitives";
 import { SupportCard } from "@/components/support/support-card";
-import { ActionButton, Card, Screen } from "@/components/ui";
+import { ActionButton, Card, EmptyStateCard, LoadingStateCard, Screen } from "@/components/ui";
 import { getTicketStatusMeta, groupTicketsByEvent } from "@/features/wallet/wallet-model";
 import { formatDateTime } from "@/lib/formatters";
 import { getOrderById } from "@/lib/orders/orders-client";
@@ -30,44 +31,6 @@ if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental
 
 function animateLayout() {
   LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-}
-
-function WalletSection({
-  title,
-  subtitle,
-  statusLabel,
-  expanded,
-  onToggle,
-  children,
-}: {
-  children: React.ReactNode;
-  expanded: boolean;
-  onToggle: () => void;
-  statusLabel?: string;
-  subtitle: string;
-  title: string;
-}) {
-  return (
-    <Card padded={false}>
-      <View style={styles.sectionShell}>
-        <Pressable onPress={onToggle} style={styles.sectionHeaderButton}>
-          <View style={styles.sectionHeaderCopy}>
-            <Text style={styles.sectionTitle}>{title}</Text>
-            <Text style={styles.copy}>{subtitle}</Text>
-          </View>
-          <View style={styles.sectionHeaderMeta}>
-            {statusLabel ? (
-              <View style={styles.sectionStatePill}>
-                <Text style={styles.sectionStatePillText}>{statusLabel}</Text>
-              </View>
-            ) : null}
-            <Text style={styles.sectionChevron}>{expanded ? "Hide" : "Open"}</Text>
-          </View>
-        </Pressable>
-        {expanded ? children : null}
-      </View>
-    </Card>
-  );
 }
 
 export function WalletHomeScreen() {
@@ -144,7 +107,8 @@ export function WalletHomeScreen() {
   return (
     <Screen
       title={session?.user.firstName ? `${session.user.firstName}'s wallet` : "Ticket wallet"}
-      subtitle="Your tickets, ready when you need them."
+      subtitle="Your tickets."
+      compactHeader
     >
       <ScrollView contentContainerStyle={styles.content}>
         <Card tone="accent" padded={false}>
@@ -153,9 +117,7 @@ export function WalletHomeScreen() {
             <View style={styles.heroGlowSecondary} />
             <Text style={styles.heroEyebrow}>Live wallet</Text>
             <Text style={styles.heroHeadline}>Everything you need for your next event.</Text>
-            <Text style={styles.heroCopy}>
-              See active tickets first, then keep track of the rest by event.
-            </Text>
+            <Text style={styles.heroCopy}>Your active passes, at a glance.</Text>
 
             <View style={styles.metricRow}>
               <View style={styles.metricCard}>
@@ -182,17 +144,17 @@ export function WalletHomeScreen() {
           <Card tone="success">
             <Text style={styles.sectionTitle}>Recent purchase</Text>
             <Text style={styles.copy}>
-              {recentOrderQuery.data.event.title} is now linked to your wallet.
+              {recentOrderQuery.data.event.title} is now in your wallet.
               {recentOrderQuery.data.tickets.length > 0
                 ? ` ${recentOrderQuery.data.tickets.length} ticket${recentOrderQuery.data.tickets.length === 1 ? "" : "s"} arrived successfully.`
-                : " Payment is confirmed and ticket issuance is still finalizing."}
+                : " Payment confirmed. Ticket issuance is still finalizing."}
             </Text>
             <View style={styles.purchaseMetaRow}>
-              <Text style={styles.purchaseMetaLabel}>Order</Text>
+              <Text style={styles.purchaseMetaLabel}>🧾 Order</Text>
               <Text style={styles.purchaseMetaValue}>{recentOrderQuery.data.id}</Text>
             </View>
             <View style={styles.purchaseMetaRow}>
-              <Text style={styles.purchaseMetaLabel}>Total</Text>
+              <Text style={styles.purchaseMetaLabel}>💳 Total</Text>
               <Text style={styles.purchaseMetaValue}>
                 {new Intl.NumberFormat("en-IE", {
                   currency: recentOrderQuery.data.currency,
@@ -217,10 +179,7 @@ export function WalletHomeScreen() {
 
         {walletQuery.isLoading ? (
           <>
-            <Card>
-              <Text style={styles.sectionTitle}>Preparing your wallet</Text>
-              <Text style={styles.copy}>Fetching your latest tickets and readiness state.</Text>
-            </Card>
+            <LoadingStateCard title="Preparing your wallet" subtitle="Loading your latest tickets." />
             <Card padded={false}>
               <View style={styles.skeletonCard}>
                 <View style={styles.skeletonLineLg} />
@@ -245,9 +204,7 @@ export function WalletHomeScreen() {
           <>
             <Card tone="warning">
               <Text style={styles.sectionTitle}>Wallet needs another try</Text>
-              <Text style={styles.copy}>
-                We couldn't load your latest ticket status. Please try again.
-              </Text>
+              <Text style={styles.copy}>We couldn't load your latest ticket status.</Text>
               <ActionButton onPress={() => void walletQuery.refetch()} title="Retry wallet" />
             </Card>
             <SupportCard
@@ -259,35 +216,25 @@ export function WalletHomeScreen() {
         ) : null}
 
         {!walletQuery.isLoading && !walletQuery.isError && !primaryTicket ? (
-          <Card>
-            <Text style={styles.sectionTitle}>Your wallet is ready</Text>
-            <Text style={styles.copy}>
-              You do not have tickets yet. Discover upcoming experiences and your next pass will
-              appear here automatically after checkout.
-            </Text>
-            <View style={styles.emptyStateActions}>
-              <ActionButton
-                onPress={() => router.push("/(public)")}
-                title="Explore events"
-              />
-              <ActionButton
-                onPress={() => router.push("/(tabs)/activity" as never)}
-                title="Open activity center"
-                variant="secondary"
-              />
-            </View>
-          </Card>
+          <EmptyStateCard
+            action={() => router.push("/(public)")}
+            actionTitle="Explore events"
+            secondaryAction={() => router.push("/(tabs)/activity" as never)}
+            secondaryActionTitle="Open activity center"
+            subtitle="You don't have tickets yet."
+            title="Your wallet is ready"
+          />
         ) : null}
 
         {primaryTicket ? (
-          <WalletSection
+          <CollapsibleSection
             expanded={isPriorityExpanded}
             onToggle={() => {
               animateLayout();
               setIsPriorityExpanded((current) => !current);
             }}
             statusLabel={primaryTicket.status.replaceAll("_", " ")}
-            subtitle={`${primaryTicket.ticketType.name} · ${formatDateTime(primaryTicket.event.startsAt)}`}
+            subtitle={`🎟 ${primaryTicket.ticketType.name} · 🗓 ${formatDateTime(primaryTicket.event.startsAt)}`}
             title="Priority ticket"
           >
             <View style={styles.primaryTicketShell}>
@@ -295,9 +242,7 @@ export function WalletHomeScreen() {
                 <View style={styles.primaryTicketHeading}>
                   <Text style={styles.eyebrow}>Up next</Text>
                   <Text style={styles.heroTitle}>{primaryTicket.event.title}</Text>
-                  <Text style={styles.copy}>
-                    {getTicketStatusMeta(primaryTicket.status).description}
-                  </Text>
+                  <Text style={styles.copy} numberOfLines={1}>{getTicketStatusMeta(primaryTicket.status).description}</Text>
                 </View>
               </View>
 
@@ -316,11 +261,11 @@ export function WalletHomeScreen() {
 
               <ActionButton onPress={() => openTicket(primaryTicket.serialNumber)} title="Open ticket" />
             </View>
-          </WalletSection>
+          </CollapsibleSection>
         ) : null}
 
         {groupedTickets.map((group) => (
-          <WalletSection
+          <CollapsibleSection
             key={group.event.id}
             expanded={Boolean(effectiveExpandedEventIds[group.event.id])}
             onToggle={() => {
@@ -331,7 +276,7 @@ export function WalletHomeScreen() {
               }));
             }}
             statusLabel={`${group.tickets.length} ticket${group.tickets.length > 1 ? "s" : ""}`}
-            subtitle={formatDateTime(group.event.startsAt)}
+            subtitle={`🗓 ${formatDateTime(group.event.startsAt)}`}
             title={group.event.title}
           >
             <View style={styles.group}>
@@ -348,7 +293,7 @@ export function WalletHomeScreen() {
                       <View style={styles.ticketHeaderRow}>
                         <View style={styles.ticketHeaderText}>
                           <Text style={styles.ticketTitle}>{ticket.ticketType.name}</Text>
-                          <Text style={styles.copy}>{meta.description}</Text>
+                          <Text numberOfLines={1} style={styles.copy}>{meta.description}</Text>
                         </View>
                         <View style={styles.smallStatusPill}>
                           <Text style={styles.smallStatusPillText}>
@@ -359,7 +304,7 @@ export function WalletHomeScreen() {
 
                       <View style={styles.ticketFooterRow}>
                         <View>
-                          <Text style={styles.serialLabel}>Serial</Text>
+                          <Text style={styles.serialLabel}>🔖 Serial</Text>
                           <Text style={styles.serial}>{ticket.serialNumber}</Text>
                         </View>
                         <ActionButton
@@ -373,7 +318,7 @@ export function WalletHomeScreen() {
                 );
               })}
             </View>
-          </WalletSection>
+          </CollapsibleSection>
         ))}
       </ScrollView>
     </Screen>
@@ -418,10 +363,6 @@ const styles = StyleSheet.create({
     fontFamily: "Courier",
     fontSize: 13,
     fontWeight: "700",
-  },
-  emptyStateActions: {
-    gap: 10,
-    marginTop: 12,
   },
   eyebrow: {
     color: palette.successDeep,
@@ -524,32 +465,6 @@ const styles = StyleSheet.create({
   },
   primaryTicketTop: {
     gap: 12,
-  },
-  sectionChevron: {
-    color: palette.muted,
-    fontSize: 12,
-    fontWeight: "800",
-    letterSpacing: 0.5,
-    textTransform: "uppercase",
-  },
-  sectionHeaderButton: {
-    ...commonStyles.sectionHeaderRow,
-  },
-  sectionHeaderCopy: {
-    flex: 1,
-    gap: 6,
-  },
-  sectionHeaderMeta: {
-    ...commonStyles.sectionHeaderMeta,
-  },
-  sectionShell: {
-    ...commonStyles.sectionShell,
-  },
-  sectionStatePill: {
-    ...commonStyles.sectionStatusPill,
-  },
-  sectionStatePillText: {
-    ...commonStyles.sectionStatusPillText,
   },
   sectionTitle: {
     ...commonStyles.headingLg,

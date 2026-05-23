@@ -4,6 +4,21 @@ TicketSystem is a full-stack event ticketing platform focused on an event wallet
 
 ## Current Product State
 
+### Latest Snapshot (May 2026)
+
+- dual payment foundation added:
+  - Stripe Connect-oriented payment domain models and API surfaces
+  - Paystack marketplace settlement foundation for NGN flows
+- public event sharing/media MVP added:
+  - organizer header image upload + removal
+  - public event image-first surfaces (web + mobile)
+  - flyer generation endpoints and mobile actions
+  - public share analytics capture
+- mobile UX refresh in progress:
+  - cleaner discovery cards with stronger media hierarchy
+  - lighter event details + ticket selection
+  - checkout-aware 2-step auth flow with state continuity through sign-in/sign-up
+
 The app is currently organized around four main product surfaces:
 
 - Public marketplace

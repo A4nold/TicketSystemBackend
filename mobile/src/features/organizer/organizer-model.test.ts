@@ -74,6 +74,7 @@ describe("organizer-model", () => {
 
   it("builds an event patch with optional fields omitted", () => {
     const payload = buildOrganizerEventPatch({
+      coverImageUrl: "",
       description: "",
       currency: "NGN",
       endsAt: "",
@@ -117,6 +118,7 @@ describe("organizer-model", () => {
 
   it("validates the required event fields before save", () => {
     const result = validateEventEditorState({
+      coverImageUrl: "",
       description: "",
       currency: "EUR",
       endsAt: "not-a-date",

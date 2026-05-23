@@ -16,8 +16,9 @@ import {
 } from "react-native";
 
 import { useAuth } from "@/components/providers/auth-provider";
+import { CollapsibleSection } from "@/components/section-primitives";
 import { SupportCard } from "@/components/support/support-card";
-import { ActionButton, Card, Screen } from "@/components/ui";
+import { ActionButton, Card, EmptyStateCard, LoadingStateCard, Screen } from "@/components/ui";
 import { canAccessScannerEvents, hasScannerSurfaceAccess } from "@/features/auth/scanner-access";
 import {
   buildDegradedAttempt,
@@ -78,35 +79,6 @@ function getManifestAgeMinutes(generatedAt: string | null | undefined) {
   }
 
   return Math.max(0, Math.round((Date.now() - generatedTime) / 60000));
-}
-
-function SectionCard({
-  title,
-  subtitle,
-  expanded,
-  onToggle,
-  children,
-}: {
-  children: React.ReactNode;
-  expanded: boolean;
-  onToggle: () => void;
-  subtitle: string;
-  title: string;
-}) {
-  return (
-    <Card padded={false}>
-      <View style={styles.sectionShell}>
-        <Pressable onPress={onToggle} style={styles.sectionHeaderButton}>
-          <View style={styles.sectionHeaderCopy}>
-            <Text style={styles.sectionTitle}>{title}</Text>
-            <Text style={styles.copy}>{subtitle}</Text>
-          </View>
-          <Text style={styles.sectionChevron}>{expanded ? "Hide" : "Open"}</Text>
-        </Pressable>
-        {expanded ? children : null}
-      </View>
-    </Card>
-  );
 }
 
 function toSyncAttempt(attempt: ScannerAttemptRecord): ScannerSyncAttempt {
@@ -588,12 +560,12 @@ export function ScannerScreen() {
 
   if (eventsQuery.isLoading) {
     return (
-      <Screen title="Scanner" subtitle="Preparing your assigned event access.">
+      <Screen title="Scanner" subtitle="Preparing access.">
         <ScrollView contentContainerStyle={styles.content}>
-          <Card>
-            <Text style={styles.sectionTitle}>Loading scanner access</Text>
-            <Text style={styles.copy}>We are collecting the events this account can scan.</Text>
-          </Card>
+          <LoadingStateCard
+            subtitle="Loading events this account can scan."
+            title="Loading scanner access"
+          />
         </ScrollView>
       </Screen>
     );
@@ -601,22 +573,19 @@ export function ScannerScreen() {
 
   if (!hasSurfaceAccess || !canAccessScannerEvents(session?.user)) {
     return (
-      <Screen title="Scanner" subtitle="Camera-first validation for doors and check-in.">
+      <Screen title="Scanner" subtitle="Camera-first entry validation.">
         <ScrollView contentContainerStyle={styles.content}>
-          <Card>
-            <Text style={styles.sectionTitle}>No scanner access yet</Text>
-            <Text style={styles.copy}>
-              This account can sign in, but it does not currently have accepted scanner access for an
-              event.
-            </Text>
-          </Card>
+          <EmptyStateCard
+            subtitle="This account does not have accepted scanner event access yet."
+            title="No scanner access yet"
+          />
         </ScrollView>
       </Screen>
     );
   }
 
   return (
-    <Screen title="Scanner" subtitle="Validate entry quickly, recover safely, and keep doors moving.">
+    <Screen title="Scanner" subtitle="Validate entry and keep doors moving.">
       <ScrollView contentContainerStyle={styles.content}>
         <Card tone={degradedMode ? "warning" : "accent"} padded={false}>
           <View style={styles.heroShell}>
@@ -643,10 +612,10 @@ export function ScannerScreen() {
           </View>
         </Card>
 
-        <SectionCard
+        <CollapsibleSection
           expanded={expandedSections.readiness}
           onToggle={() => toggleSection("readiness")}
-          subtitle="Confirm the lane, device, manifest, and scan mode before doors open."
+          subtitle="Lane, device, manifest, scan mode."
           title="Door readiness"
         >
           <View style={styles.readinessGrid}>
@@ -683,10 +652,7 @@ export function ScannerScreen() {
 
           <Card tone="accent">
             <Text style={styles.sectionTitle}>Before doors open</Text>
-            <Text style={styles.copy}>
-              Pick the event, refresh the manifest, confirm camera permission, and label the lane on
-              this device so every scan session can be traced clearly later.
-            </Text>
+            <Text style={styles.copy}>Pick event, refresh manifest, confirm camera, label lane.</Text>
           </Card>
 
           {recoveryNotice ? (
@@ -695,12 +661,12 @@ export function ScannerScreen() {
               <Text style={styles.copy}>{recoveryNotice}</Text>
             </Card>
           ) : null}
-        </SectionCard>
+        </CollapsibleSection>
 
-        <SectionCard
+        <CollapsibleSection
           expanded={expandedSections.event}
           onToggle={() => toggleSection("event")}
-          subtitle="Choose the event and prepare its validation manifest."
+          subtitle="Select event and prepare manifest."
           title="Event setup"
         >
           <View style={styles.segmentedWrap}>
@@ -738,9 +704,7 @@ export function ScannerScreen() {
             </View>
           ) : null}
 
-          {manifestQuery.isLoading ? (
-            <Text style={styles.copy}>Loading validation manifest...</Text>
-          ) : null}
+          {manifestQuery.isLoading ? <Text style={styles.copy}>Loading manifest...</Text> : null}
 
           <View style={styles.infoCard}>
             <Text style={styles.infoTitle}>
@@ -828,12 +792,12 @@ export function ScannerScreen() {
               <Text style={styles.copy}>{syncNotice}</Text>
             </Card>
           ) : null}
-        </SectionCard>
+        </CollapsibleSection>
 
-        <SectionCard
+        <CollapsibleSection
           expanded={expandedSections.camera}
           onToggle={() => toggleSection("camera")}
-          subtitle="Camera-first scanning with manual fallback."
+          subtitle="Camera scanning with manual fallback."
           title="Validation"
         >
           {!isPhysicalDevice ? (
@@ -1027,12 +991,12 @@ export function ScannerScreen() {
                       : "If a lane stalls, switch to manual entry, keep the next guests moving, and escalate only the disputed case rather than stopping the whole line."}
             </Text>
           </Card>
-        </SectionCard>
+        </CollapsibleSection>
 
-        <SectionCard
+        <CollapsibleSection
           expanded={expandedSections.recent}
           onToggle={() => toggleSection("recent")}
-          subtitle="Recent attempts help the door team stay confident."
+          subtitle="Latest attempts at this lane."
           title="Recent attempts"
         >
           {recentAttempts.length ? (
@@ -1060,7 +1024,7 @@ export function ScannerScreen() {
               <Text style={styles.copy}>Your latest scans will appear here.</Text>
             </View>
           )}
-        </SectionCard>
+        </CollapsibleSection>
 
         {scanError || (permission && !permission.granted) || latestOutcome?.outcome === "BLOCKED" ? (
           <SupportCard
@@ -1378,27 +1342,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#f7e5d0",
     borderColor: "#e7c399",
     borderWidth: 1,
-  },
-  sectionChevron: {
-    color: palette.muted,
-    fontSize: 12,
-    fontWeight: "800",
-    letterSpacing: 0.5,
-    textTransform: "uppercase",
-  },
-  sectionHeaderButton: {
-    alignItems: "flex-start",
-    flexDirection: "row",
-    gap: 12,
-    justifyContent: "space-between",
-  },
-  sectionHeaderCopy: {
-    flex: 1,
-    gap: 6,
-  },
-  sectionShell: {
-    gap: 14,
-    padding: 18,
   },
   sectionTitle: {
     color: palette.ink,

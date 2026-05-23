@@ -35,6 +35,9 @@ type ApiEventDetail = {
   endsAt: string | null;
   status: string;
   coverImageUrl: string | null;
+  shareHeadline?: string | null;
+  shareDescription?: string | null;
+  shareImageUrl?: string | null;
   allowResale: boolean;
   organizer: ApiEventOrganizer;
   ticketTypes: ApiEventTicketType[];
@@ -52,6 +55,9 @@ type ApiEventSummary = {
   endsAt: string | null;
   status: string;
   coverImageUrl: string | null;
+  shareHeadline?: string | null;
+  shareDescription?: string | null;
+  shareImageUrl?: string | null;
   allowResale: boolean;
   organizer: ApiEventOrganizer;
   ticketTypes: ApiEventTicketType[];
@@ -84,10 +90,14 @@ export type PublicEventTicketType = {
 
 export type PublicEventDetail = {
   allowResale: boolean;
+  coverImageUrl?: string | null;
   description: string | null;
   endsAt: string | null;
   id: string;
   organizerName: string;
+  shareDescription?: string | null;
+  shareHeadline?: string | null;
+  shareImageUrl?: string | null;
   slug: string;
   startsAt: string;
   status: string;
@@ -99,11 +109,15 @@ export type PublicEventDetail = {
 
 export type PublicEventSummary = {
   allowResale: boolean;
+  coverImageUrl?: string | null;
   description: string | null;
   endsAt: string | null;
   id: string;
   issuedTicketsCount: number;
   organizerName: string;
+  shareDescription?: string | null;
+  shareHeadline?: string | null;
+  shareImageUrl?: string | null;
   slug: string;
   startsAt: string;
   status: string;
@@ -220,10 +234,14 @@ function mapTicketAvailability(
 function mapPublicEventDetail(event: ApiEventDetail): PublicEventDetail {
   return {
     allowResale: event.allowResale,
+    coverImageUrl: event.coverImageUrl,
     description: event.description,
     endsAt: event.endsAt,
     id: event.id,
     organizerName: getOrganizerName(event.organizer),
+    shareDescription: event.shareDescription ?? null,
+    shareHeadline: event.shareHeadline ?? null,
+    shareImageUrl: event.shareImageUrl ?? null,
     slug: event.slug,
     startsAt: event.startsAt,
     status: event.status,
@@ -263,11 +281,15 @@ function mapPublicEventDetail(event: ApiEventDetail): PublicEventDetail {
 function mapPublicEventSummary(event: ApiEventSummary): PublicEventSummary {
   return {
     allowResale: event.allowResale,
+    coverImageUrl: event.coverImageUrl,
     description: event.description,
     endsAt: event.endsAt,
     id: event.id,
     issuedTicketsCount: event.issuedTicketsCount,
     organizerName: getOrganizerName(event.organizer),
+    shareDescription: event.shareDescription ?? null,
+    shareHeadline: event.shareHeadline ?? null,
+    shareImageUrl: event.shareImageUrl ?? null,
     slug: event.slug,
     startsAt: event.startsAt,
     status: event.status,

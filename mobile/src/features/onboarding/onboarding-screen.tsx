@@ -38,7 +38,7 @@ export function OnboardingScreen() {
   }
 
   return (
-    <Screen title="Welcome to Maya" subtitle="A premium wallet for unforgettable events.">
+    <Screen title="Welcome to Maya" subtitle="Your event wallet." compactHeader>
       <ScrollView contentContainerStyle={styles.content}>
         <Card tone="accent" padded={false}>
           <View style={styles.hero}>

@@ -25,10 +25,25 @@ function getStartingPriceLabel(event: PublicEventDetail) {
 
 export function PublicEventHero({ event }: { event: PublicEventDetail }) {
   const authNext = `/tickets?eventSlug=${encodeURIComponent(event.slug)}`;
+  const hasCoverImage = Boolean(event.coverImageUrl);
 
   return (
-    <section className="relative overflow-hidden rounded-[2rem] border border-border bg-[linear-gradient(135deg,rgba(255,255,255,0.98),rgba(223,240,242,0.76),rgba(255,236,230,0.82))] px-6 py-8 shadow-[0_24px_70px_rgba(16,32,51,0.14)] sm:px-8 sm:py-10">
+    <section
+      className="relative overflow-hidden rounded-[2rem] border border-border bg-[linear-gradient(135deg,rgba(255,255,255,0.98),rgba(223,240,242,0.76),rgba(255,236,230,0.82))] px-6 py-8 shadow-[0_24px_70px_rgba(16,32,51,0.14)] sm:px-8 sm:py-10"
+      style={
+        hasCoverImage
+          ? {
+              backgroundImage: `url(${event.coverImageUrl})`,
+              backgroundPosition: "center",
+              backgroundSize: "cover",
+            }
+          : undefined
+      }
+    >
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(15,143,134,0.14),transparent_28%),radial-gradient(circle_at_bottom_left,rgba(217,95,67,0.16),transparent_32%)]" />
+      {hasCoverImage ? (
+        <div className="absolute inset-0 bg-black/45" />
+      ) : null}
       <div className="relative grid gap-8 lg:grid-cols-[minmax(0,1.3fr)_minmax(18rem,0.82fr)]">
         <div className="space-y-5">
           <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em]">
@@ -303,12 +318,15 @@ export function PublicEventFooter({ slug }: { slug: string }) {
   return (
     <Panel>
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="space-y-2">
-          <p className="text-sm font-medium uppercase tracking-[0.24em] text-muted">
-            Shareable event path
-          </p>
-          <p className="font-mono text-sm text-foreground">/events/{slug}</p>
-        </div>
+        {/*
+          Temporarily hidden until the share-link behavior is finalized.
+          <div className="space-y-2">
+            <p className="text-sm font-medium uppercase tracking-[0.24em] text-muted">
+              Shareable event path
+            </p>
+            <p className="font-mono text-sm text-foreground">/events/{slug}</p>
+          </div>
+        */}
 
         <div className="flex flex-wrap gap-3">
           <Link
