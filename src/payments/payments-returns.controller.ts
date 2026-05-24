@@ -54,7 +54,14 @@ export class PaymentsReturnsController {
     const pathFromQuery = this.resolveSafePath(path);
 
     if (schemeFromQuery && pathFromQuery) {
-      return `${schemeFromQuery}://${pathFromQuery.replace(/^\//, "")}`;
+      const normalizedPath = pathFromQuery.replace(/^\/+/, "");
+
+      // Always emit hostless deep links as scheme:///path for Expo Router compatibility.
+      if (!normalizedPath) {
+        return `${schemeFromQuery}:///checkout/success`;
+      }
+
+      return `${schemeFromQuery}:///${normalizedPath}`;
     }
 
     if (!value) {
@@ -63,9 +70,26 @@ export class PaymentsReturnsController {
 
     try {
       const parsed = new URL(value);
-      return ["ticketsystem:", "exp:", "exps:"].includes(parsed.protocol)
-        ? parsed.toString()
-        : null;
+      if (!["ticketsystem:", "exp:", "exps:"].includes(parsed.protocol)) {
+        return null;
+      }
+
+      const hostPart = parsed.host ? `/${parsed.host}` : "";
+      const combinedPath = `${hostPart}${parsed.pathname || ""}`.replace(/\/{2,}/g, "/");
+      const normalizedPath = combinedPath.replace(/^\/+/, "");
+      const normalized = new URL(
+        `${parsed.protocol}///${normalizedPath || "checkout/success"}`,
+      );
+
+      for (const [key, queryValue] of parsed.searchParams.entries()) {
+        normalized.searchParams.set(key, queryValue);
+      }
+
+      if (parsed.hash) {
+        normalized.hash = parsed.hash;
+      }
+
+      return normalized.toString();
     } catch {
       return null;
     }

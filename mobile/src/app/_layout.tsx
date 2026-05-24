@@ -24,18 +24,18 @@ function RootNavigator() {
   }
 
   return (
-    <Stack
-      screenOptions={{
-        animation: "slide_from_right",
-        headerShown: false,
-        presentation: "card",
-      }}
-    >
-      <Stack.Screen name="index" />
-      <Stack.Screen name="(onboarding)" />
-      <Stack.Screen name="(public)" />
-      <Stack.Screen name="(auth)" />
-      <Stack.Screen name="(tabs)" />
+      <Stack
+        screenOptions={{
+          animation: "slide_from_right",
+          headerShown: false,
+          presentation: "card",
+        }}
+      >
+        <Stack.Screen name="index" />
+        <Stack.Screen name="onboarding" />
+        <Stack.Screen name="(public)" />
+        <Stack.Screen name="(auth)" />
+        <Stack.Screen name="(tabs)" />
       <Stack.Screen name="checkout/start" />
       <Stack.Screen name="checkout/paystack-inline" />
       <Stack.Screen name="checkout/success" />

@@ -92,7 +92,8 @@ function EventCard({
         <Card density={isFeatured ? "comfortable" : "dense"} padded={false}>
           <View style={styles.cardImageWrap}>
             <ImageBackground
-              imageStyle={styles.cardImage}
+              imageStyle={styles.cardImageSource}
+              resizeMode="cover"
               source={coverImageUrl ? { uri: coverImageUrl } : undefined}
               style={[styles.cardImage, isFeatured ? styles.cardImageFeatured : null]}
             >
@@ -305,6 +306,13 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 14,
     height: 190,
     width: "100%",
+  },
+  cardImageSource: {
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+    borderTopLeftRadius: 14,
+    borderTopRightRadius: 14,
+    resizeMode: "cover",
   },
   cardImageFeatured: {
     height: 220,

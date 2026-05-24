@@ -44,7 +44,7 @@ export default function IndexScreen() {
   }
 
   if (!seenOnboarding) {
-    return <Redirect href={"/(onboarding)/index" as never} />;
+    return <Redirect href={"/onboarding" as never} />;
   }
 
   return <DiscoveryScreen />;
