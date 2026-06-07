@@ -258,7 +258,7 @@ describe("PaymentsService Paystack", () => {
   });
 
   it("persists Stripe charge refunds and marks organizer settlement on hold", async () => {
-    process.env.STRIPE_WEBHOOK_SECRET = "whsec_test";
+    process.env.STRIPE_WEBHOOK_SECRET = "stripe_webhook_secret_for_tests";
     const rawBody = Buffer.from("stripe-refund");
     const event = {
       id: "evt_refund_123",
@@ -315,7 +315,7 @@ describe("PaymentsService Paystack", () => {
     expect(stripeMock.webhooks.constructEvent).toHaveBeenCalledWith(
       rawBody,
       "sig_test",
-      "whsec_test",
+      "stripe_webhook_secret_for_tests",
     );
     expect(prisma.refund.upsert).toHaveBeenCalledWith(
       expect.objectContaining({

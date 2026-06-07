@@ -33,6 +33,9 @@ import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { AuthenticatedUser } from "../auth/types/authenticated-user.type";
 import { CreateEventDto } from "./dto/create-event.dto";
 import { CreateTicketTypeDto } from "./dto/create-ticket-type.dto";
+import { EventAttendeesResponseDto } from "./dto/event-attendee-response.dto";
+import { EventSalesResponseDto } from "./dto/event-sales-response.dto";
+import { ListEventSalesQueryDto } from "./dto/list-event-sales-query.dto";
 import {
   EventDetailResponseDto,
   EventStaffMemberDto,
@@ -40,7 +43,10 @@ import {
   EventTicketTypeDto,
   StaffMembershipResponseDto,
 } from "./dto/event-response.dto";
+import { EventAttendeesQueryService } from "./event-attendees-query.service";
+import { EventSalesQueryService } from "./event-sales-query.service";
 import { InviteStaffMemberDto } from "./dto/invite-staff-member.dto";
+import { ListEventAttendeesQueryDto } from "./dto/list-event-attendees-query.dto";
 import { ListEventsQueryDto } from "./dto/list-events-query.dto";
 import { UpdateStaffRoleDto } from "./dto/update-staff-role.dto";
 import { UpdateEventDto } from "./dto/update-event.dto";
@@ -61,6 +67,8 @@ import { GenerateEventFlyerDto } from "./dto/generate-event-flyer.dto";
 export class EventsController {
   constructor(
     private readonly eventQueryService: EventQueryService,
+    private readonly eventAttendeesQueryService: EventAttendeesQueryService,
+    private readonly eventSalesQueryService: EventSalesQueryService,
     private readonly eventsService: EventsService,
     private readonly eventShareAnalyticsService: EventShareAnalyticsService,
     private readonly eventMediaService: EventMediaService,
@@ -359,6 +367,54 @@ export class EventsController {
     @Param("eventId") eventId: string,
   ) {
     return this.eventsService.listStaff(eventId);
+  }
+
+  @Get(":eventId/attendees")
+  @ApiBearerAuth("bearer")
+  @UseGuards(JwtAuthGuard, EventMembershipGuard)
+  @RequireEventRoles(StaffRole.OWNER, StaffRole.ADMIN)
+  @ApiOperation({
+    summary: "List event attendees",
+    description:
+      "Returns organizer-facing attendee, purchaser, ticket, and check-in context for an event.",
+  })
+  @ApiParam({
+    name: "eventId",
+    description: "Event identifier",
+  })
+  @ApiOkResponse({
+    description: "Event attendee list",
+    type: EventAttendeesResponseDto,
+  })
+  listAttendees(
+    @Param("eventId") eventId: string,
+    @Query() query: ListEventAttendeesQueryDto,
+  ) {
+    return this.eventAttendeesQueryService.listEventAttendees(eventId, query);
+  }
+
+  @Get(":eventId/sales")
+  @ApiBearerAuth("bearer")
+  @UseGuards(JwtAuthGuard, EventMembershipGuard)
+  @RequireEventRoles(StaffRole.OWNER, StaffRole.ADMIN)
+  @ApiOperation({
+    summary: "Get event sales summary",
+    description:
+      "Returns organizer-facing event sales totals and recent transaction history.",
+  })
+  @ApiParam({
+    name: "eventId",
+    description: "Event identifier",
+  })
+  @ApiOkResponse({
+    description: "Event sales summary",
+    type: EventSalesResponseDto,
+  })
+  getSales(
+    @Param("eventId") eventId: string,
+    @Query() query: ListEventSalesQueryDto,
+  ) {
+    return this.eventSalesQueryService.getEventSales(eventId, query);
   }
 
   @Post(":eventId/staff/invite")

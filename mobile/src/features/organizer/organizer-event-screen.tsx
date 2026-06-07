@@ -1164,6 +1164,38 @@ export function OrganizerEventScreen() {
                   <Text style={styles.metricValue}>{selectedSummary.ticketTypes.length}</Text>
                 </View>
               </View>
+              <ActionButton
+                onPress={() => {
+                  router.push(
+                    {
+                      params: {
+                        eventId: selectedSummary.id,
+                        slug: selectedSummary.slug,
+                        title: selectedSummary.title,
+                      },
+                      pathname: "/organizer/[slug]/attendees",
+                    } as never,
+                  );
+                }}
+                title="View attendees"
+                variant="secondary"
+              />
+              <ActionButton
+                onPress={() => {
+                  router.push(
+                    {
+                      params: {
+                        eventId: selectedSummary.id,
+                        slug: selectedSummary.slug,
+                        title: selectedSummary.title,
+                      },
+                      pathname: "/organizer/[slug]/sales",
+                    } as never,
+                  );
+                }}
+                title="View sales"
+                variant="secondary"
+              />
             </View>
           </Card>
         ) : null}
