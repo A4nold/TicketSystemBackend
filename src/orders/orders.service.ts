@@ -12,7 +12,9 @@ import { CancelOrderDto } from "./dto/cancel-order.dto";
 import { ConfirmPaymentDto } from "./dto/confirm-payment.dto";
 import { CreateCheckoutDto } from "./dto/create-checkout.dto";
 import { toOrderResponse } from "./mappers/order-response.mapper";
+import { OrderRefundService } from "./order-refund.service";
 import { OrderPaymentService } from "./order-payment.service";
+import { CreateRefundDto } from "./dto/create-refund.dto";
 
 @Injectable()
 export class OrdersService {
@@ -20,6 +22,7 @@ export class OrdersService {
     private readonly prisma: PrismaService,
     private readonly checkoutService: CheckoutService,
     private readonly orderPaymentService: OrderPaymentService,
+    private readonly orderRefundService: OrderRefundService,
   ) {}
 
   async createCheckout(payload: CreateCheckoutDto, user: AuthenticatedUser) {
@@ -36,6 +39,18 @@ export class OrdersService {
     user: AuthenticatedUser,
   ) {
     return this.orderPaymentService.confirmPayment(orderId, payload, user);
+  }
+
+  async listRefunds(orderId: string, user: AuthenticatedUser) {
+    return this.orderRefundService.listRefunds(orderId, user);
+  }
+
+  async createRefund(
+    orderId: string,
+    payload: CreateRefundDto,
+    user: AuthenticatedUser,
+  ) {
+    return this.orderRefundService.createRefund(orderId, payload, user);
   }
 
   async cancelOrder(
@@ -96,6 +111,12 @@ export class OrdersService {
         orderBy: {
           createdAt: "asc" as const,
         },
+      },
+      paymentTransactions: {
+        orderBy: {
+          createdAt: "desc" as const,
+        },
+        take: 1,
       },
     };
   }

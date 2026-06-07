@@ -71,6 +71,7 @@ describe("CheckoutService", () => {
     const service = new CheckoutService(
       prisma as never,
       { createCheckoutSession: vi.fn(), createPaystackCheckoutTransaction: vi.fn() } as never,
+      { getOrganizerStripeReadiness: vi.fn() } as never,
       { issuePurchasedTickets: vi.fn() } as never,
       { notifyOrderPaid: vi.fn() } as never,
     );
@@ -253,6 +254,7 @@ describe("CheckoutService", () => {
     const service = new CheckoutService(
       prisma as never,
       { createCheckoutSession: vi.fn(), createPaystackCheckoutTransaction: vi.fn() } as never,
+      { getOrganizerStripeReadiness: vi.fn() } as never,
       { issuePurchasedTickets } as never,
       { notifyOrderPaid } as never,
     );
@@ -321,6 +323,7 @@ describe("CheckoutService", () => {
     const service = new CheckoutService(
       prisma as never,
       { createCheckoutSession: vi.fn(), createPaystackCheckoutTransaction: vi.fn() } as never,
+      { getOrganizerStripeReadiness: vi.fn() } as never,
       { issuePurchasedTickets: vi.fn() } as never,
       { notifyOrderPaid: vi.fn() } as never,
     );
@@ -371,6 +374,7 @@ describe("CheckoutService", () => {
     const service = new CheckoutService(
       prisma as never,
       { createCheckoutSession: vi.fn(), createPaystackCheckoutTransaction: vi.fn() } as never,
+      { getOrganizerStripeReadiness: vi.fn() } as never,
       { issuePurchasedTickets: vi.fn() } as never,
       { notifyOrderPaid: vi.fn() } as never,
     );

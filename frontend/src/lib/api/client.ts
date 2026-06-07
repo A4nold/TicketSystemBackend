@@ -9,6 +9,7 @@ type ApiFetchInit = RequestInit & {
   };
 };
 type ApiErrorBody = {
+  code?: string;
   error?: string;
   message?: string | string[];
   path?: string;
@@ -26,6 +27,7 @@ export class ApiError extends Error {
     message: string,
     public readonly status: number,
     public readonly details?: string | string[],
+    public readonly code?: string,
     public readonly body?: ApiErrorBody,
   ) {
     super(message);
@@ -95,7 +97,7 @@ export async function apiFetch<T>(
           ? details.join(" ")
           : `API request failed for ${path}`;
 
-    throw new ApiError(message, response.status, details, errorBody);
+    throw new ApiError(message, response.status, details, errorBody?.code, errorBody);
   }
 
   if (response.status === 204) {

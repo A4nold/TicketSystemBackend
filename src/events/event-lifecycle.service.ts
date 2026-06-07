@@ -10,6 +10,7 @@ import { Prisma, StaffRole } from "@prisma/client";
 import { AuthenticatedUser } from "../auth/types/authenticated-user.type";
 import { PostEventNotificationSweepService } from "../notifications/post-event-notification-sweep.service";
 import { PrismaService } from "../prisma/prisma.service";
+import { EventPaymentReadinessService } from "./event-payment-readiness.service";
 import { CreateEventDto } from "./dto/create-event.dto";
 import { UpdateEventDto } from "./dto/update-event.dto";
 import { toEventDetailResponse } from "./mappers/event-response.mapper";
@@ -21,6 +22,7 @@ export class EventLifecycleService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly postEventNotificationSweepService: PostEventNotificationSweepService,
+    private readonly eventPaymentReadinessService: EventPaymentReadinessService,
   ) {}
 
   async createEvent(payload: CreateEventDto, user: AuthenticatedUser) {
@@ -124,6 +126,7 @@ export class EventLifecycleService {
 
     this.assertEventDates(payload, existingEvent);
     this.assertCurrencyChangeAllowed(payload, existingEvent);
+    await this.assertPaidEventPublicationReadiness(existingEvent, payload);
 
     const wasPostEventPublished = this.isPostEventContentPublished(existingEvent);
 
@@ -245,6 +248,55 @@ export class EventLifecycleService {
     }
 
     return toEventDetailResponse(event);
+  }
+
+  private async assertPaidEventPublicationReadiness(
+    existingEvent: {
+      id: string;
+      organizerId: string;
+      status: string;
+      _count: {
+        ticketTypes: number;
+      };
+    },
+    payload: UpdateEventDto,
+  ) {
+    const nextStatus = payload.status ?? existingEvent.status;
+    const isPublishing = nextStatus === "PUBLISHED";
+
+    if (!isPublishing) {
+      return;
+    }
+
+    if (existingEvent._count.ticketTypes === 0) {
+      return;
+    }
+
+    const paidTicketTypeCount = await this.prisma.ticketType.count({
+      where: {
+        eventId: existingEvent.id,
+        OR: [
+          {
+            pricingMode: {
+              not: "FREE",
+            },
+          },
+          {
+            price: {
+              gt: new Prisma.Decimal(0),
+            },
+          },
+        ],
+      },
+    });
+
+    if (paidTicketTypeCount === 0) {
+      return;
+    }
+
+    await this.eventPaymentReadinessService.assertOrganizerCanPublishPaidEvent(
+      existingEvent.organizerId,
+    );
   }
 
   private eventDetailInclude() {

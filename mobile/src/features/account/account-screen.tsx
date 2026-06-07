@@ -13,10 +13,12 @@ import { palette } from "@/styles/theme";
 
 export function AccountScreen() {
   const router = useRouter();
-  const { session, signOut } = useAuth();
+  const { session, signOut, upgradeToOrganizer } = useAuth();
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
   const [deleteAccountError, setDeleteAccountError] = useState<string | null>(null);
+  const [isUpgradingToOrganizer, setIsUpgradingToOrganizer] = useState(false);
+  const [upgradeOrganizerError, setUpgradeOrganizerError] = useState<string | null>(null);
   const hasOrganizerAccess = hasOrganizerSurfaceAccess(session?.user);
   const canManageEvents = canManageOrganizerEvents(session?.user);
   const hasScannerAccess = hasScannerSurfaceAccess(session?.user);
@@ -50,6 +52,26 @@ export function AccountScreen() {
       );
     } finally {
       setIsDeletingAccount(false);
+    }
+  }
+
+  async function handleBecomeOrganizer() {
+    setUpgradeOrganizerError(null);
+    setIsUpgradingToOrganizer(true);
+
+    try {
+      const upgraded = await upgradeToOrganizer();
+
+      if (!upgraded) {
+        setUpgradeOrganizerError(
+          "We couldn't enable organizer access right now. Please try again.",
+        );
+        return;
+      }
+
+      router.push("/organizer/setup" as never);
+    } finally {
+      setIsUpgradingToOrganizer(false);
     }
   }
 
@@ -135,7 +157,24 @@ export function AccountScreen() {
                 }}
                 title="Open organizer"
               />
-            ) : null}
+            ) : (
+              <>
+                <Text style={styles.copy}>
+                  Ready to host events? Upgrade this account to organizer access and unlock event
+                  management on mobile.
+                </Text>
+                {upgradeOrganizerError ? (
+                  <Text style={styles.error}>{upgradeOrganizerError}</Text>
+                ) : null}
+                <ActionButton
+                  loading={isUpgradingToOrganizer}
+                  onPress={() => {
+                    void handleBecomeOrganizer();
+                  }}
+                  title="Become an organizer"
+                />
+              </>
+            )}
             {hasScannerAccess ? (
               <ActionButton
                 onPress={() => {

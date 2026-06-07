@@ -46,11 +46,37 @@ describe("PaymentsService Paystack", () => {
       findFirst: vi.fn(),
       update: vi.fn(),
     },
+    paymentTransaction: {
+      findUnique: vi.fn(),
+      update: vi.fn(),
+      updateMany: vi.fn(),
+    },
+    organizerEarning: {
+      findFirst: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+      updateMany: vi.fn(),
+    },
+    refund: {
+      upsert: vi.fn(),
+    },
+    dispute: {
+      upsert: vi.fn(),
+    },
     webhookEvent: {
       findUnique: vi.fn(),
       update: vi.fn(),
       upsert: vi.fn(),
     },
+    $transaction: vi.fn(async (handler: (tx: any) => Promise<any>) =>
+      handler({
+        refund: prisma.refund,
+        dispute: prisma.dispute,
+        order: prisma.order,
+        organizerEarning: prisma.organizerEarning,
+        paymentTransaction: prisma.paymentTransaction,
+      }),
+    ),
   };
   const notificationsService = {
     notifyOrderPaid: vi.fn(),
@@ -61,7 +87,11 @@ describe("PaymentsService Paystack", () => {
     vi.clearAllMocks();
     process.env.PAYSTACK_SECRET_KEY = "sk_test_paystack";
     process.env.FRONTEND_APP_URL = "http://localhost:3001";
-    service = new PaymentsService(prisma as never, notificationsService as never);
+    service = new PaymentsService(
+      prisma as never,
+      notificationsService as never,
+      { syncFromStripeWebhook: vi.fn() } as never,
+    );
   });
 
   afterEach(() => {
@@ -181,6 +211,127 @@ describe("PaymentsService Paystack", () => {
         create: expect.objectContaining({
           provider: PaymentProvider.PAYSTACK,
           providerEventId: "paystack:transfer.success:paystack-ref-123",
+        }),
+      }),
+    );
+  });
+
+  it("reconciles a pending Stripe Connect payment intent without a checkout session", async () => {
+    process.env.STRIPE_SECRET_KEY = "sk_test_stripe";
+    const stripeMock = {
+      paymentIntents: {
+        retrieve: vi.fn().mockResolvedValue({
+          id: "pi_connect_123",
+          status: "requires_action",
+          client_secret: "pi_client_secret_123",
+          transfer_data: {
+            destination: "acct_123",
+          },
+        }),
+      },
+    };
+    vi.spyOn(service as any, "getStripeClient").mockReturnValue(stripeMock);
+
+    const result = await service.reconcilePendingOrderWithProvider({
+      checkoutSessionId: null,
+      id: "order_123",
+      paymentProvider: PaymentProvider.STRIPE,
+      paymentTransactions: [
+        {
+          connectedAccountId: "acct_123",
+          providerPaymentIntentId: "pi_connect_123",
+        },
+      ],
+      status: OrderStatus.PENDING,
+    });
+
+    expect(stripeMock.paymentIntents.retrieve).toHaveBeenCalledWith("pi_connect_123");
+    expect(result).toEqual(
+      expect.objectContaining({
+        checkoutSessionId: null,
+        checkoutStatus: "requires_action",
+        connectedAccountId: "acct_123",
+        paymentIntentId: "pi_connect_123",
+        paymentStatus: "requires_action",
+      }),
+    );
+  });
+
+  it("persists Stripe charge refunds and marks organizer settlement on hold", async () => {
+    process.env.STRIPE_WEBHOOK_SECRET = "whsec_test";
+    const rawBody = Buffer.from("stripe-refund");
+    const event = {
+      id: "evt_refund_123",
+      type: "charge.refunded",
+      data: {
+        object: {
+          id: "ch_123",
+          payment_intent: "pi_connect_123",
+          amount_refunded: 3500,
+          currency: "eur",
+          created: 1_780_000_000,
+          refunds: {
+            data: [
+              {
+                id: "re_123",
+                amount: 3500,
+                currency: "eur",
+                created: 1_780_000_000,
+                metadata: { source: "test" },
+                reason: "requested_by_customer",
+                refund_application_fee: true,
+                reverse_transfer: true,
+                status: "succeeded",
+              },
+            ],
+          },
+        },
+      },
+    };
+    const stripeMock = {
+      webhooks: {
+        constructEvent: vi.fn().mockReturnValue(event),
+      },
+    };
+    vi.spyOn(service as any, "getStripeClient").mockReturnValue(stripeMock);
+    prisma.webhookEvent.findUnique.mockResolvedValue(null);
+    prisma.webhookEvent.upsert.mockResolvedValue({});
+    prisma.webhookEvent.update.mockResolvedValue({});
+    prisma.paymentTransaction.findUnique.mockResolvedValue({
+      id: "pt_123",
+      orderId: "order_123",
+      grossAmount: new Prisma.Decimal("50.00"),
+      currency: "EUR",
+    });
+    prisma.refund.upsert.mockResolvedValue({});
+    prisma.paymentTransaction.update.mockResolvedValue({});
+    prisma.organizerEarning.updateMany.mockResolvedValue({ count: 1 });
+    prisma.order.update.mockResolvedValue({});
+
+    await expect(
+      service.handleStripeWebhook(rawBody, "sig_test"),
+    ).resolves.toEqual({ received: true });
+
+    expect(stripeMock.webhooks.constructEvent).toHaveBeenCalledWith(
+      rawBody,
+      "sig_test",
+      "whsec_test",
+    );
+    expect(prisma.refund.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({
+          paymentTransactionId: "pt_123",
+          providerRefundId: "re_123",
+          reverseTransfer: true,
+          refundApplicationFee: true,
+          status: "SUCCEEDED",
+        }),
+      }),
+    );
+    expect(prisma.paymentTransaction.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          settlementState: "ON_HOLD",
         }),
       }),
     );

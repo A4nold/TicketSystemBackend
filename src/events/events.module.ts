@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 
 import { NotificationsModule } from "../notifications/notifications.module";
+import { EventPaymentReadinessService } from "./event-payment-readiness.service";
 import { EventsController } from "./events.controller";
 import { EventLifecycleService } from "./event-lifecycle.service";
 import { EventFlyerService } from "./event-flyer.service";
@@ -16,6 +17,7 @@ import { EventsService } from "./events.service";
     EventLifecycleService,
     EventFlyerService,
     EventMediaService,
+    EventPaymentReadinessService,
     EventQueryService,
     EventShareAnalyticsService,
     EventsService,

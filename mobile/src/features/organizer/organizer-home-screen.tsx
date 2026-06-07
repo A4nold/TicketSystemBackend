@@ -1,20 +1,67 @@
 import { useRouter } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
+import * as WebBrowser from "expo-web-browser";
+import { useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { useAuth } from "@/components/providers/auth-provider";
 import { ActionButton, Card, Screen } from "@/components/ui";
 import { canManageOrganizerEvents, hasOrganizerSurfaceAccess } from "@/features/auth/organizer-access";
+import {
+  deriveOrganizerSetupStep,
+  isOrganizerProfileReadyForPayments,
+} from "@/features/organizer/organizer-setup-flow";
 import { formatDateTime } from "@/lib/formatters";
 import {
   getOrganizerManageableEventIds,
   listOrganizerEvents,
 } from "@/lib/organizer/events-client";
+import { getOrganizerProfile } from "@/lib/organizer/organizer-profile-client";
+import {
+  createStripeConnectOnboardingLink,
+  getOrganizerPayoutVisibility,
+  getStripeConnectAccountStatus,
+  refreshStripeConnectOnboardingLink,
+} from "@/lib/payments/stripe-connect-client";
 import { palette } from "@/styles/theme";
+
+function formatMoney(value: string, currency: string) {
+  return new Intl.NumberFormat("en-IE", {
+    currency,
+    maximumFractionDigits: 2,
+    style: "currency",
+  }).format(Number(value));
+}
+
+function getPaymentActionLabel(input: {
+  connectedAccountId: string | null;
+  isReadyForPaidEvents: boolean;
+  onboardingStatus: string | null;
+  requirements: {
+    currentlyDue: string[];
+    pastDue: string[];
+  };
+}) {
+  if (!input.connectedAccountId) {
+    return "Connect Stripe";
+  }
+
+  if (input.isReadyForPaidEvents) {
+    return "Refresh payment status";
+  }
+
+  if (input.requirements.pastDue.length > 0 || input.onboardingStatus === "RESTRICTED") {
+    return "Resolve Stripe requirements";
+  }
+
+  return "Resume Stripe onboarding";
+}
 
 export function OrganizerHomeScreen() {
   const router = useRouter();
   const { session } = useAuth();
+  const [isOpeningStripe, setIsOpeningStripe] = useState(false);
+  const [paymentMessage, setPaymentMessage] = useState<string | null>(null);
   const hasSurfaceAccess = hasOrganizerSurfaceAccess(session?.user);
   const manageableEventIds = getOrganizerManageableEventIds(session?.user.memberships ?? []);
   const eventsQuery = useQuery({
@@ -22,10 +69,66 @@ export function OrganizerHomeScreen() {
     queryFn: () => listOrganizerEvents(session!.accessToken),
     queryKey: ["organizer-events", session?.accessToken],
   });
+  const organizerProfileQuery = useQuery({
+    enabled: Boolean(session?.accessToken && hasSurfaceAccess),
+    queryFn: () => getOrganizerProfile(session!.accessToken),
+    queryKey: ["organizer-profile", session?.accessToken],
+  });
+  const stripeAccountQuery = useQuery({
+    enabled: Boolean(session?.accessToken && hasSurfaceAccess),
+    queryFn: () => getStripeConnectAccountStatus(session!.accessToken),
+    queryKey: ["organizer-stripe-account", session?.accessToken],
+  });
+  const payoutVisibilityQuery = useQuery({
+    enabled: Boolean(session?.accessToken && hasSurfaceAccess),
+    queryFn: () => getOrganizerPayoutVisibility(session!.accessToken),
+    queryKey: ["organizer-payout-visibility", session?.accessToken],
+  });
 
   const manageableEvents = (eventsQuery.data ?? []).filter((event) =>
     manageableEventIds.includes(event.id),
   );
+  const setupStep = deriveOrganizerSetupStep({
+    profile: organizerProfileQuery.data,
+    stripeAccount: stripeAccountQuery.data,
+  });
+  const organizerSetupComplete = setupStep === "complete";
+
+  async function handleStripeAction() {
+    if (!session?.accessToken) {
+      return;
+    }
+
+    const account = stripeAccountQuery.data;
+    setPaymentMessage(null);
+    setIsOpeningStripe(true);
+
+    try {
+      const response =
+        account?.connectedAccountId && !account.isReadyForPaidEvents
+          ? await refreshStripeConnectOnboardingLink(session.accessToken)
+          : account?.connectedAccountId
+            ? null
+            : await createStripeConnectOnboardingLink(session.accessToken);
+
+      if (response?.onboardingUrl) {
+        await WebBrowser.openBrowserAsync(response.onboardingUrl);
+        setPaymentMessage("Returned from Stripe. Refreshing account readiness.");
+      } else {
+        setPaymentMessage("Stripe status refreshed.");
+      }
+
+      await Promise.all([stripeAccountQuery.refetch(), payoutVisibilityQuery.refetch()]);
+    } catch (error) {
+      setPaymentMessage(
+        error instanceof Error
+          ? error.message
+          : "Stripe onboarding couldn't be opened right now.",
+      );
+    } finally {
+      setIsOpeningStripe(false);
+    }
+  }
 
   return (
     <Screen
@@ -92,7 +195,153 @@ export function OrganizerHomeScreen() {
           <Card padded={false}>
             <View style={styles.sectionShell}>
               <Text style={styles.sectionTitle}>No manageable events yet</Text>
-              <Text style={styles.copy}>No owner/admin events yet.</Text>
+              <Text style={styles.copy}>
+                Start your first event draft here, then come back to refine ticket types, media,
+                staff access, and publish readiness.
+              </Text>
+              <ActionButton
+                onPress={() => {
+                  router.push("/organizer/create" as never);
+                }}
+                title="Create your first event"
+              />
+            </View>
+          </Card>
+        ) : null}
+
+        {hasSurfaceAccess && organizerProfileQuery.data ? (
+          <Card
+            tone={organizerSetupComplete ? "success" : "warning"}
+            padded={false}
+          >
+            <View style={styles.sectionShell}>
+              <Text style={styles.sectionTitle}>Organizer setup</Text>
+              <Text style={styles.copy}>
+                {organizerSetupComplete
+                  ? "Your organizer profile and payout setup are in good shape."
+                  : "Complete your organizer setup before relying on paid event workflows."}
+              </Text>
+              <Text style={styles.value}>
+                Current step: {setupStep === "complete" ? "ready to go" : setupStep}
+              </Text>
+
+              {!isOrganizerProfileReadyForPayments(organizerProfileQuery.data) ? (
+                <Text style={styles.warningText}>
+                  Add your organizer name, country, and default payout currency first.
+                </Text>
+              ) : null}
+
+              <ActionButton
+                onPress={() => {
+                  router.push("/organizer/setup" as never);
+                }}
+                title={organizerSetupComplete ? "Review organizer setup" : "Continue organizer setup"}
+                variant={organizerSetupComplete ? "secondary" : "primary"}
+              />
+            </View>
+          </Card>
+        ) : null}
+
+        {hasSurfaceAccess ? (
+          <Card padded={false}>
+            <View style={styles.sectionShell}>
+              <Text style={styles.sectionTitle}>Payments</Text>
+              <Text style={styles.copy}>
+                Connect Stripe so paid events can publish and revenue can settle to your account.
+              </Text>
+
+              {!organizerProfileQuery.data || !isOrganizerProfileReadyForPayments(organizerProfileQuery.data) ? (
+                <>
+                  <Text style={styles.warningText}>
+                    Finish organizer setup before starting payout onboarding.
+                  </Text>
+                  <ActionButton
+                    onPress={() => {
+                      router.push("/organizer/setup" as never);
+                    }}
+                    title="Open organizer setup"
+                  />
+                </>
+              ) : (
+                <>
+
+                  {stripeAccountQuery.isLoading ? (
+                    <Text style={styles.copy}>Checking Stripe account readiness.</Text>
+                  ) : null}
+
+                  {stripeAccountQuery.data ? (
+                    <>
+                      <View style={styles.paymentStatusRow}>
+                        <View style={styles.metricCardInline}>
+                          <Text style={styles.metricLabelInline}>Paid events</Text>
+                          <Text style={styles.metricValueInline}>
+                            {stripeAccountQuery.data.isReadyForPaidEvents ? "Ready" : "Action needed"}
+                          </Text>
+                        </View>
+                        <View style={styles.metricCardInline}>
+                          <Text style={styles.metricLabelInline}>Payouts</Text>
+                          <Text style={styles.metricValueInline}>
+                            {stripeAccountQuery.data.payoutsEnabled ? "Enabled" : "Pending"}
+                          </Text>
+                        </View>
+                      </View>
+
+                      <Text style={styles.copy}>
+                        {stripeAccountQuery.data.connectedAccountId
+                          ? stripeAccountQuery.data.isReadyForPaidEvents
+                            ? "Stripe is connected and ready for paid event publishing."
+                            : "Stripe is connected, but onboarding or verification still needs attention."
+                          : "No Stripe Connect account is linked yet."}
+                      </Text>
+
+                      {stripeAccountQuery.data.requirements.pastDue.length > 0 ? (
+                        <Text style={styles.warningText}>
+                          Past due requirements: {stripeAccountQuery.data.requirements.pastDue.join(", ")}
+                        </Text>
+                      ) : null}
+
+                      {payoutVisibilityQuery.data ? (
+                        <View style={styles.paymentStatusRow}>
+                          <View style={styles.metricCardInline}>
+                            <Text style={styles.metricLabelInline}>Net earnings</Text>
+                            <Text style={styles.metricValueInline}>
+                              {formatMoney(
+                                payoutVisibilityQuery.data.netEarnings,
+                                payoutVisibilityQuery.data.currency,
+                              )}
+                            </Text>
+                          </View>
+                          <View style={styles.metricCardInline}>
+                            <Text style={styles.metricLabelInline}>On hold</Text>
+                            <Text style={styles.metricValueInline}>
+                              {formatMoney(
+                                payoutVisibilityQuery.data.onHoldAmount,
+                                payoutVisibilityQuery.data.currency,
+                              )}
+                            </Text>
+                          </View>
+                        </View>
+                      ) : null}
+
+                      <ActionButton
+                        loading={isOpeningStripe}
+                        onPress={() => void handleStripeAction()}
+                        title={getPaymentActionLabel(stripeAccountQuery.data)}
+                      />
+                    </>
+                  ) : null}
+
+                  {stripeAccountQuery.isError ? (
+                    <ActionButton
+                      onPress={() => void stripeAccountQuery.refetch()}
+                      title="Retry payment status"
+                      variant="secondary"
+                    />
+                  ) : null}
+
+                  {paymentMessage ? <Text style={styles.copy}>{paymentMessage}</Text> : null}
+                </>
+              )}
             </View>
           </Card>
         ) : null}
@@ -101,7 +350,14 @@ export function OrganizerHomeScreen() {
           <Card density="dense" padded={false}>
             <View style={styles.sectionShell}>
               <Text style={styles.sectionTitle}>Your events</Text>
-              <Text style={styles.copy}>Open any event to manage it.</Text>
+              <Text style={styles.copy}>Open any event to manage it, or create a fresh draft.</Text>
+              <ActionButton
+                onPress={() => {
+                  router.push("/organizer/create" as never);
+                }}
+                title="Create event"
+                variant="secondary"
+              />
 
               {manageableEvents.map((event) => (
                 <View key={event.id} style={styles.eventCard}>
@@ -222,6 +478,28 @@ const styles = StyleSheet.create({
     gap: 12,
     marginTop: 8,
   },
+  metricCardInline: {
+    backgroundColor: palette.backgroundMuted,
+    borderColor: palette.divider,
+    borderRadius: 18,
+    borderWidth: 1,
+    flex: 1,
+    gap: 4,
+    minHeight: 72,
+    padding: 12,
+  },
+  metricLabelInline: {
+    color: palette.muted,
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 1,
+    textTransform: "uppercase",
+  },
+  metricValueInline: {
+    color: palette.ink,
+    fontSize: 16,
+    fontWeight: "700",
+  },
   metricValue: {
     color: palette.white,
     fontSize: 20,
@@ -253,6 +531,20 @@ const styles = StyleSheet.create({
     color: palette.ink,
     fontSize: 22,
     fontWeight: "800",
+  },
+  value: {
+    color: palette.ink,
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  paymentStatusRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  warningText: {
+    color: "#8c5a00",
+    fontSize: 14,
+    lineHeight: 20,
   },
   statusPill: {
     backgroundColor: palette.warningSoft,

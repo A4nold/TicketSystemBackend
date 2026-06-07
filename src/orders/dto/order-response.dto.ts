@@ -107,6 +107,18 @@ export class OrderResponseDto {
   checkoutSessionId!: string | null;
 
   @ApiProperty({ nullable: true })
+  paymentTransactionId!: string | null;
+
+  @ApiProperty({ nullable: true })
+  paymentIntentId!: string | null;
+
+  @ApiProperty({ nullable: true })
+  clientSecret!: string | null;
+
+  @ApiProperty({ nullable: true })
+  connectedAccountId!: string | null;
+
+  @ApiProperty({ nullable: true })
   checkoutUrl!: string | null;
 
   @ApiProperty({ nullable: true })

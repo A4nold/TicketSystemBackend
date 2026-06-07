@@ -9,3 +9,8 @@ export function getApiBaseUrl() {
 
   return configured.replace(/\/$/, "");
 }
+
+export function getStripePublishableKey() {
+  const configured = process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY?.trim();
+  return configured || null;
+}

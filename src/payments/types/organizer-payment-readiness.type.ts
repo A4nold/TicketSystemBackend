@@ -1,0 +1,99 @@
+export type OrganizerStripeAccountReadiness = {
+  organizerId: string;
+  connectedAccountId: string | null;
+  accountType: string | null;
+  status: string | null;
+  onboardingStatus: string | null;
+  verificationStatus: string | null;
+  chargesEnabled: boolean;
+  payoutsEnabled: boolean;
+  detailsSubmitted: boolean;
+  country: string | null;
+  defaultCurrency: string | null;
+  currentlyDueRequirements: string[];
+  eventuallyDueRequirements: string[];
+  pastDueRequirements: string[];
+  disabledReason: string | null;
+  onboardingCompletedAt: Date | null;
+  lastSyncedAt: Date | null;
+  isReadyForPaidEvents: boolean;
+  readinessCheckedAt: Date | null;
+  firstReadyAt: Date | null;
+};
+
+export type OrganizerPaymentTransactionSummary = {
+  id: string;
+  organizerId: string;
+  eventId: string;
+  eventTitle: string;
+  orderId: string | null;
+  provider: string;
+  type: string;
+  status: string;
+  currency: string;
+  amount: string;
+  grossAmount: string;
+  platformFeeAmount: string;
+  organizerNetAmount: string;
+  settlementState: string;
+  connectedAccountId: string | null;
+  providerPaymentIntentId: string | null;
+  providerChargeId: string | null;
+  createdAt: Date;
+};
+
+export type OrganizerRefundSummary = {
+  id: string;
+  paymentTransactionId: string;
+  orderId: string | null;
+  eventId: string;
+  eventTitle: string;
+  status: string;
+  providerRefundId: string | null;
+  amount: string;
+  currency: string;
+  reverseTransfer: boolean;
+  refundApplicationFee: boolean;
+  reason: string | null;
+  requestedAt: Date;
+  processedAt: Date | null;
+  createdAt: Date;
+};
+
+export type OrganizerDisputeSummary = {
+  id: string;
+  paymentTransactionId: string;
+  eventId: string;
+  eventTitle: string;
+  providerDisputeId: string;
+  providerChargeId: string | null;
+  amount: string;
+  currency: string;
+  reason: string | null;
+  status: string;
+  evidenceDueBy: Date | null;
+  needsResponse: boolean;
+  wonAt: Date | null;
+  lostAt: Date | null;
+  closedAt: Date | null;
+  createdAt: Date;
+};
+
+export type OrganizerPayoutVisibilitySummary = {
+  organizerId: string;
+  currency: string;
+  grossSales: string;
+  platformFees: string;
+  netEarnings: string;
+  pendingSettlement: string;
+  onHoldAmount: string;
+  settledAmount: string;
+  refundedAmount: string;
+  disputeExposureAmount: string;
+  successfulTransactionCount: number;
+  pendingTransactionCount: number;
+  onHoldTransactionCount: number;
+  refundCount: number;
+  disputeCount: number;
+  lastTransactionAt: Date | null;
+};

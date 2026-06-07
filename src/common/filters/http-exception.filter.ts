@@ -52,6 +52,9 @@ export class GlobalHttpExceptionFilter implements ExceptionFilter {
       statusCode: status,
       error,
       message,
+      ...(this.resolveCode(exceptionResponse)
+        ? { code: this.resolveCode(exceptionResponse) }
+        : {}),
       requestId,
       timestamp: new Date().toISOString(),
       path,
@@ -75,5 +78,18 @@ export class GlobalHttpExceptionFilter implements ExceptionFilter {
     }
 
     return "An unexpected error occurred.";
+  }
+
+  private resolveCode(exceptionResponse: unknown): string | null {
+    if (
+      typeof exceptionResponse === "object" &&
+      exceptionResponse !== null &&
+      "code" in exceptionResponse &&
+      typeof (exceptionResponse as { code?: unknown }).code === "string"
+    ) {
+      return (exceptionResponse as { code: string }).code;
+    }
+
+    return null;
   }
 }

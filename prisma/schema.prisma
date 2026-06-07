@@ -17,6 +17,19 @@ enum AccountType {
   ORGANIZER
 }
 
+enum OrganizerOnboardingStatus {
+  NOT_STARTED
+  PROFILE_INCOMPLETE
+  PROFILE_COMPLETED
+  PAYMENT_SETUP_PENDING
+  READY_FOR_PAID_EVENTS
+}
+
+enum OrganizerProviderSelectionSource {
+  AUTO_RECOMMENDED
+  MANUAL
+}
+
 enum EventStatus {
   DRAFT
   PUBLISHED
@@ -84,6 +97,75 @@ enum PaymentProvider {
   STRIPE
   PAYSTACK
   MANUAL
+}
+
+enum PaymentAccountStatus {
+  NOT_STARTED
+  PENDING
+  ACTION_REQUIRED
+  VERIFIED
+  RESTRICTED
+  DISABLED
+}
+
+enum ConnectedAccountType {
+  EXPRESS
+  STANDARD
+  CUSTOM
+}
+
+enum PaymentAccountOnboardingStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+  ACTION_REQUIRED
+  EXPIRED
+}
+
+enum PaymentVerificationStatus {
+  UNVERIFIED
+  PENDING
+  VERIFIED
+  RESTRICTED
+  DISABLED
+}
+
+enum PaymentTransactionType {
+  PRIMARY_TICKET_PURCHASE
+  RESALE_PURCHASE
+  REFUND
+  ADJUSTMENT
+}
+
+enum PaymentTransactionStatus {
+  PENDING
+  PROCESSING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+  REQUIRES_ACTION
+}
+
+enum SettlementState {
+  NOT_APPLICABLE
+  PENDING
+  IN_TRANSIT
+  SETTLED
+  FAILED
+  ON_HOLD
+}
+
+enum RefundStatus {
+  REQUESTED
+  PROCESSING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+}
+
+enum FixedFeeApplication {
+  PER_ORDER
+  PER_TICKET
 }
 
 enum TicketPricingMode {
@@ -165,33 +247,38 @@ enum OwnershipChangeType {
 }
 
 model User {
-  id                       String                   @id @default(cuid())
-  email                    String                   @unique
-  passwordHash             String?                  @map("password_hash")
-  accountType              AccountType              @default(ATTENDEE) @map("account_type")
-  status                   UserStatus               @default(ACTIVE)
-  lastLoginAt              DateTime?                @map("last_login_at")
-  createdAt                DateTime                 @default(now()) @map("created_at")
-  updatedAt                DateTime                 @updatedAt @map("updated_at")
-  profile                  UserProfile?
-  organizedEvents          Event[]                  @relation("event_organizer")
-  orders                   Order[]
-  ownedTickets             Ticket[]                 @relation("ticket_current_owner")
-  transferRequestsCreated  TransferRequest[]        @relation("transfer_sender")
-  transferRequestsReceived TransferRequest[]        @relation("transfer_recipient")
-  resaleListings           ResaleListing[]          @relation("resale_seller")
-  purchasedResales         ResaleListing[]          @relation("resale_buyer")
-  ownershipHistoryFrom     TicketOwnershipHistory[] @relation("ownership_from_user")
-  ownershipHistoryTo       TicketOwnershipHistory[] @relation("ownership_to_user")
-  staffMemberships         StaffMembership[]
-  scanSessionsStarted      ScanSession[]            @relation("scan_session_started_by")
-  scanAttempts             ScanAttempt[]            @relation("scan_attempt_staff")
-  notifications            UserNotification[]
-  passwordResetTokens      PasswordResetToken[]
-  pushDevices              PushDevice[]
-  ticketOfferRequests      TicketOfferRequest[]     @relation("offer_attendee")
-  reviewedTicketOffers     TicketOfferRequest[]     @relation("offer_reviewer")
-  eventShareAnalytics      EventShareAnalytics[]
+  id                           String                   @id @default(cuid())
+  email                        String                   @unique
+  passwordHash                 String?                  @map("password_hash")
+  accountType                  AccountType              @default(ATTENDEE) @map("account_type")
+  status                       UserStatus               @default(ACTIVE)
+  lastLoginAt                  DateTime?                @map("last_login_at")
+  createdAt                    DateTime                 @default(now()) @map("created_at")
+  updatedAt                    DateTime                 @updatedAt @map("updated_at")
+  profile                      UserProfile?
+  organizedEvents              Event[]                  @relation("event_organizer")
+  orders                       Order[]
+  ownedTickets                 Ticket[]                 @relation("ticket_current_owner")
+  transferRequestsCreated      TransferRequest[]        @relation("transfer_sender")
+  transferRequestsReceived     TransferRequest[]        @relation("transfer_recipient")
+  resaleListings               ResaleListing[]          @relation("resale_seller")
+  purchasedResales             ResaleListing[]          @relation("resale_buyer")
+  ownershipHistoryFrom         TicketOwnershipHistory[] @relation("ownership_from_user")
+  ownershipHistoryTo           TicketOwnershipHistory[] @relation("ownership_to_user")
+  staffMemberships             StaffMembership[]
+  scanSessionsStarted          ScanSession[]            @relation("scan_session_started_by")
+  scanAttempts                 ScanAttempt[]            @relation("scan_attempt_staff")
+  notifications                UserNotification[]
+  passwordResetTokens          PasswordResetToken[]
+  pushDevices                  PushDevice[]
+  ticketOfferRequests          TicketOfferRequest[]     @relation("offer_attendee")
+  reviewedTicketOffers         TicketOfferRequest[]     @relation("offer_reviewer")
+  eventShareAnalytics          EventShareAnalytics[]
+  organizerProfile            OrganizerProfile?
+  organizerPaymentProfile      OrganizerPaymentProfile?
+  paymentAccounts              PaymentAccount[]
+  organizerEarnings            OrganizerEarning[]
+  organizerPaymentTransactions PaymentTransaction[]     @relation("payment_transaction_organizer")
 
   @@map("users")
 }
@@ -223,6 +310,27 @@ model UserProfile {
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("user_profiles")
+}
+
+model OrganizerProfile {
+  id                      String                           @id @default(cuid())
+  userId                  String                           @unique @map("user_id")
+  displayName             String?                          @map("display_name")
+  businessName            String?                          @map("business_name")
+  country                 String?
+  defaultPayoutCurrency   String?                          @map("default_payout_currency")
+  onboardingStatus        OrganizerOnboardingStatus        @default(NOT_STARTED) @map("onboarding_status")
+  selectedPaymentProvider PaymentProvider?                 @map("selected_payment_provider")
+  recommendedProvider     PaymentProvider?                 @map("recommended_provider")
+  providerSelectionSource OrganizerProviderSelectionSource? @map("provider_selection_source")
+  providerSelectedAt      DateTime?                        @map("provider_selected_at")
+  createdAt               DateTime                         @default(now()) @map("created_at")
+  updatedAt               DateTime                         @updatedAt @map("updated_at")
+  user                    User                             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([country, defaultPayoutCurrency])
+  @@index([onboardingStatus, updatedAt])
+  @@map("organizer_profiles")
 }
 
 model Event {
@@ -271,6 +379,8 @@ model Event {
   webhookEvents          WebhookEvent[]
   ticketOfferRequests    TicketOfferRequest[]
   shareAnalytics         EventShareAnalytics[]
+  paymentTransactions    PaymentTransaction[]
+  organizerEarnings      OrganizerEarning[]
 
   @@index([organizerId, status])
   @@index([startsAt])
@@ -326,28 +436,31 @@ model TicketType {
 }
 
 model Order {
-  id                String          @id @default(cuid())
-  userId            String          @map("user_id")
-  eventId           String          @map("event_id")
-  status            OrderStatus     @default(PENDING)
-  currency          String          @default("EUR")
-  subtotalAmount    Decimal         @map("subtotal_amount") @db.Decimal(10, 2)
-  feeAmount         Decimal         @default(0) @map("fee_amount") @db.Decimal(10, 2)
-  totalAmount       Decimal         @map("total_amount") @db.Decimal(10, 2)
-  paymentProvider   PaymentProvider @default(STRIPE) @map("payment_provider")
-  paymentReference  String?         @unique @map("payment_reference")
-  checkoutSessionId String?         @unique @map("checkout_session_id")
-  idempotencyKey    String?         @unique @map("idempotency_key")
-  paidAt            DateTime?       @map("paid_at")
-  cancelledAt       DateTime?       @map("cancelled_at")
-  refundedAt        DateTime?       @map("refunded_at")
-  createdAt         DateTime        @default(now()) @map("created_at")
-  updatedAt         DateTime        @updatedAt @map("updated_at")
-  user              User            @relation(fields: [userId], references: [id], onDelete: Restrict)
-  event             Event           @relation(fields: [eventId], references: [id], onDelete: Restrict)
-  items             OrderItem[]
-  tickets           Ticket[]
-  payoutRecords     PayoutRecord[]
+  id                  String               @id @default(cuid())
+  userId              String               @map("user_id")
+  eventId             String               @map("event_id")
+  status              OrderStatus          @default(PENDING)
+  currency            String               @default("EUR")
+  subtotalAmount      Decimal              @map("subtotal_amount") @db.Decimal(10, 2)
+  feeAmount           Decimal              @default(0) @map("fee_amount") @db.Decimal(10, 2)
+  totalAmount         Decimal              @map("total_amount") @db.Decimal(10, 2)
+  paymentProvider     PaymentProvider      @default(STRIPE) @map("payment_provider")
+  paymentReference    String?              @unique @map("payment_reference")
+  checkoutSessionId   String?              @unique @map("checkout_session_id")
+  idempotencyKey      String?              @unique @map("idempotency_key")
+  paidAt              DateTime?            @map("paid_at")
+  cancelledAt         DateTime?            @map("cancelled_at")
+  refundedAt          DateTime?            @map("refunded_at")
+  createdAt           DateTime             @default(now()) @map("created_at")
+  updatedAt           DateTime             @updatedAt @map("updated_at")
+  user                User                 @relation(fields: [userId], references: [id], onDelete: Restrict)
+  event               Event                @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  items               OrderItem[]
+  tickets             Ticket[]
+  payoutRecords       PayoutRecord[]
+  paymentTransactions PaymentTransaction[]
+  organizerEarnings   OrganizerEarning[]
+  refunds             Refund[]
 
   @@index([userId, createdAt])
   @@index([eventId, status])
@@ -486,29 +599,31 @@ model PushDevice {
 }
 
 model ResaleListing {
-  id                     String          @id @default(cuid())
-  ticketId               String          @map("ticket_id")
-  sellerUserId           String          @map("seller_user_id")
-  buyerUserId            String?         @map("buyer_user_id")
-  eventId                String          @map("event_id")
-  askingPrice            Decimal         @map("asking_price") @db.Decimal(10, 2)
-  currency               String          @default("EUR")
-  organizerRoyaltyAmount Decimal?        @map("organizer_royalty_amount") @db.Decimal(10, 2)
-  sellerNetAmount        Decimal?        @map("seller_net_amount") @db.Decimal(10, 2)
-  status                 ResaleStatus    @default(DRAFT)
-  paymentProvider        PaymentProvider @default(STRIPE) @map("payment_provider")
-  saleReference          String?         @unique @map("sale_reference")
-  listedAt               DateTime?       @map("listed_at")
-  soldAt                 DateTime?       @map("sold_at")
-  expiresAt              DateTime?       @map("expires_at")
-  cancelledAt            DateTime?       @map("cancelled_at")
-  createdAt              DateTime        @default(now()) @map("created_at")
-  updatedAt              DateTime        @updatedAt @map("updated_at")
-  ticket                 Ticket          @relation(fields: [ticketId], references: [id], onDelete: Restrict)
-  event                  Event           @relation(fields: [eventId], references: [id], onDelete: Restrict)
-  sellerUser             User            @relation("resale_seller", fields: [sellerUserId], references: [id], onDelete: Restrict)
-  buyerUser              User?           @relation("resale_buyer", fields: [buyerUserId], references: [id], onDelete: SetNull)
+  id                     String               @id @default(cuid())
+  ticketId               String               @map("ticket_id")
+  sellerUserId           String               @map("seller_user_id")
+  buyerUserId            String?              @map("buyer_user_id")
+  eventId                String               @map("event_id")
+  askingPrice            Decimal              @map("asking_price") @db.Decimal(10, 2)
+  currency               String               @default("EUR")
+  organizerRoyaltyAmount Decimal?             @map("organizer_royalty_amount") @db.Decimal(10, 2)
+  sellerNetAmount        Decimal?             @map("seller_net_amount") @db.Decimal(10, 2)
+  status                 ResaleStatus         @default(DRAFT)
+  paymentProvider        PaymentProvider      @default(STRIPE) @map("payment_provider")
+  saleReference          String?              @unique @map("sale_reference")
+  listedAt               DateTime?            @map("listed_at")
+  soldAt                 DateTime?            @map("sold_at")
+  expiresAt              DateTime?            @map("expires_at")
+  cancelledAt            DateTime?            @map("cancelled_at")
+  createdAt              DateTime             @default(now()) @map("created_at")
+  updatedAt              DateTime             @updatedAt @map("updated_at")
+  ticket                 Ticket               @relation(fields: [ticketId], references: [id], onDelete: Restrict)
+  event                  Event                @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  sellerUser             User                 @relation("resale_seller", fields: [sellerUserId], references: [id], onDelete: Restrict)
+  buyerUser              User?                @relation("resale_buyer", fields: [buyerUserId], references: [id], onDelete: SetNull)
   payoutRecords          PayoutRecord[]
+  paymentTransactions    PaymentTransaction[]
+  organizerEarnings      OrganizerEarning[]
 
   @@index([ticketId, status])
   @@index([eventId, status])
@@ -616,26 +731,30 @@ model ScanAttempt {
 }
 
 model PayoutRecord {
-  id              String          @id @default(cuid())
-  eventId         String          @map("event_id")
-  orderId         String?         @map("order_id")
-  resaleListingId String?         @map("resale_listing_id")
-  paymentProvider PaymentProvider @default(STRIPE) @map("payment_provider")
-  payoutReference String?         @unique @map("payout_reference")
-  grossAmount     Decimal         @map("gross_amount") @db.Decimal(10, 2)
-  feeAmount       Decimal         @default(0) @map("fee_amount") @db.Decimal(10, 2)
-  netAmount       Decimal         @map("net_amount") @db.Decimal(10, 2)
-  currency        String          @default("EUR")
-  status          PayoutStatus    @default(PENDING)
-  scheduledAt     DateTime?       @map("scheduled_at")
-  paidAt          DateTime?       @map("paid_at")
-  failedAt        DateTime?       @map("failed_at")
-  failureReason   String?         @map("failure_reason")
-  createdAt       DateTime        @default(now()) @map("created_at")
-  updatedAt       DateTime        @updatedAt @map("updated_at")
-  event           Event           @relation(fields: [eventId], references: [id], onDelete: Restrict)
-  order           Order?          @relation(fields: [orderId], references: [id], onDelete: SetNull)
-  resaleListing   ResaleListing?  @relation(fields: [resaleListingId], references: [id], onDelete: SetNull)
+  id                   String          @id @default(cuid())
+  eventId              String          @map("event_id")
+  orderId              String?         @map("order_id")
+  resaleListingId      String?         @map("resale_listing_id")
+  paymentProvider      PaymentProvider @default(STRIPE) @map("payment_provider")
+  payoutReference      String?         @unique @map("payout_reference")
+  grossAmount          Decimal         @map("gross_amount") @db.Decimal(10, 2)
+  feeAmount            Decimal         @default(0) @map("fee_amount") @db.Decimal(10, 2)
+  netAmount            Decimal         @map("net_amount") @db.Decimal(10, 2)
+  currency             String          @default("EUR")
+  status               PayoutStatus    @default(PENDING)
+  settlementState      SettlementState @default(PENDING) @map("settlement_state")
+  scheduledAt          DateTime?       @map("scheduled_at")
+  expectedSettlementAt DateTime?       @map("expected_settlement_at")
+  paidAt               DateTime?       @map("paid_at")
+  failedAt             DateTime?       @map("failed_at")
+  settledAt            DateTime?       @map("settled_at")
+  settlementReference  String?         @map("settlement_reference")
+  failureReason        String?         @map("failure_reason")
+  createdAt            DateTime        @default(now()) @map("created_at")
+  updatedAt            DateTime        @updatedAt @map("updated_at")
+  event                Event           @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  order                Order?          @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  resaleListing        ResaleListing?  @relation(fields: [resaleListingId], references: [id], onDelete: SetNull)
 
   @@index([eventId, status])
   @@index([orderId])
@@ -644,18 +763,228 @@ model PayoutRecord {
 }
 
 model WebhookEvent {
-  id              String          @id @default(cuid())
-  eventId         String?         @map("event_id")
-  provider        PaymentProvider @default(STRIPE)
-  providerEventId String          @unique @map("provider_event_id")
-  eventType       String          @map("event_type")
-  payload         Json
-  processedAt     DateTime?       @map("processed_at")
-  processingError String?         @map("processing_error")
-  createdAt       DateTime        @default(now()) @map("created_at")
-  event           Event?          @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  id               String          @id @default(cuid())
+  eventId          String?         @map("event_id")
+  provider         PaymentProvider @default(STRIPE)
+  providerEventId  String          @unique @map("provider_event_id")
+  eventType        String          @map("event_type")
+  payload          Json
+  deliveryAttempts Int             @default(0) @map("delivery_attempts")
+  lastAttemptAt    DateTime?       @map("last_attempt_at")
+  processedAt      DateTime?       @map("processed_at")
+  processingError  String?         @map("processing_error")
+  createdAt        DateTime        @default(now()) @map("created_at")
+  event            Event?          @relation(fields: [eventId], references: [id], onDelete: SetNull)
 
   @@index([eventId, createdAt])
   @@index([provider, eventType])
   @@map("webhook_events")
+}
+
+model OrganizerPaymentProfile {
+  id                        String    @id @default(cuid())
+  organizerId               String    @unique @map("organizer_id")
+  defaultSettlementCurrency String?   @map("default_settlement_currency")
+  isReadyForPaidEvents      Boolean   @default(false) @map("is_ready_for_paid_events")
+  readinessCheckedAt        DateTime? @map("readiness_checked_at")
+  firstReadyAt              DateTime? @map("first_ready_at")
+  createdAt                 DateTime  @default(now()) @map("created_at")
+  updatedAt                 DateTime  @updatedAt @map("updated_at")
+  organizer                 User      @relation(fields: [organizerId], references: [id], onDelete: Cascade)
+
+  @@index([isReadyForPaidEvents, updatedAt])
+  @@map("organizer_payment_profiles")
+}
+
+model PaymentAccount {
+  id                        String                         @id @default(cuid())
+  organizerId               String                         @map("organizer_id")
+  provider                  PaymentProvider
+  status                    PaymentAccountStatus           @default(NOT_STARTED)
+  accountType               ConnectedAccountType?          @map("account_type")
+  verificationStatus        PaymentVerificationStatus      @default(UNVERIFIED) @map("verification_status")
+  onboardingStatus          PaymentAccountOnboardingStatus @default(NOT_STARTED) @map("onboarding_status")
+  externalAccountId         String                         @map("external_account_id")
+  externalAccountCode       String?                        @map("external_account_code")
+  payoutsEnabled            Boolean                        @default(false) @map("payouts_enabled")
+  chargesEnabled            Boolean                        @default(false) @map("charges_enabled")
+  detailsSubmitted          Boolean                        @default(false) @map("details_submitted")
+  country                   String?
+  defaultCurrency           String?                        @map("default_currency")
+  currentlyDueRequirements  String[]                       @default([]) @map("currently_due_requirements")
+  eventuallyDueRequirements String[]                       @default([]) @map("eventually_due_requirements")
+  pastDueRequirements       String[]                       @default([]) @map("past_due_requirements")
+  onboardingCompletedAt     DateTime?                      @map("onboarding_completed_at")
+  requirementsDueBy         DateTime?                      @map("requirements_due_by")
+  requirementsSummary       String?                        @map("requirements_summary")
+  disabledReason            String?                        @map("disabled_reason")
+  lastSyncedAt              DateTime?                      @map("last_synced_at")
+  metadata                  Json?
+  createdAt                 DateTime                       @default(now()) @map("created_at")
+  updatedAt                 DateTime                       @updatedAt @map("updated_at")
+  organizer                 User                           @relation(fields: [organizerId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, externalAccountId])
+  @@unique([organizerId, provider])
+  @@index([status, updatedAt])
+  @@map("payment_accounts")
+}
+
+model PaymentTransaction {
+  id                       String                   @id @default(cuid())
+  organizerId              String                   @map("organizer_id")
+  eventId                  String                   @map("event_id")
+  orderId                  String?                  @map("order_id")
+  resaleListingId          String?                  @map("resale_listing_id")
+  provider                 PaymentProvider
+  type                     PaymentTransactionType   @default(PRIMARY_TICKET_PURCHASE)
+  status                   PaymentTransactionStatus @default(PENDING)
+  providerReference        String                   @map("provider_reference")
+  providerCheckoutId       String?                  @map("provider_checkout_id")
+  providerPaymentIntentId  String?                  @map("provider_payment_intent_id")
+  providerChargeId         String?                  @map("provider_charge_id")
+  providerTransferId       String?                  @map("provider_transfer_id")
+  providerApplicationFeeId String?                  @map("provider_application_fee_id")
+  connectedAccountId       String?                  @map("connected_account_id")
+  amount                   Decimal                  @db.Decimal(10, 2)
+  currency                 String
+  grossAmount              Decimal                  @map("gross_amount") @db.Decimal(10, 2)
+  platformFeeAmount        Decimal                  @default(0) @map("platform_fee_amount") @db.Decimal(10, 2)
+  organizerNetAmount       Decimal                  @default(0) @map("organizer_net_amount") @db.Decimal(10, 2)
+  settlementState          SettlementState          @default(PENDING) @map("settlement_state")
+  idempotencyKey           String?                  @map("idempotency_key")
+  capturedAt               DateTime?                @map("captured_at")
+  settledAt                DateTime?                @map("settled_at")
+  canceledAt               DateTime?                @map("canceled_at")
+  failedAt                 DateTime?                @map("failed_at")
+  failureReason            String?                  @map("failure_reason")
+  metadata                 Json?
+  createdAt                DateTime                 @default(now()) @map("created_at")
+  updatedAt                DateTime                 @updatedAt @map("updated_at")
+  organizer                User                     @relation("payment_transaction_organizer", fields: [organizerId], references: [id], onDelete: Restrict)
+  event                    Event                    @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  order                    Order?                   @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  resaleListing            ResaleListing?           @relation(fields: [resaleListingId], references: [id], onDelete: SetNull)
+  platformFees             PlatformFee[]
+  organizerEarnings        OrganizerEarning[]
+  refunds                  Refund[]
+  disputes                 Dispute[]
+
+  @@unique([provider, providerReference])
+  @@unique([provider, providerPaymentIntentId])
+  @@unique([provider, providerChargeId])
+  @@index([orderId])
+  @@index([organizerId, createdAt])
+  @@index([resaleListingId])
+  @@index([connectedAccountId, createdAt])
+  @@index([eventId, status, createdAt])
+  @@map("payment_transactions")
+}
+
+model PlatformFee {
+  id                   String               @id @default(cuid())
+  paymentTransactionId String               @map("payment_transaction_id")
+  amount               Decimal              @db.Decimal(10, 2)
+  currency             String
+  responsibility       String               @default("BUYER")
+  model                String               @default("BLENDED")
+  percentRate          Decimal?             @map("percent_rate") @db.Decimal(10, 6)
+  fixedAmount          Decimal?             @map("fixed_amount") @db.Decimal(10, 2)
+  fixedFeeApplication  FixedFeeApplication? @map("fixed_fee_application")
+  pricingRuleId        String?              @map("pricing_rule_id")
+  pricingRuleSnapshot  Json?                @map("pricing_rule_snapshot")
+  metadata             Json?
+  createdAt            DateTime             @default(now()) @map("created_at")
+  updatedAt            DateTime             @updatedAt @map("updated_at")
+  paymentTransaction   PaymentTransaction   @relation(fields: [paymentTransactionId], references: [id], onDelete: Cascade)
+
+  @@index([paymentTransactionId])
+  @@map("platform_fees")
+}
+
+model OrganizerEarning {
+  id                   String             @id @default(cuid())
+  organizerId          String             @map("organizer_id")
+  eventId              String             @map("event_id")
+  orderId              String?            @map("order_id")
+  resaleListingId      String?            @map("resale_listing_id")
+  paymentTransactionId String             @map("payment_transaction_id")
+  grossAmount          Decimal            @map("gross_amount") @db.Decimal(10, 2)
+  platformFeeAmount    Decimal            @default(0) @map("platform_fee_amount") @db.Decimal(10, 2)
+  netAmount            Decimal            @map("net_amount") @db.Decimal(10, 2)
+  currency             String
+  settlementState      SettlementState    @default(PENDING) @map("settlement_state")
+  settledAt            DateTime?          @map("settled_at")
+  createdAt            DateTime           @default(now()) @map("created_at")
+  updatedAt            DateTime           @updatedAt @map("updated_at")
+  organizer            User               @relation(fields: [organizerId], references: [id], onDelete: Restrict)
+  event                Event              @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  order                Order?             @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  resaleListing        ResaleListing?     @relation(fields: [resaleListingId], references: [id], onDelete: SetNull)
+  paymentTransaction   PaymentTransaction @relation(fields: [paymentTransactionId], references: [id], onDelete: Restrict)
+
+  @@index([organizerId, settlementState, createdAt])
+  @@index([eventId, createdAt])
+  @@index([orderId])
+  @@index([resaleListingId])
+  @@index([paymentTransactionId])
+  @@map("organizer_earnings")
+}
+
+model Refund {
+  id                   String              @id @default(cuid())
+  orderId              String?             @map("order_id")
+  paymentTransactionId String?             @map("payment_transaction_id")
+  provider             PaymentProvider
+  status               RefundStatus        @default(REQUESTED)
+  providerRefundId     String?             @map("provider_refund_id")
+  providerReversalId   String?             @map("provider_reversal_id")
+  amount               Decimal             @db.Decimal(10, 2)
+  currency             String
+  reverseTransfer      Boolean             @default(false) @map("reverse_transfer")
+  refundApplicationFee Boolean             @default(false) @map("refund_application_fee")
+  reason               String?
+  requestedByUserId    String?             @map("requested_by_user_id")
+  requestedAt          DateTime            @default(now()) @map("requested_at")
+  processedAt          DateTime?           @map("processed_at")
+  failedAt             DateTime?           @map("failed_at")
+  failureReason        String?             @map("failure_reason")
+  metadata             Json?
+  createdAt            DateTime            @default(now()) @map("created_at")
+  updatedAt            DateTime            @updatedAt @map("updated_at")
+  order                Order?              @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  paymentTransaction   PaymentTransaction? @relation(fields: [paymentTransactionId], references: [id], onDelete: SetNull)
+
+  @@unique([provider, providerRefundId])
+  @@index([orderId, createdAt])
+  @@index([paymentTransactionId, createdAt])
+  @@index([status, createdAt])
+  @@map("refunds")
+}
+
+model Dispute {
+  id                   String             @id @default(cuid())
+  paymentTransactionId String             @map("payment_transaction_id")
+  provider             PaymentProvider
+  providerDisputeId    String             @map("provider_dispute_id")
+  providerChargeId     String?            @map("provider_charge_id")
+  amount               Decimal            @db.Decimal(10, 2)
+  currency             String
+  reason               String?
+  status               String
+  evidenceDueBy        DateTime?          @map("evidence_due_by")
+  needsResponse        Boolean            @default(false) @map("needs_response")
+  wonAt                DateTime?          @map("won_at")
+  lostAt               DateTime?          @map("lost_at")
+  closedAt             DateTime?          @map("closed_at")
+  metadata             Json?
+  createdAt            DateTime           @default(now()) @map("created_at")
+  updatedAt            DateTime           @updatedAt @map("updated_at")
+  paymentTransaction   PaymentTransaction @relation(fields: [paymentTransactionId], references: [id], onDelete: Restrict)
+
+  @@unique([provider, providerDisputeId])
+  @@index([paymentTransactionId])
+  @@index([providerChargeId])
+  @@index([status, createdAt])
+  @@map("disputes")
 }

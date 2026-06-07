@@ -14,6 +14,7 @@ import { RateLimitGuard } from "./common/security/rate-limit.guard";
 import { EventsModule } from "./events/events.module";
 import { HealthModule } from "./health/health.module";
 import { OrdersModule } from "./orders/orders.module";
+import { OrganizersModule } from "./organizers/organizers.module";
 import { PaymentsModule } from "./payments/payments.module";
 import { NotificationsModule } from "./notifications/notifications.module";
 import { MonitoringModule } from "./monitoring/monitoring.module";
@@ -39,6 +40,7 @@ import { TransfersModule } from "./transfers/transfers.module";
     EventsModule,
     TicketsModule,
     OrdersModule,
+    OrganizersModule,
     ResaleModule,
     ScannerModule,
     TransfersModule,

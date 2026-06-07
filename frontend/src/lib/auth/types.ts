@@ -1,6 +1,6 @@
 export type AppSurface = "public" | "attendee" | "organizer" | "scanner";
 export type AccountType = "ATTENDEE" | "ORGANIZER";
-export type PlatformRole = "EVENT_OWNER";
+export type PlatformRole = "EVENT_OWNER" | "PLATFORM_ADMIN";
 
 export type AuthMembership = {
   acceptedAt: string | null;

@@ -169,6 +169,20 @@ export async function listOrganizerEvents(accessToken: string) {
   );
 }
 
+export async function createOrganizerEvent(
+  payload: CreateOrganizerEventPayload,
+  accessToken: string,
+) {
+  return apiFetch<OrganizerEventResponse>("/api/events", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+}
+
 export async function getOrganizerEventBySlug(slug: string, accessToken: string) {
   return apiFetch<OrganizerEventResponse>(`/api/events/${slug}`, {
     headers: {

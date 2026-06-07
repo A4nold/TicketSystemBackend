@@ -1,4 +1,10 @@
-import { OrderStatus, PaymentProvider, Prisma, TicketStatus } from "@prisma/client";
+import {
+  OrderStatus,
+  PaymentProvider,
+  PaymentTransactionStatus,
+  Prisma,
+  TicketStatus,
+} from "@prisma/client";
 
 import { type FeePolicy } from "../fee-policy";
 
@@ -13,6 +19,12 @@ type OrderResponseSource = {
   paymentProvider: PaymentProvider;
   paymentReference: string | null;
   checkoutSessionId: string | null;
+  paymentTransactions?: Array<{
+    id: string;
+    status: PaymentTransactionStatus;
+    connectedAccountId: string | null;
+    providerPaymentIntentId: string | null;
+  }>;
   checkoutUrl?: string | null;
   paymentStatus?: string | null;
   checkoutStatus?: string | null;
@@ -47,18 +59,36 @@ type OrderResponseSource = {
 };
 
 type CheckoutState = {
-  checkoutSessionId: string;
+  checkoutSessionId: string | null;
   checkoutUrl: string | null;
   paymentStatus: string | null;
   checkoutStatus: string | null;
   isAwaitingPaymentConfirmation: boolean;
+  paymentIntentId?: string | null;
+  clientSecret?: string | null;
+  connectedAccountId?: string | null;
 } | null;
 
 export function toOrderResponse(
   order: OrderResponseSource,
   checkoutState?: CheckoutState,
 ) {
-  const paymentStatus = checkoutState?.paymentStatus ?? order.paymentStatus ?? null;
+  const latestPaymentTransaction = order.paymentTransactions?.[0] ?? null;
+  const paymentIntentId =
+    checkoutState?.paymentIntentId ??
+    latestPaymentTransaction?.providerPaymentIntentId ??
+    null;
+  const paymentTransactionId = latestPaymentTransaction?.id ?? null;
+  const clientSecret = checkoutState?.clientSecret ?? null;
+  const connectedAccountId =
+    checkoutState?.connectedAccountId ??
+    latestPaymentTransaction?.connectedAccountId ??
+    null;
+  const paymentStatus =
+    checkoutState?.paymentStatus ??
+    order.paymentStatus ??
+    mapPaymentTransactionStatusToPaymentStatus(latestPaymentTransaction?.status) ??
+    null;
   const checkoutStatus =
     checkoutState?.checkoutStatus ?? order.checkoutStatus ?? null;
   const checkoutUrl = checkoutState?.checkoutUrl ?? order.checkoutUrl ?? null;
@@ -70,7 +100,7 @@ export function toOrderResponse(
     (order.status === OrderStatus.PENDING &&
       (order.paymentProvider === PaymentProvider.STRIPE ||
         order.paymentProvider === PaymentProvider.PAYSTACK) &&
-      Boolean(order.checkoutSessionId) &&
+      (Boolean(order.checkoutSessionId) || Boolean(paymentIntentId)) &&
       !["paid", "success"].includes(paymentStatus ?? "") &&
       !["expired", "abandoned", "failed"].includes(checkoutStatus ?? ""));
 
@@ -92,6 +122,10 @@ export function toOrderResponse(
     paymentProvider: order.paymentProvider,
     paymentReference: order.paymentReference,
     checkoutSessionId,
+    paymentTransactionId,
+    paymentIntentId,
+    clientSecret,
+    connectedAccountId,
     checkoutUrl,
     paymentStatus,
     checkoutStatus,
@@ -122,4 +156,25 @@ export function toOrderResponse(
       issuedAt: ticket.issuedAt,
     })),
   };
+}
+
+function mapPaymentTransactionStatusToPaymentStatus(
+  status: PaymentTransactionStatus | undefined,
+) {
+  switch (status) {
+    case PaymentTransactionStatus.SUCCEEDED:
+      return "paid";
+    case PaymentTransactionStatus.FAILED:
+      return "failed";
+    case PaymentTransactionStatus.CANCELLED:
+      return "cancelled";
+    case PaymentTransactionStatus.REQUIRES_ACTION:
+      return "requires_action";
+    case PaymentTransactionStatus.PROCESSING:
+      return "processing";
+    case PaymentTransactionStatus.PENDING:
+      return "pending";
+    default:
+      return null;
+  }
 }

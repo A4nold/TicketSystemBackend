@@ -160,6 +160,28 @@ export class AuthController {
     return result;
   }
 
+  @Post("upgrade-to-organizer")
+  @ApiBearerAuth("bearer")
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({
+    summary: "Upgrade the current authenticated account to organizer access",
+  })
+  @ApiOkResponse({
+    description: "Authenticated user upgraded to organizer capability",
+    type: AuthResponseDto,
+  })
+  @ApiUnauthorizedResponse({
+    description: "Bearer token was missing, invalid, expired, or tied to an inactive user",
+  })
+  async upgradeToOrganizer(
+    @CurrentUser() user: AuthenticatedUser,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const authResponse = await this.authService.upgradeToOrganizer(user.id);
+    this.setAccessCookie(response, authResponse.accessToken);
+    return authResponse;
+  }
+
   @Post("logout")
   @ApiOperation({
     summary: "Log out the current browser session",

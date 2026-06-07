@@ -223,6 +223,12 @@ export class OrderPaymentService {
           createdAt: "asc" as const,
         },
       },
+      paymentTransactions: {
+        orderBy: {
+          createdAt: "desc" as const,
+        },
+        take: 1,
+      },
     };
   }
 

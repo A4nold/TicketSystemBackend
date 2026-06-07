@@ -15,6 +15,7 @@ import { GlobalHttpExceptionFilter } from "./common/filters/http-exception.filte
 async function bootstrap() {
   const bootstrapLogger = new Logger("Bootstrap");
   assertSecurityModeConsistency();
+  const isProduction = process.env.NODE_ENV === "production";
 
   process.on("unhandledRejection", (reason) => {
     const message =
@@ -48,14 +49,14 @@ async function bootstrap() {
           objectSrc: ["'none'"],
           scriptSrc: ["'self'", "'unsafe-inline'"],
           styleSrc: ["'self'", "'unsafe-inline'"],
-          upgradeInsecureRequests: [],
+          ...(isProduction ? { upgradeInsecureRequests: [] } : {}),
         },
       },
       crossOriginEmbedderPolicy: false,
       referrerPolicy: {
         policy: "no-referrer",
       },
-      hsts: process.env.NODE_ENV === "production"
+      hsts: isProduction
         ? {
             maxAge: 31536000,
             includeSubDomains: true,

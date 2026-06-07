@@ -1,6 +1,6 @@
 import { StaffMembership, User, UserProfile } from "@prisma/client";
 
-type AuthenticatedPlatformRole = "EVENT_OWNER";
+type AuthenticatedPlatformRole = "EVENT_OWNER" | "PLATFORM_ADMIN";
 type AuthenticatedAccountType = "ATTENDEE" | "ORGANIZER";
 
 export type AuthenticatedUser = Pick<User, "id" | "email" | "status"> & {

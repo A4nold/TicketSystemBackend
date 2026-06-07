@@ -1,6 +1,11 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
+import DateTimePicker, {
+  DateTimePickerAndroid,
+  type DateTimePickerEvent,
+} from "@react-native-community/datetimepicker";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import * as ImagePicker from "expo-image-picker";
+import * as WebBrowser from "expo-web-browser";
 import { useEffect, useMemo, useState } from "react";
 import {
   Image,
@@ -24,15 +29,18 @@ import {
   blankTicketTypeEditorState,
   buildOrganizerEventPatch,
   buildTicketTypePayload,
+  type EventEditorState,
+  formatLocalDateTimeInput,
   getStaffStatusCopy,
+  parseLocalDateTimeInput,
   toEventEditorState,
   toTicketTypeEditorState,
+  type TicketTypeEditorState,
   validateEventEditorState,
   validateStaffInvite,
   validateTicketTypeEditorState,
-  type EventEditorState,
-  type TicketTypeEditorState,
 } from "@/features/organizer/organizer-model";
+import { deriveOrganizerSetupStep } from "@/features/organizer/organizer-setup-flow";
 import { ApiError } from "@/lib/api/client";
 import { formatDateTime } from "@/lib/formatters";
 import {
@@ -49,11 +57,17 @@ import {
   updateOrganizerStaffRole,
   updateOrganizerTicketType,
 } from "@/lib/organizer/events-client";
+import { getOrganizerProfile } from "@/lib/organizer/organizer-profile-client";
 import {
   acceptOrganizerOffer,
   listOrganizerOffers,
   rejectOrganizerOffer,
 } from "@/lib/organizer/offers-client";
+import {
+  createStripeConnectOnboardingLink,
+  getStripeConnectAccountStatus,
+  refreshStripeConnectOnboardingLink,
+} from "@/lib/payments/stripe-connect-client";
 import { palette } from "@/styles/theme";
 
 const STATUS_OPTIONS: EventEditorState["status"][] = [
@@ -81,6 +95,59 @@ function getErrorMessage(error: unknown, fallback: string) {
 
 function animateLayout() {
   LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+}
+
+function ticketTypeRequiresStripeReadiness(input: {
+  price: string;
+  pricingMode: "FIXED" | "FREE" | "OFFER_RANGE";
+}) {
+  if (input.pricingMode === "FREE") {
+    return false;
+  }
+
+  if (input.pricingMode === "OFFER_RANGE") {
+    return true;
+  }
+
+  return Number(input.price || "0") > 0;
+}
+
+function getPaidEventSetupMessage(input: {
+  provider: "STRIPE" | "PAYSTACK" | "MANUAL" | null | undefined;
+  setupStep:
+    | "intro"
+    | "identity"
+    | "location"
+    | "provider"
+    | "payments"
+    | "verification"
+    | "complete";
+}) {
+  if (input.setupStep === "identity") {
+    return "Add your organizer name first before publishing paid events.";
+  }
+
+  if (input.setupStep === "location") {
+    return "Add your operating country and payout currency before publishing paid events.";
+  }
+
+  if (input.setupStep === "provider") {
+    return "Choose a payout provider before publishing paid events.";
+  }
+
+  if (input.provider === "PAYSTACK") {
+    return "Paystack organizer payout onboarding is not active in this mobile flow yet. Review provider setup before publishing paid events.";
+  }
+
+  if (input.setupStep === "payments") {
+    return "Connect your payout provider before publishing paid events.";
+  }
+
+  if (input.setupStep === "verification") {
+    return "Finish payout verification before publishing paid events.";
+  }
+
+  return "Paid event publishing is blocked until payout setup is ready.";
 }
 
 function Field({
@@ -127,6 +194,104 @@ function Field({
   );
 }
 
+function formatDateTimeFieldValue(value: string) {
+  const parsed = parseLocalDateTimeInput(value);
+
+  if (!parsed) {
+    return null;
+  }
+
+  return new Intl.DateTimeFormat("en-IE", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(parsed);
+}
+
+function EventDateTimeField({
+  compact = false,
+  error,
+  fullWidth = false,
+  hint,
+  isOpen,
+  label,
+  onChangeText,
+  onToggle,
+  placeholder,
+  value,
+  allowClear = false,
+}: {
+  allowClear?: boolean;
+  compact?: boolean;
+  error?: string;
+  fullWidth?: boolean;
+  hint?: string;
+  isOpen: boolean;
+  label: string;
+  onChangeText: (value: string) => void;
+  onToggle: () => void;
+  placeholder: string;
+  value: string;
+}) {
+  const parsedValue = parseLocalDateTimeInput(value) ?? new Date();
+  const displayValue = formatDateTimeFieldValue(value);
+
+  const handleIosChange = (_event: DateTimePickerEvent, selectedDate?: Date) => {
+    if (!selectedDate) {
+      return;
+    }
+
+    onChangeText(formatLocalDateTimeInput(selectedDate));
+  };
+
+  return (
+    <View style={styles.field}>
+      <Text style={styles.fieldLabel}>{label}</Text>
+      <Pressable
+        onPress={onToggle}
+        style={[
+          styles.input,
+          compact ? styles.inputCompact : null,
+          fullWidth ? styles.dateInputFullWidth : null,
+          styles.dateInputShell,
+          error ? styles.inputError : null,
+        ]}
+      >
+        <Text
+          style={[
+            displayValue ? styles.dateInputValue : styles.dateInputPlaceholder,
+            fullWidth ? styles.dateInputValueFullWidth : null,
+          ]}
+        >
+          {displayValue ?? placeholder}
+        </Text>
+      </Pressable>
+      {Platform.OS === "ios" && isOpen ? (
+        <View style={[styles.datePickerCard, fullWidth ? styles.datePickerCardExpanded : null]}>
+          <DateTimePicker
+            display="spinner"
+            minuteInterval={5}
+            mode="datetime"
+            onChange={handleIosChange}
+            value={parsedValue}
+          />
+          <View style={styles.datePickerActions}>
+            {allowClear && value ? (
+              <Pressable onPress={() => onChangeText("")} style={styles.inlineAction}>
+                <Text style={styles.inlineDangerText}>Clear</Text>
+              </Pressable>
+            ) : null}
+            <Pressable onPress={onToggle} style={styles.inlineAction}>
+              <Text style={styles.inlineActionText}>Done</Text>
+            </Pressable>
+          </View>
+        </View>
+      ) : null}
+      {error ? <Text style={styles.errorText}>{error}</Text> : null}
+      {!error && hint ? <Text style={styles.hintText}>{hint}</Text> : null}
+    </View>
+  );
+}
+
 function SegmentedControl<T extends string>({
   options,
   selected,
@@ -162,7 +327,13 @@ function SegmentedControl<T extends string>({
 }
 
 export function OrganizerEventScreen() {
-  const { slug } = useLocalSearchParams<{ slug: string }>();
+  const { created, focus, mediaStatus, publishIntent, slug } = useLocalSearchParams<{
+    created?: string;
+    focus?: string;
+    mediaStatus?: string;
+    publishIntent?: string;
+    slug: string;
+  }>();
   const router = useRouter();
   const { session } = useAuth();
   const queryClient = useQueryClient();
@@ -182,6 +353,13 @@ export function OrganizerEventScreen() {
   const [isSavingTicketType, setIsSavingTicketType] = useState(false);
   const [isSavingStaff, setIsSavingStaff] = useState(false);
   const [isSavingOffers, setIsSavingOffers] = useState(false);
+  const [isOpeningStripe, setIsOpeningStripe] = useState(false);
+  const [activeDateField, setActiveDateField] = useState<
+    "startsAt" | "endsAt" | "salesStartAt" | "salesEndAt" | null
+  >(null);
+  const [activeTicketTypeDateField, setActiveTicketTypeDateField] = useState<
+    "saleStartsAt" | "saleEndsAt" | null
+  >(null);
   const [expandedSections, setExpandedSections] = useState({
     event: false,
     offers: false,
@@ -228,6 +406,16 @@ export function OrganizerEventScreen() {
       ),
     queryKey: ["organizer-offers", selectedSummary?.id, session?.accessToken, offerStatusFilter],
   });
+  const organizerProfileQuery = useQuery({
+    enabled: Boolean(session?.accessToken && hasSurfaceAccess),
+    queryFn: () => getOrganizerProfile(session!.accessToken),
+    queryKey: ["organizer-profile", session?.accessToken],
+  });
+  const stripeAccountQuery = useQuery({
+    enabled: Boolean(session?.accessToken && hasSurfaceAccess),
+    queryFn: () => getStripeConnectAccountStatus(session!.accessToken),
+    queryKey: ["organizer-stripe-account", session?.accessToken],
+  });
   const pristineEventForm = eventDetailQuery.data ? toEventEditorState(eventDetailQuery.data) : null;
   const pristineTicketTypeForm = useMemo(() => {
     const currentTicketType = eventDetailQuery.data?.ticketTypes.find(
@@ -249,6 +437,24 @@ export function OrganizerEventScreen() {
   const ticketTypeIsDirty =
     JSON.stringify(ticketTypeForm) !== JSON.stringify(pristineTicketTypeForm);
   const staffIsDirty = Boolean(inviteEmail.trim());
+  const currentTicketTypes = eventDetailQuery.data?.ticketTypes ?? [];
+  const eventHasPaidTicketTypes =
+    currentTicketTypes.some((ticketType) =>
+      ticketTypeRequiresStripeReadiness(ticketType),
+    ) || ticketTypeRequiresStripeReadiness(ticketTypeForm);
+  const organizerSetupStep = deriveOrganizerSetupStep({
+    profile: organizerProfileQuery.data,
+    stripeAccount: stripeAccountQuery.data,
+  });
+  const selectedPaymentProvider =
+    organizerProfileQuery.data?.selectedPaymentProvider ?? null;
+  const isPaidEventSetupBlocked =
+    organizerSetupStep !== "complete" &&
+    organizerSetupStep !== "intro";
+  const shouldShowPaymentReadinessWarning =
+    Boolean(eventForm?.status === "PUBLISHED" || selectedSummary?.status === "PUBLISHED") &&
+    eventHasPaidTicketTypes &&
+    isPaidEventSetupBlocked;
   const stickyAction = useMemo(() => {
     if (expandedSections.event && eventIsDirty) {
       return {
@@ -340,6 +546,7 @@ export function OrganizerEventScreen() {
   useEffect(() => {
     if (eventDetailQuery.data) {
       setEventForm(toEventEditorState(eventDetailQuery.data));
+      setActiveDateField(null);
       setSelectedTicketTypeId(eventDetailQuery.data.ticketTypes[0]?.id ?? "new");
       setNotice(null);
       setErrorMessage(null);
@@ -347,15 +554,54 @@ export function OrganizerEventScreen() {
   }, [eventDetailQuery.data?.id]);
 
   useEffect(() => {
+    if (!eventDetailQuery.data) {
+      return;
+    }
+
+    const openedFromCreation = created === "1";
+    const shouldFocusTicketTypes = focus === "ticket-types";
+
+    if (!openedFromCreation && !shouldFocusTicketTypes) {
+      return;
+    }
+
+    animateLayout();
+    setExpandedSections({
+      event: false,
+      offers: false,
+      staff: false,
+      ticketTypes: true,
+    });
+
+    if (!eventDetailQuery.data.ticketTypes.length) {
+      setSelectedTicketTypeId("new");
+    }
+
+    if (openedFromCreation) {
+      setNotice(
+        mediaStatus === "failed"
+          ? "Event created, but the header image still needs another upload. Next up: add ticket types, media, and review publish readiness."
+          : publishIntent === "PUBLISHED"
+            ? "Published event created. Next up: add ticket types, media, and confirm publish readiness for any paid sales."
+            : mediaStatus === "uploaded"
+              ? "Event created and header image uploaded. Next up: add your first ticket type, then review publish readiness."
+              : "Event created. Next up: add your first ticket type, then review media and publish readiness.",
+      );
+    }
+  }, [created, eventDetailQuery.data, focus, mediaStatus, publishIntent]);
+
+  useEffect(() => {
     const currentTicketType = eventDetailQuery.data?.ticketTypes.find(
       (ticketType) => ticketType.id === selectedTicketTypeId,
     );
 
     if (currentTicketType) {
+      setActiveTicketTypeDateField(null);
       setTicketTypeForm(toTicketTypeEditorState(currentTicketType));
       return;
     }
 
+    setActiveTicketTypeDateField(null);
     setTicketTypeForm({
       ...blankTicketTypeEditorState(),
       currency: eventDetailQuery.data?.currency ?? "EUR",
@@ -375,9 +621,113 @@ export function OrganizerEventScreen() {
     return () => clearTimeout(timer);
   }, [notice]);
 
+  function updateEventDateField(
+    field: "startsAt" | "endsAt" | "salesStartAt" | "salesEndAt",
+    nextValue: string,
+  ) {
+    setEventForm((current) => (current ? { ...current, [field]: nextValue } : current));
+  }
+
+  function openDatePicker(
+    field: "startsAt" | "endsAt" | "salesStartAt" | "salesEndAt",
+    currentValue: string,
+  ) {
+    if (Platform.OS === "ios") {
+      setActiveDateField((current) => (current === field ? null : field));
+      return;
+    }
+
+    const baseDate = parseLocalDateTimeInput(currentValue) ?? new Date();
+
+    DateTimePickerAndroid.open({
+      is24Hour: true,
+      mode: "date",
+      onChange: (dateEvent, selectedDate) => {
+        if (dateEvent.type !== "set" || !selectedDate) {
+          return;
+        }
+
+        const nextDate = new Date(baseDate);
+        nextDate.setFullYear(
+          selectedDate.getFullYear(),
+          selectedDate.getMonth(),
+          selectedDate.getDate(),
+        );
+
+        DateTimePickerAndroid.open({
+          is24Hour: true,
+          mode: "time",
+          onChange: (timeEvent, selectedTime) => {
+            if (timeEvent.type !== "set" || !selectedTime) {
+              return;
+            }
+
+            nextDate.setHours(selectedTime.getHours(), selectedTime.getMinutes(), 0, 0);
+            updateEventDateField(field, formatLocalDateTimeInput(nextDate));
+          },
+          value: nextDate,
+        });
+      },
+      value: baseDate,
+    });
+  }
+
+  function updateTicketTypeDateField(
+    field: "saleStartsAt" | "saleEndsAt",
+    nextValue: string,
+  ) {
+    setTicketTypeForm((current) => ({ ...current, [field]: nextValue }));
+  }
+
+  function openTicketTypeDatePicker(
+    field: "saleStartsAt" | "saleEndsAt",
+    currentValue: string,
+  ) {
+    if (Platform.OS === "ios") {
+      setActiveTicketTypeDateField((current) => (current === field ? null : field));
+      return;
+    }
+
+    const baseDate = parseLocalDateTimeInput(currentValue) ?? new Date();
+
+    DateTimePickerAndroid.open({
+      is24Hour: true,
+      mode: "date",
+      onChange: (dateEvent, selectedDate) => {
+        if (dateEvent.type !== "set" || !selectedDate) {
+          return;
+        }
+
+        const nextDate = new Date(baseDate);
+        nextDate.setFullYear(
+          selectedDate.getFullYear(),
+          selectedDate.getMonth(),
+          selectedDate.getDate(),
+        );
+
+        DateTimePickerAndroid.open({
+          is24Hour: true,
+          mode: "time",
+          onChange: (timeEvent, selectedTime) => {
+            if (timeEvent.type !== "set" || !selectedTime) {
+              return;
+            }
+
+            nextDate.setHours(selectedTime.getHours(), selectedTime.getMinutes(), 0, 0);
+            updateTicketTypeDateField(field, formatLocalDateTimeInput(nextDate));
+          },
+          value: nextDate,
+        });
+      },
+      value: baseDate,
+    });
+  }
+
   async function refreshOrganizerQueries() {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ["organizer-events", session?.accessToken] }),
+      queryClient.invalidateQueries({ queryKey: ["organizer-profile", session?.accessToken] }),
+      queryClient.invalidateQueries({ queryKey: ["organizer-stripe-account", session?.accessToken] }),
       queryClient.invalidateQueries({
         queryKey: ["organizer-event-detail", selectedSummary?.slug, session?.accessToken],
       }),
@@ -385,6 +735,43 @@ export function OrganizerEventScreen() {
         queryKey: ["organizer-staff", selectedSummary?.id, session?.accessToken],
       }),
     ]);
+  }
+
+  async function handleStripeReadinessAction() {
+    if (selectedPaymentProvider && selectedPaymentProvider !== "STRIPE") {
+      router.push("/organizer/setup" as never);
+      return;
+    }
+
+    if (organizerSetupStep !== "payments" && organizerSetupStep !== "verification" && organizerSetupStep !== "complete") {
+      router.push("/organizer/setup" as never);
+      return;
+    }
+
+    if (!session?.accessToken) {
+      return;
+    }
+
+    setIsOpeningStripe(true);
+    setNotice(null);
+    setErrorMessage(null);
+
+    try {
+      const account = stripeAccountQuery.data;
+      const result = account?.connectedAccountId
+        ? await refreshStripeConnectOnboardingLink(session.accessToken)
+        : await createStripeConnectOnboardingLink(session.accessToken);
+
+      await WebBrowser.openBrowserAsync(result.onboardingUrl);
+      await stripeAccountQuery.refetch();
+      setNotice("Returned from Stripe. Payment readiness refreshed.");
+    } catch (error) {
+      setErrorMessage(
+        getErrorMessage(error, "Stripe onboarding couldn't be opened right now."),
+      );
+    } finally {
+      setIsOpeningStripe(false);
+    }
   }
 
   async function handleEventSave() {
@@ -405,7 +792,20 @@ export function OrganizerEventScreen() {
       await refreshOrganizerQueries();
       setNotice("Event details saved.");
     } catch (error) {
-      setErrorMessage(getErrorMessage(error, "Event details couldn't be saved right now."));
+      if (
+        error instanceof ApiError &&
+        error.code === "ORGANIZER_PAYMENT_ACCOUNT_NOT_READY"
+      ) {
+        setErrorMessage(
+          getPaidEventSetupMessage({
+            provider: selectedPaymentProvider,
+            setupStep: organizerSetupStep,
+          }),
+        );
+        await Promise.all([stripeAccountQuery.refetch(), organizerProfileQuery.refetch()]);
+      } else {
+        setErrorMessage(getErrorMessage(error, "Event details couldn't be saved right now."));
+      }
     } finally {
       setIsSavingEvent(false);
     }
@@ -554,7 +954,20 @@ export function OrganizerEventScreen() {
 
       await refreshOrganizerQueries();
     } catch (error) {
-      setErrorMessage(getErrorMessage(error, "Ticket type changes couldn't be saved right now."));
+      if (
+        error instanceof ApiError &&
+        error.code === "ORGANIZER_PAYMENT_ACCOUNT_NOT_READY"
+      ) {
+        setErrorMessage(
+          getPaidEventSetupMessage({
+            provider: selectedPaymentProvider,
+            setupStep: organizerSetupStep,
+          }),
+        );
+        await Promise.all([stripeAccountQuery.refetch(), organizerProfileQuery.refetch()]);
+      } else {
+        setErrorMessage(getErrorMessage(error, "Ticket type changes couldn't be saved right now."));
+      }
     } finally {
       setIsSavingTicketType(false);
     }
@@ -755,6 +1168,97 @@ export function OrganizerEventScreen() {
           </Card>
         ) : null}
 
+        {eventDetailQuery.data && (created === "1" || eventDetailQuery.data.ticketTypes.length === 0) ? (
+          <Card tone="accent" padded={false}>
+            <View style={styles.sectionShell}>
+              <Text style={styles.sectionTitle}>Next steps</Text>
+              <Text style={styles.copy}>
+                {eventDetailQuery.data.ticketTypes.length === 0
+                  ? "Your event shell is ready. Add the first ticket type next so sales and publish readiness can take shape."
+                  : "Your event is created. Keep momentum by reviewing ticket pricing, media, and payout readiness."}
+              </Text>
+              <View style={styles.checklistShell}>
+                <View style={styles.checklistItem}>
+                  <Text style={styles.checklistBullet}>1</Text>
+                  <Text style={styles.checklistCopy}>Add or review ticket types</Text>
+                </View>
+                <View style={styles.checklistItem}>
+                  <Text style={styles.checklistBullet}>2</Text>
+                  <Text style={styles.checklistCopy}>Upload the event header image</Text>
+                </View>
+                <View style={styles.checklistItem}>
+                  <Text style={styles.checklistBullet}>3</Text>
+                  <Text style={styles.checklistCopy}>Check payout and publish readiness</Text>
+                </View>
+              </View>
+              <ActionButton
+                onPress={() => {
+                  animateLayout();
+                  setExpandedSections((current) => ({
+                    ...current,
+                    ticketTypes: true,
+                  }));
+                  setSelectedTicketTypeId("new");
+                  setNotice("Start with the first ticket type. You can always come back to the rest.");
+                }}
+                title={
+                  eventDetailQuery.data.ticketTypes.length === 0
+                    ? "Create first ticket type"
+                    : "Add another ticket type"
+                }
+              />
+              <ActionButton
+                onPress={() => {
+                  animateLayout();
+                  setExpandedSections((current) => ({
+                    ...current,
+                    event: true,
+                  }));
+                  setNotice("Core event details are open below when you’re ready.");
+                }}
+                title="Review event details"
+                variant="secondary"
+              />
+            </View>
+          </Card>
+        ) : null}
+
+        {shouldShowPaymentReadinessWarning ? (
+          <Card tone="warning">
+            <Text style={styles.sectionTitle}>Paid event setup still needs attention</Text>
+            <Text style={styles.copy}>
+              {getPaidEventSetupMessage({
+                provider: selectedPaymentProvider,
+                setupStep: organizerSetupStep,
+              })}
+            </Text>
+            <Text style={styles.copy}>
+              Free tickets can still be managed, but paid event publishing stays blocked until this
+              setup step is complete.
+            </Text>
+            <ActionButton
+              loading={isOpeningStripe}
+              onPress={() => void handleStripeReadinessAction()}
+              title={
+                organizerSetupStep === "payments" || organizerSetupStep === "verification"
+                  ? stripeAccountQuery.data?.connectedAccountId
+                    ? "Resume payout onboarding"
+                    : "Connect payout provider"
+                  : "Open organizer setup"
+              }
+            />
+            {organizerSetupStep === "payments" || organizerSetupStep === "verification" ? (
+              <ActionButton
+                onPress={() => {
+                  router.push("/organizer/setup" as never);
+                }}
+                title="Review full setup"
+                variant="secondary"
+              />
+            ) : null}
+          </Card>
+        ) : null}
+
         {notice ? (
           <Card tone="success" padded={false}>
             <View style={styles.sectionShell}>
@@ -769,6 +1273,18 @@ export function OrganizerEventScreen() {
             <View style={styles.sectionShell}>
               <Text style={styles.flashTitle}>Action needed</Text>
               <Text style={styles.copy}>{errorMessage}</Text>
+              {errorMessage ===
+              getPaidEventSetupMessage({
+                provider: selectedPaymentProvider,
+                setupStep: organizerSetupStep,
+              }) ? (
+                <ActionButton
+                  onPress={() => {
+                    router.push("/organizer/setup" as never);
+                  }}
+                  title="Open organizer setup"
+                />
+              ) : null}
             </View>
           </Card>
         ) : null}
@@ -885,30 +1401,65 @@ export function OrganizerEventScreen() {
                   }
                   value={eventForm.venueAddress}
                 />
-                <View style={styles.row}>
+                <View style={[styles.row, styles.eventDateRow]}>
                   <View style={styles.rowItem}>
-                    <Field
+                    <EventDateTimeField
                       compact
                       error={eventValidation?.fieldErrors.startsAt}
+                      fullWidth={Platform.OS === "ios"}
                       hint="Use local date and time."
+                      isOpen={activeDateField === "startsAt"}
                       label="Starts"
-                      onChangeText={(value) =>
-                        setEventForm((current) => (current ? { ...current, startsAt: value } : current))
-                      }
-                      placeholder="YYYY-MM-DDTHH:mm"
+                      onChangeText={(value) => updateEventDateField("startsAt", value)}
+                      onToggle={() => openDatePicker("startsAt", eventForm.startsAt)}
+                      placeholder="Choose date and time"
                       value={eventForm.startsAt}
                     />
                   </View>
                   <View style={styles.rowItem}>
-                    <Field
+                    <EventDateTimeField
+                      allowClear
                       compact
                       error={eventValidation?.fieldErrors.endsAt}
+                      fullWidth={Platform.OS === "ios"}
+                      isOpen={activeDateField === "endsAt"}
                       label="Ends"
-                      onChangeText={(value) =>
-                        setEventForm((current) => (current ? { ...current, endsAt: value } : current))
-                      }
-                      placeholder="YYYY-MM-DDTHH:mm"
+                      onChangeText={(value) => updateEventDateField("endsAt", value)}
+                      onToggle={() => openDatePicker("endsAt", eventForm.endsAt)}
+                      placeholder="Optional end time"
                       value={eventForm.endsAt}
+                    />
+                  </View>
+                </View>
+                <View style={[styles.row, styles.eventDateRow]}>
+                  <View style={styles.rowItem}>
+                    <EventDateTimeField
+                      allowClear
+                      compact
+                      error={eventValidation?.fieldErrors.salesStartAt}
+                      fullWidth={Platform.OS === "ios"}
+                      hint="Optional window for when ticket sales begin."
+                      isOpen={activeDateField === "salesStartAt"}
+                      label="Event sales start"
+                      onChangeText={(value) => updateEventDateField("salesStartAt", value)}
+                      onToggle={() => openDatePicker("salesStartAt", eventForm.salesStartAt)}
+                      placeholder="Optional sales start"
+                      value={eventForm.salesStartAt}
+                    />
+                  </View>
+                  <View style={styles.rowItem}>
+                    <EventDateTimeField
+                      allowClear
+                      compact
+                      error={eventValidation?.fieldErrors.salesEndAt}
+                      fullWidth={Platform.OS === "ios"}
+                      hint="Ticket type sales must end on or before this time."
+                      isOpen={activeDateField === "salesEndAt"}
+                      label="Event sales end"
+                      onChangeText={(value) => updateEventDateField("salesEndAt", value)}
+                      onToggle={() => openDatePicker("salesEndAt", eventForm.salesEndAt)}
+                      placeholder="Optional sales end"
+                      value={eventForm.salesEndAt}
                     />
                   </View>
                 </View>
@@ -976,6 +1527,17 @@ export function OrganizerEventScreen() {
                   <View style={styles.inlineNotice}>
                     <Text style={styles.inlineNoticeTitle}>
                       Ticket type details still need attention.
+                    </Text>
+                  </View>
+                ) : null}
+
+                {selectedTicketTypeId === "new" && eventDetailQuery.data.ticketTypes.length === 0 ? (
+                  <View style={styles.inlineNotice}>
+                    <Text style={styles.inlineNoticeTitle}>
+                      This is the first ticket type for the event.
+                    </Text>
+                    <Text style={styles.copy}>
+                      Start simple. You can add more ticket tiers after this one is saved.
                     </Text>
                   </View>
                 ) : null}
@@ -1171,26 +1733,32 @@ export function OrganizerEventScreen() {
                 ) : null}
                 <View style={styles.row}>
                   <View style={styles.rowItem}>
-                    <Field
+                    <EventDateTimeField
+                      allowClear
                       compact
                       error={ticketTypeValidation.fieldErrors.saleStartsAt}
+                      isOpen={activeTicketTypeDateField === "saleStartsAt"}
                       label="Sale starts"
-                      onChangeText={(value) =>
-                        setTicketTypeForm((current) => ({ ...current, saleStartsAt: value }))
+                      onChangeText={(value) => updateTicketTypeDateField("saleStartsAt", value)}
+                      onToggle={() =>
+                        openTicketTypeDatePicker("saleStartsAt", ticketTypeForm.saleStartsAt)
                       }
-                      placeholder="YYYY-MM-DDTHH:mm"
+                      placeholder="Optional sale start"
                       value={ticketTypeForm.saleStartsAt}
                     />
                   </View>
                   <View style={styles.rowItem}>
-                    <Field
+                    <EventDateTimeField
+                      allowClear
                       compact
                       error={ticketTypeValidation.fieldErrors.saleEndsAt}
+                      isOpen={activeTicketTypeDateField === "saleEndsAt"}
                       label="Sale ends"
-                      onChangeText={(value) =>
-                        setTicketTypeForm((current) => ({ ...current, saleEndsAt: value }))
+                      onChangeText={(value) => updateTicketTypeDateField("saleEndsAt", value)}
+                      onToggle={() =>
+                        openTicketTypeDatePicker("saleEndsAt", ticketTypeForm.saleEndsAt)
                       }
-                      placeholder="YYYY-MM-DDTHH:mm"
+                      placeholder="Optional sale end"
                       value={ticketTypeForm.saleEndsAt}
                     />
                   </View>
@@ -1477,10 +2045,76 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingBottom: 48,
   },
+  checklistBullet: {
+    backgroundColor: palette.accent,
+    borderRadius: 999,
+    color: palette.white,
+    fontSize: 12,
+    fontWeight: "800",
+    minWidth: 24,
+    overflow: "hidden",
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    textAlign: "center",
+  },
+  checklistCopy: {
+    color: palette.ink,
+    flex: 1,
+    fontSize: 15,
+    fontWeight: "600",
+    lineHeight: 21,
+  },
+  checklistItem: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 10,
+  },
+  checklistShell: {
+    gap: 10,
+  },
   copy: {
     color: palette.muted,
     fontSize: 15,
     lineHeight: 22,
+  },
+  dateInputPlaceholder: {
+    color: palette.muted,
+    fontSize: 15,
+  },
+  dateInputFullWidth: {
+    minHeight: 58,
+  },
+  dateInputShell: {
+    alignItems: "center",
+    flexDirection: "row",
+  },
+  dateInputValue: {
+    color: palette.ink,
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  dateInputValueFullWidth: {
+    flexShrink: 1,
+    fontSize: 17,
+    lineHeight: 24,
+  },
+  datePickerActions: {
+    flexDirection: "row",
+    gap: 10,
+    justifyContent: "flex-end",
+    paddingHorizontal: 12,
+    paddingTop: 4,
+  },
+  datePickerCard: {
+    backgroundColor: palette.backgroundMuted,
+    borderColor: palette.divider,
+    borderRadius: 18,
+    borderWidth: 1,
+    overflow: "hidden",
+    paddingBottom: 12,
+  },
+  datePickerCardExpanded: {
+    alignSelf: "stretch",
   },
   errorText: {
     color: palette.danger,
@@ -1546,6 +2180,9 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     lineHeight: 34,
     maxWidth: 320,
+  },
+  eventDateRow: {
+    flexDirection: Platform.OS === "ios" ? "column" : "row",
   },
   stickyActionWrap: {
     minWidth: 180,

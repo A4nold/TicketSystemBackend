@@ -131,16 +131,10 @@ function TrustStrip({ event }: { event: PublicEventDetail }) {
           <p className="text-sm font-medium uppercase tracking-[0.24em] text-accent-warm">
             Wallet delivery
           </p>
-          <p className="text-sm leading-6 text-muted">
-            Paid tickets continue into the attendee wallet for QR access, transfer, and live state tracking.
-          </p>
         </div>
         <div className="space-y-2 rounded-[1.35rem] border border-border bg-black/10 p-5">
           <p className="text-sm font-medium uppercase tracking-[0.24em] text-accent">
             Ownership truth
-          </p>
-          <p className="text-sm leading-6 text-muted">
-            Every ticket action is backed by backend ownership state instead of a loose confirmation-only flow.
           </p>
         </div>
         <div className="space-y-2 rounded-[1.35rem] border border-border bg-black/10 p-5">

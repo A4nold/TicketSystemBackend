@@ -1,10 +1,14 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  blankEventEditorState,
   blankTicketTypeEditorState,
+  buildOrganizerEventCreatePayload,
   buildOrganizerEventPatch,
   buildTicketTypePayload,
+  formatLocalDateTimeInput,
   getStaffStatusCopy,
+  parseLocalDateTimeInput,
   toEventEditorState,
   validateEventEditorState,
   validateStaffInvite,
@@ -78,6 +82,8 @@ describe("organizer-model", () => {
       description: "",
       currency: "NGN",
       endsAt: "",
+      salesEndAt: "",
+      salesStartAt: "",
       slug: "campus-neon",
       startsAt: "2026-05-12T20:00",
       status: "PUBLISHED",
@@ -93,6 +99,29 @@ describe("organizer-model", () => {
     expect(payload.venueAddress).toBeUndefined();
     expect(payload.venueName).toBe("The Yard");
     expect(payload.startsAt).toBe("2026-05-12T19:00:00.000Z");
+  });
+
+  it("builds a create payload from a blank event shell", () => {
+    const blank = blankEventEditorState();
+    const payload = buildOrganizerEventCreatePayload({
+      ...blank,
+      slug: "campus-neon",
+      title: "Campus Neon",
+    });
+
+    expect(payload.title).toBe("Campus Neon");
+    expect(payload.slug).toBe("campus-neon");
+    expect(payload.currency).toBe("EUR");
+    expect(payload.status).toBe("DRAFT");
+    expect(payload.startsAt).toContain("T");
+  });
+
+  it("parses and formats local datetime values safely", () => {
+    const parsed = parseLocalDateTimeInput("2026-05-12T20:05");
+
+    expect(parsed).toBeTruthy();
+    expect(formatLocalDateTimeInput(parsed as Date)).toBe("2026-05-12T20:05");
+    expect(parseLocalDateTimeInput("2026-02-31T20:05")).toBeNull();
   });
 
   it("builds ticket type payloads with numeric conversions", () => {
@@ -122,6 +151,8 @@ describe("organizer-model", () => {
       description: "",
       currency: "EUR",
       endsAt: "not-a-date",
+      salesEndAt: "not-a-date",
+      salesStartAt: "",
       slug: "",
       startsAt: "",
       status: "DRAFT",
@@ -135,6 +166,7 @@ describe("organizer-model", () => {
     expect(result.fieldErrors.title).toBeTruthy();
     expect(result.fieldErrors.startsAt).toBeTruthy();
     expect(result.fieldErrors.endsAt).toBeTruthy();
+    expect(result.fieldErrors.salesEndAt).toBeTruthy();
   });
 
   it("validates ticket type numeric fields and invite email", () => {

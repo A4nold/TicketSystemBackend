@@ -122,4 +122,28 @@ export class TicketOwnershipHistoryService {
       },
     });
   }
+
+  async recordRefund(
+    tx: Prisma.TransactionClient,
+    input: {
+      fromUserId: string;
+      refundedAt: Date;
+      revision: number;
+      ticketId: string;
+      toUserId: string;
+    },
+  ) {
+    await tx.ticketOwnershipHistory.create({
+      data: {
+        ticketId: input.ticketId,
+        fromUserId: input.fromUserId,
+        toUserId: input.toUserId,
+        changeType: OwnershipChangeType.REFUND,
+        revision: input.revision,
+        metadata: {
+          refundedAt: input.refundedAt.toISOString(),
+        },
+      },
+    });
+  }
 }

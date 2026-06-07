@@ -3,6 +3,7 @@ import { Module } from "@nestjs/common";
 import { NotificationsModule } from "../notifications/notifications.module";
 import { CheckoutService } from "./checkout.service";
 import { OrderPaymentService } from "./order-payment.service";
+import { OrderRefundService } from "./order-refund.service";
 import { OrdersController } from "./orders.controller";
 import { OrderQueryService } from "./order-query.service";
 import { OrdersService } from "./orders.service";
@@ -15,6 +16,7 @@ import { TicketOwnershipHistoryService } from "../tickets/ticket-ownership-histo
   providers: [
     CheckoutService,
     OrderPaymentService,
+    OrderRefundService,
     OrderQueryService,
     OrdersService,
     PurchasedTicketIssuanceService,

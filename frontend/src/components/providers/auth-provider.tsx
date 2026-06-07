@@ -38,7 +38,9 @@ function normalizeSession(nextSession: AuthSession | null): AuthSession | null {
   }
 
   const platformRoles = Array.isArray(nextSession.user.platformRoles)
-    ? nextSession.user.platformRoles.filter((role) => role === "EVENT_OWNER")
+    ? nextSession.user.platformRoles.filter(
+        (role) => role === "EVENT_OWNER" || role === "PLATFORM_ADMIN",
+      )
     : [];
 
   return {

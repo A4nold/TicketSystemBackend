@@ -11,6 +11,7 @@ import {
 
 import { AuthenticatedUser } from "../auth/types/authenticated-user.type";
 import { NotificationsService } from "../notifications/notifications.service";
+import { EventPaymentReadinessService } from "./event-payment-readiness.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { isOfferRangePricingEnabled } from "../common/feature-flags";
 import { CreateEventDto } from "./dto/create-event.dto";
@@ -31,6 +32,7 @@ export class EventsService {
     private readonly prisma: PrismaService,
     private readonly eventLifecycleService: EventLifecycleService,
     private readonly notificationsService: NotificationsService,
+    private readonly eventPaymentReadinessService: EventPaymentReadinessService,
   ) {}
 
   async createEvent(payload: CreateEventDto, user: AuthenticatedUser) {
@@ -52,6 +54,7 @@ export class EventsService {
     this.assertTicketTypeCurrency(payload.currency, event.currency);
     this.assertTicketTypeDates(payload, event);
     const normalizedPricing = this.normalizeTicketPricing(payload);
+    await this.assertPublishedPaidTicketTypeAllowed(event, normalizedPricing);
 
     const ticketType = await this.prisma.ticketType.create({
       data: {
@@ -111,6 +114,7 @@ export class EventsService {
       payload,
       existingTicketType,
     );
+    await this.assertPublishedPaidTicketTypeAllowed(event, normalizedPricing);
 
     const ticketType = await this.prisma.ticketType.update({
       where: { id: ticketTypeId },
@@ -569,6 +573,29 @@ export class EventsService {
         "Ticket-type sales cannot end after the event sales window.",
       );
     }
+  }
+
+  private async assertPublishedPaidTicketTypeAllowed(
+    event: {
+      organizerId: string;
+      status: string;
+    },
+    pricing: {
+      pricingMode: TicketPricingModeValue;
+      price: Prisma.Decimal;
+    },
+  ) {
+    if (event.status !== "PUBLISHED") {
+      return;
+    }
+
+    if (!this.eventPaymentReadinessService.requiresPaidEventReadiness(pricing)) {
+      return;
+    }
+
+    await this.eventPaymentReadinessService.assertOrganizerCanPublishPaidEvent(
+      event.organizerId,
+    );
   }
 }
 type TicketPricingModeValue = "FIXED" | "FREE" | "OFFER_RANGE";

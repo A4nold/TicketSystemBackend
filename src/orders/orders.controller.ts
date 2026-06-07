@@ -18,7 +18,9 @@ import { RateLimit } from "../common/security/rate-limit.decorator";
 import { CancelOrderDto } from "./dto/cancel-order.dto";
 import { ConfirmPaymentDto } from "./dto/confirm-payment.dto";
 import { CreateCheckoutDto } from "./dto/create-checkout.dto";
+import { CreateRefundDto } from "./dto/create-refund.dto";
 import { OrderResponseDto } from "./dto/order-response.dto";
+import { RefundResponseDto } from "./dto/refund-response.dto";
 import { OrderQueryService } from "./order-query.service";
 import { OrdersService } from "./orders.service";
 import { CheckoutQuoteResponseDto } from "./dto/quote-response.dto";
@@ -173,5 +175,52 @@ export class OrdersController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.ordersService.cancelOrder(orderId, payload, user);
+  }
+
+  @Get(":orderId/refunds")
+  @ApiOperation({
+    summary: "List refunds for an order",
+    description:
+      "Returns refund records created for an authenticated user's order.",
+  })
+  @ApiParam({
+    name: "orderId",
+    description: "Order identifier",
+  })
+  @ApiOkResponse({
+    description: "Refund records for the order",
+    type: RefundResponseDto,
+    isArray: true,
+  })
+  listRefunds(
+    @Param("orderId") orderId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.ordersService.listRefunds(orderId, user);
+  }
+
+  @Post(":orderId/refunds")
+  @ApiOperation({
+    summary: "Create a refund for an order",
+    description:
+      "Creates a full or partial Stripe refund against the authenticated user's paid order.",
+  })
+  @ApiParam({
+    name: "orderId",
+    description: "Order identifier",
+  })
+  @ApiCreatedResponse({
+    description: "Refund created",
+    type: RefundResponseDto,
+  })
+  @ApiBadRequestResponse({
+    description: "The refund request was invalid or the order was not refundable",
+  })
+  createRefund(
+    @Param("orderId") orderId: string,
+    @Body() payload: CreateRefundDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.ordersService.createRefund(orderId, payload, user);
   }
 }

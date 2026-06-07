@@ -53,6 +53,8 @@ describe("AuthService", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    delete process.env.PLATFORM_ADMIN_EMAILS;
+    delete process.env.PLATFORM_ADMIN_USER_IDS;
     service = new AuthService(
       prisma as never,
       { sign } as never,
@@ -184,6 +186,38 @@ describe("AuthService", () => {
     });
   });
 
+  describe("upgradeToOrganizer", () => {
+    it("upgrades attendee accounts and returns organizer access", async () => {
+      prisma.user.findUnique.mockResolvedValue(
+        createAuthUser({ accountType: "ATTENDEE" }),
+      );
+      prisma.user.update.mockResolvedValue(
+        createAuthUser({ accountType: "ORGANIZER" }),
+      );
+
+      const result = await service.upgradeToOrganizer("user_123");
+
+      expect(prisma.user.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: "user_123" },
+          data: expect.objectContaining({
+            accountType: "ORGANIZER",
+            organizerProfile: expect.objectContaining({
+              upsert: expect.objectContaining({
+                create: expect.objectContaining({
+                  onboardingStatus: "PROFILE_INCOMPLETE",
+                }),
+              }),
+            }),
+          }),
+        }),
+      );
+      expect(result.user.accountType).toBe("ORGANIZER");
+      expect(result.user.platformRoles).toEqual(["EVENT_OWNER"]);
+      expect(result.user.appRoles).toEqual(["attendee", "organizer"]);
+    });
+  });
+
   describe("validateJwtUser", () => {
     it("returns identity data with platform roles and memberships", async () => {
       prisma.user.findUnique.mockResolvedValue(
@@ -213,6 +247,35 @@ describe("AuthService", () => {
           acceptedAt: "2026-04-10T10:00:00.000Z",
         },
       ]);
+    });
+
+    it("adds PLATFORM_ADMIN when the email is allowlisted", async () => {
+      process.env.PLATFORM_ADMIN_EMAILS = "user@example.com";
+      prisma.user.findUnique.mockResolvedValue(
+        createAuthUser({
+          accountType: "ORGANIZER",
+          email: "user@example.com",
+        }),
+      );
+
+      const result = await service.validateJwtUser("user_123");
+
+      expect(result.platformRoles).toEqual(["EVENT_OWNER", "PLATFORM_ADMIN"]);
+      expect(result.appRoles).toEqual(["attendee", "organizer"]);
+    });
+
+    it("adds PLATFORM_ADMIN when the user id is allowlisted", async () => {
+      process.env.PLATFORM_ADMIN_USER_IDS = "user_123";
+      prisma.user.findUnique.mockResolvedValue(
+        createAuthUser({
+          accountType: "ATTENDEE",
+        }),
+      );
+
+      const result = await service.validateJwtUser("user_123");
+
+      expect(result.platformRoles).toEqual(["PLATFORM_ADMIN"]);
+      expect(result.appRoles).toEqual(["attendee"]);
     });
   });
 });

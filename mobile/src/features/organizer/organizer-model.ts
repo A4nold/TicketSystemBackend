@@ -10,6 +10,8 @@ export type EventEditorState = {
   currency: "EUR" | "NGN";
   description: string;
   endsAt: string;
+  salesEndAt: string;
+  salesStartAt: string;
   slug: string;
   startsAt: string;
   status: "DRAFT" | "PUBLISHED" | "CANCELLED" | "COMPLETED";
@@ -36,10 +38,81 @@ export type TicketTypeEditorState = {
   sortOrder: string;
 };
 
+export function blankEventEditorState(): EventEditorState {
+  const startsAt = new Date();
+  startsAt.setMinutes(Math.ceil(startsAt.getMinutes() / 5) * 5, 0, 0);
+
+  const endsAt = new Date(startsAt.getTime() + 3 * 60 * 60 * 1000);
+
+  return {
+    coverImageUrl: "",
+    currency: "EUR",
+    description: "",
+    endsAt: formatLocalDateTimeInput(endsAt),
+    salesEndAt: "",
+    salesStartAt: "",
+    slug: "",
+    startsAt: formatLocalDateTimeInput(startsAt),
+    status: "DRAFT",
+    timezone: "Europe/Dublin",
+    title: "",
+    venueAddress: "",
+    venueName: "",
+  };
+}
+
 export type FormValidationResult = {
   fieldErrors: Partial<Record<string, string>>;
   isValid: boolean;
 };
+
+const LOCAL_DATE_TIME_PATTERN =
+  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/;
+
+function padDateTimeSegment(value: number) {
+  return String(value).padStart(2, "0");
+}
+
+export function formatLocalDateTimeInput(date: Date) {
+  return [
+    date.getFullYear(),
+    padDateTimeSegment(date.getMonth() + 1),
+    padDateTimeSegment(date.getDate()),
+  ].join("-") +
+    `T${padDateTimeSegment(date.getHours())}:${padDateTimeSegment(date.getMinutes())}`;
+}
+
+export function parseLocalDateTimeInput(value: string) {
+  const normalized = value.trim();
+  const match = LOCAL_DATE_TIME_PATTERN.exec(normalized);
+
+  if (!match) {
+    return null;
+  }
+
+  const [, year, month, day, hour, minute] = match;
+  const parsed = new Date(
+    Number(year),
+    Number(month) - 1,
+    Number(day),
+    Number(hour),
+    Number(minute),
+    0,
+    0,
+  );
+
+  if (
+    parsed.getFullYear() !== Number(year) ||
+    parsed.getMonth() !== Number(month) - 1 ||
+    parsed.getDate() !== Number(day) ||
+    parsed.getHours() !== Number(hour) ||
+    parsed.getMinutes() !== Number(minute)
+  ) {
+    return null;
+  }
+
+  return parsed;
+}
 
 export function toLocalDateTime(value: string | null | undefined) {
   if (!value) {
@@ -47,13 +120,17 @@ export function toLocalDateTime(value: string | null | undefined) {
   }
 
   const date = new Date(value);
-  const offset = date.getTimezoneOffset();
-  const adjusted = new Date(date.getTime() - offset * 60_000);
-  return adjusted.toISOString().slice(0, 16);
+
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  return formatLocalDateTimeInput(date);
 }
 
 export function toIsoDateTime(value: string) {
-  return value ? new Date(value).toISOString() : undefined;
+  const parsed = parseLocalDateTimeInput(value);
+  return parsed ? parsed.toISOString() : undefined;
 }
 
 export function toEventEditorState(event: OrganizerEventResponse): EventEditorState {
@@ -62,6 +139,8 @@ export function toEventEditorState(event: OrganizerEventResponse): EventEditorSt
     currency: event.currency as EventEditorState["currency"],
     description: event.description ?? "",
     endsAt: toLocalDateTime(event.endsAt),
+    salesEndAt: toLocalDateTime(event.salesWindow.endsAt),
+    salesStartAt: toLocalDateTime(event.salesWindow.startsAt),
     slug: event.slug,
     startsAt: toLocalDateTime(event.startsAt),
     status: event.status as EventEditorState["status"],
@@ -115,17 +194,42 @@ export function toTicketTypeEditorState(
 export function buildOrganizerEventPatch(
   form: EventEditorState,
 ): Partial<CreateOrganizerEventPayload> {
+  const startsAt = parseLocalDateTimeInput(form.startsAt);
+
   return {
     description: form.description || undefined,
     currency: form.currency,
     endsAt: toIsoDateTime(form.endsAt),
+    salesEndAt: toIsoDateTime(form.salesEndAt),
+    salesStartAt: toIsoDateTime(form.salesStartAt),
     slug: form.slug || undefined,
-    startsAt: new Date(form.startsAt).toISOString(),
+    startsAt: (startsAt as Date).toISOString(),
     status: form.status,
     timezone: form.timezone,
     title: form.title.trim(),
     venueAddress: form.venueAddress || undefined,
     venueName: form.venueName || undefined,
+  };
+}
+
+export function buildOrganizerEventCreatePayload(
+  form: EventEditorState,
+): CreateOrganizerEventPayload {
+  const payload = buildOrganizerEventPatch(form);
+
+  return {
+    startsAt: payload.startsAt as string,
+    timezone: payload.timezone as string,
+    title: payload.title as string,
+    currency: payload.currency,
+    description: payload.description,
+    endsAt: payload.endsAt,
+    salesEndAt: payload.salesEndAt,
+    salesStartAt: payload.salesStartAt,
+    slug: payload.slug,
+    status: payload.status,
+    venueAddress: payload.venueAddress,
+    venueName: payload.venueName,
   };
 }
 
@@ -155,11 +259,7 @@ export function getStaffStatusCopy(acceptedAt: string | null) {
 }
 
 function isValidDateTimeInput(value: string) {
-  if (!value) {
-    return false;
-  }
-
-  return !Number.isNaN(new Date(value).getTime());
+  return Boolean(parseLocalDateTimeInput(value));
 }
 
 export function validateEventEditorState(form: EventEditorState): FormValidationResult {
@@ -177,6 +277,14 @@ export function validateEventEditorState(form: EventEditorState): FormValidation
 
   if (form.endsAt.trim() && !isValidDateTimeInput(form.endsAt)) {
     fieldErrors.endsAt = "Use a valid end time or leave it empty.";
+  }
+
+  if (form.salesStartAt.trim() && !isValidDateTimeInput(form.salesStartAt)) {
+    fieldErrors.salesStartAt = "Use a valid sales start time or leave it empty.";
+  }
+
+  if (form.salesEndAt.trim() && !isValidDateTimeInput(form.salesEndAt)) {
+    fieldErrors.salesEndAt = "Use a valid sales end time or leave it empty.";
   }
 
   if (!form.timezone.trim()) {

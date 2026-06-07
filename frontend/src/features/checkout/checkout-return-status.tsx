@@ -46,7 +46,7 @@ function getHeading(mode: "cancel" | "success") {
 
 function getIntro(mode: "cancel" | "success") {
   return mode === "success"
-    ? "We are confirming the latest backend order state for this payment attempt."
+    ? "We are confirming the latest order state for this payment attempt."
     : "We are checking whether this checkout was cancelled, interrupted, or still needs confirmation.";
 }
 
@@ -95,7 +95,7 @@ export function CheckoutReturnStatus({
           <Panel>
             <div className="space-y-3">
               <p className="text-sm font-medium uppercase tracking-[0.24em] text-accent">
-                Refreshing backend truth
+                Refreshing order status
               </p>
               <p className="text-sm leading-6 text-muted">
                 We are checking your order status so we can show the latest payment outcome.
@@ -142,7 +142,7 @@ export function CheckoutReturnStatus({
                   <p className="mt-1 text-sm text-muted">
                     {hasIssuedTickets
                       ? "Use the attendee surface to reopen this recent purchase and keep moving toward entry."
-                      : "Payment is complete, but backend ticket issuance has not appeared yet. Refresh before assuming anything is missing."}
+                      : "Payment is complete, but ticket issuance has not appeared yet. Refresh before assuming anything is missing."}
                   </p>
                 </div>
               </div>

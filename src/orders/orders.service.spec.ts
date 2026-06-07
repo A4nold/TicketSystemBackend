@@ -9,6 +9,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { CheckoutService } from "./checkout.service";
 import { OrderPaymentService } from "./order-payment.service";
+import { OrderRefundService } from "./order-refund.service";
 import { OrdersService } from "./orders.service";
 
 function createAuthenticatedUser() {
@@ -97,6 +98,10 @@ describe("OrdersService", () => {
   const orderPaymentService = {
     confirmPayment: vi.fn(),
   };
+  const orderRefundService = {
+    createRefund: vi.fn(),
+    listRefunds: vi.fn(),
+  };
 
   let service: OrdersService;
 
@@ -106,6 +111,7 @@ describe("OrdersService", () => {
       prisma as never,
       checkoutService as unknown as CheckoutService,
       orderPaymentService as unknown as OrderPaymentService,
+      orderRefundService as unknown as OrderRefundService,
     );
   });
 
@@ -192,6 +198,29 @@ describe("OrdersService", () => {
           createAuthenticatedUser(),
         ),
       ).rejects.toBeInstanceOf(BadRequestException);
+    });
+  });
+
+  describe("createRefund", () => {
+    it("delegates refund creation to the refund service", async () => {
+      orderRefundService.createRefund.mockResolvedValue({
+        amount: "16.50",
+        id: "refund_123",
+        status: "SUCCEEDED",
+      });
+
+      const result = await service.createRefund(
+        "order_123",
+        { reason: "requested_by_customer" },
+        createAuthenticatedUser(),
+      );
+
+      expect(orderRefundService.createRefund).toHaveBeenCalledWith(
+        "order_123",
+        { reason: "requested_by_customer" },
+        expect.objectContaining({ id: "user_123" }),
+      );
+      expect(result.id).toBe("refund_123");
     });
   });
 });

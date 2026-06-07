@@ -4,13 +4,21 @@ import {
   Logger,
   NotImplementedException,
 } from "@nestjs/common";
-import { OrderStatus, PaymentProvider, Prisma } from "@prisma/client";
+import {
+  OrderStatus,
+  PaymentProvider,
+  PaymentTransactionStatus,
+  Prisma,
+  RefundStatus,
+  SettlementState,
+} from "@prisma/client";
 import { createHmac, timingSafeEqual } from "crypto";
 import Stripe from "stripe";
 
 import { NotificationsService } from "../notifications/notifications.service";
 import { type FeePolicy } from "../orders/fee-policy";
 import { PrismaService } from "../prisma/prisma.service";
+import { OrganizerStripeAccountService } from "./organizer-stripe-account.service";
 
 type CheckoutOrder = {
   cancelReturnUrl?: string;
@@ -38,11 +46,42 @@ type CheckoutOrder = {
 };
 
 type StripeCheckoutState = {
-  checkoutSessionId: string;
+  checkoutSessionId: string | null;
   checkoutUrl: string | null;
   paymentStatus: string | null;
   checkoutStatus: string | null;
   isAwaitingPaymentConfirmation: boolean;
+  paymentIntentId?: string | null;
+  clientSecret?: string | null;
+  connectedAccountId?: string | null;
+};
+
+type StripeConnectCheckoutOrder = {
+  connectedAccountId: string;
+  feeAmount: Prisma.Decimal;
+  feePolicy: FeePolicy;
+  id: string;
+  currency: string;
+  paymentTransactionId: string;
+  totalAmount: Prisma.Decimal;
+  userEmail: string;
+  userId: string;
+  event: {
+    title: string;
+    slug: string;
+  };
+};
+
+type StripeRefundRequest = {
+  amount: Prisma.Decimal;
+  currency: string;
+  paymentTransactionId: string;
+  providerChargeId: string | null;
+  providerPaymentIntentId: string | null;
+  reason: string | null;
+  refundApplicationFee: boolean;
+  refundId: string;
+  reverseTransfer: boolean;
 };
 
 type PaystackInitializeResponse = {
@@ -73,6 +112,7 @@ export class PaymentsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notificationsService: NotificationsService,
+    private readonly organizerStripeAccountService: OrganizerStripeAccountService,
   ) {}
 
   async createCheckoutSession(order: CheckoutOrder) {
@@ -227,6 +267,118 @@ export class PaymentsService {
       paymentStatus: "pending",
       checkoutStatus: "initialized",
       isAwaitingPaymentConfirmation: true,
+    };
+  }
+
+  async createStripeConnectPaymentIntent(order: StripeConnectCheckoutOrder) {
+    this.logger.log(
+      `payments.stripe.connect_payment_intent.started orderId=${order.id} transactionId=${order.paymentTransactionId} connectedAccountId=${order.connectedAccountId} total=${order.totalAmount.toFixed(2)} currency=${order.currency}`,
+    );
+
+    const stripe = this.getStripeClient();
+
+    let paymentIntent: any;
+
+    try {
+      paymentIntent = await stripe.paymentIntents.create(
+        {
+          amount: this.toPaymentSubunit(order.totalAmount),
+          application_fee_amount: this.toPaymentSubunit(order.feeAmount),
+          automatic_payment_methods: {
+            enabled: true,
+          },
+          currency: order.currency.toLowerCase(),
+          description: `${order.event.title} ticket purchase`,
+          metadata: {
+            connectedAccountId: order.connectedAccountId,
+            eventSlug: order.event.slug,
+            orderId: order.id,
+            paymentTransactionId: order.paymentTransactionId,
+            userId: order.userId,
+          },
+          receipt_email: order.userEmail,
+          transfer_data: {
+            destination: order.connectedAccountId,
+          },
+        },
+        {
+          idempotencyKey: `order:${order.id}:payment-intent:create:v1`,
+        },
+      );
+    } catch (error) {
+      this.logger.error(
+        `payments.stripe.connect_payment_intent.failed orderId=${order.id} transactionId=${order.paymentTransactionId} reason="${error instanceof Error ? error.message : "Unknown error"}"`,
+      );
+      throw error;
+    }
+
+    this.logger.log(
+      `payments.stripe.connect_payment_intent.completed orderId=${order.id} transactionId=${order.paymentTransactionId} paymentIntentId=${paymentIntent.id} status=${paymentIntent.status ?? "unknown"}`,
+    );
+
+    return {
+      checkoutSessionId: null,
+      checkoutUrl: null,
+      paymentStatus: this.mapStripePaymentIntentStatus(paymentIntent.status),
+      checkoutStatus: paymentIntent.status ?? null,
+      isAwaitingPaymentConfirmation: !["succeeded", "canceled"].includes(
+        paymentIntent.status ?? "",
+      ),
+      paymentIntentId: paymentIntent.id,
+      clientSecret: paymentIntent.client_secret ?? null,
+      connectedAccountId: order.connectedAccountId,
+    };
+  }
+
+  async createStripeRefund(input: StripeRefundRequest) {
+    this.logger.log(
+      `payments.stripe.refund.started refundId=${input.refundId} paymentTransactionId=${input.paymentTransactionId} amount=${input.amount.toFixed(2)} currency=${input.currency}`,
+    );
+
+    if (!input.providerChargeId && !input.providerPaymentIntentId) {
+      throw new BadRequestException(
+        `Refund "${input.refundId}" does not have a Stripe charge or payment intent reference.`,
+      );
+    }
+
+    const stripe = this.getStripeClient();
+
+    let refund: any;
+
+    try {
+      refund = await stripe.refunds.create(
+        {
+          ...(input.providerChargeId
+            ? { charge: input.providerChargeId }
+            : { payment_intent: input.providerPaymentIntentId }),
+          amount: this.toPaymentSubunit(input.amount),
+          metadata: {
+            paymentTransactionId: input.paymentTransactionId,
+            refundId: input.refundId,
+          },
+          reason: this.toStripeRefundReason(input.reason),
+          refund_application_fee: input.refundApplicationFee,
+          reverse_transfer: input.reverseTransfer,
+        },
+        {
+          idempotencyKey: `refund:${input.refundId}:stripe:create:v1`,
+        },
+      );
+    } catch (error) {
+      this.logger.error(
+        `payments.stripe.refund.failed refundId=${input.refundId} paymentTransactionId=${input.paymentTransactionId} reason="${error instanceof Error ? error.message : "Unknown error"}"`,
+      );
+      throw error;
+    }
+
+    this.logger.log(
+      `payments.stripe.refund.completed refundId=${input.refundId} providerRefundId=${refund.id} status=${refund.status ?? "unknown"}`,
+    );
+
+    return {
+      providerRefundId: refund.id ?? null,
+      status: this.mapStripeRefundStatus(refund.status),
+      failureReason: refund.failure_reason ?? null,
     };
   }
 
@@ -403,93 +555,11 @@ export class PaymentsService {
       throw new BadRequestException("Invalid Stripe webhook signature.");
     }
 
-    this.logger.log(
-      `payments.stripe.webhook.received eventId=${event.id} type=${event.type}`,
-    );
-
-    const existing = await this.prisma.webhookEvent.findUnique({
-      where: {
-        providerEventId: event.id,
-      },
+    const result = await this.processStripeEvent(event, {
+      allowDuplicateSkip: true,
+      isReplay: false,
     });
-
-    if (existing?.processedAt) {
-      this.logger.log(
-        `payments.stripe.webhook.duplicate eventId=${event.id} type=${event.type}`,
-      );
-      return { received: true, duplicate: true };
-    }
-
-    const relatedEventId = await this.resolveRelatedEventId(event);
-
-    await this.prisma.webhookEvent.upsert({
-      where: {
-        providerEventId: event.id,
-      },
-      create: {
-        eventId: relatedEventId,
-        provider: PaymentProvider.STRIPE,
-        providerEventId: event.id,
-        eventType: event.type,
-        payload: event as unknown as Prisma.InputJsonValue,
-        processedAt: null,
-      },
-      update: {
-        eventId: relatedEventId,
-        payload: event as unknown as Prisma.InputJsonValue,
-        processingError: null,
-      },
-    });
-
-    try {
-      switch (event.type) {
-        case "checkout.session.completed": {
-          const session = event.data.object as any;
-          this.logger.log(
-            `payments.stripe.webhook.checkout_completed eventId=${event.id} checkoutSessionId=${session.id} orderId=${session.client_reference_id ?? session.metadata?.orderId ?? "unknown"}`,
-          );
-          await this.markOrderPaidFromStripeSession(session);
-          break;
-        }
-        case "checkout.session.expired": {
-          const session = event.data.object as any;
-          this.logger.log(
-            `payments.stripe.webhook.checkout_expired eventId=${event.id} checkoutSessionId=${session.id} orderId=${session.client_reference_id ?? session.metadata?.orderId ?? "unknown"}`,
-          );
-          await this.markOrderCancelledFromStripeSession(session);
-          break;
-        }
-        default:
-          break;
-      }
-
-      await this.prisma.webhookEvent.update({
-        where: {
-          providerEventId: event.id,
-        },
-        data: {
-          processedAt: new Date(),
-          processingError: null,
-        },
-      });
-    } catch (error) {
-      this.logger.error(
-        `payments.stripe.webhook.failed eventId=${event.id} type=${event.type} reason="${error instanceof Error ? error.message : "Unknown error"}"`,
-      );
-      await this.prisma.webhookEvent.update({
-        where: {
-          providerEventId: event.id,
-        },
-        data: {
-          processingError:
-            this.toWebhookProcessingError(event, error),
-        },
-      });
-
-      throw error;
-    }
-
-    return { received: true };
+    return result.duplicate ? { received: true, duplicate: true } : { received: true };
   }
 
   async handlePaystackWebhook(rawBody: Buffer, signature: string) {
@@ -514,88 +584,131 @@ export class PaymentsService {
       throw new BadRequestException("Invalid Paystack webhook payload.");
     }
 
-    const reference = event?.data?.reference;
-    const eventType = event?.event ?? "unknown";
+    const result = await this.processPaystackEvent(event, {
+      allowDuplicateSkip: true,
+      isReplay: false,
+    });
+    return result.duplicate ? { received: true, duplicate: true } : { received: true };
+  }
 
-    if (!reference) {
-      throw new BadRequestException("Paystack webhook did not include a transaction reference.");
+  async replayStoredWebhook(providerEventId: string) {
+    const webhookEvent = await this.prisma.webhookEvent.findUnique({
+      where: { providerEventId },
+    });
+
+    if (!webhookEvent) {
+      throw new BadRequestException(`Webhook event "${providerEventId}" was not found.`);
     }
 
-    const providerEventId = `paystack:${eventType}:${reference}`;
+    if (webhookEvent.provider === PaymentProvider.STRIPE) {
+      return this.processStripeEvent(webhookEvent.payload, {
+        allowDuplicateSkip: false,
+        isReplay: true,
+      });
+    }
 
-    this.logger.log(
-      `payments.paystack.webhook.received eventId=${providerEventId} type=${eventType}`,
-    );
+    return this.processPaystackEvent(webhookEvent.payload, {
+      allowDuplicateSkip: false,
+      isReplay: true,
+    });
+  }
 
-    const existing = await this.prisma.webhookEvent.findUnique({
-      where: {
-        providerEventId,
+  async syncStripeAccount(accountId: string) {
+    const stripe = this.getStripeClient();
+    const account = await stripe.accounts.retrieve(accountId);
+    await this.organizerStripeAccountService.syncFromStripeWebhook(account);
+    return { resourceId: accountId, resourceType: "account", synced: true };
+  }
+
+  async syncStripePaymentIntent(paymentIntentId: string) {
+    const stripe = this.getStripeClient();
+    const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+
+    if (paymentIntent.status === "succeeded") {
+      await this.markOrderPaidFromStripePaymentIntent(paymentIntent);
+    } else if (
+      paymentIntent.status === "canceled" ||
+      paymentIntent.status === "requires_payment_method"
+    ) {
+      await this.markOrderFailedFromStripePaymentIntent(paymentIntent);
+    }
+
+    return { resourceId: paymentIntentId, resourceType: "payment_intent", synced: true };
+  }
+
+  async syncStripeCharge(chargeId: string) {
+    const stripe = this.getStripeClient();
+    const charge = await stripe.charges.retrieve(chargeId, {
+      expand: ["refunds"],
+    });
+
+    await this.syncRefundsFromStripeCharge(charge);
+    return { resourceId: chargeId, resourceType: "charge", synced: true };
+  }
+
+  async syncStripeRefund(refundId: string) {
+    const stripe = this.getStripeClient();
+    const refund = await stripe.refunds.retrieve(refundId);
+
+    if (typeof refund.charge === "string") {
+      await this.syncStripeCharge(refund.charge);
+    }
+
+    return { resourceId: refundId, resourceType: "refund", synced: true };
+  }
+
+  async syncStripeDispute(disputeId: string) {
+    const stripe = this.getStripeClient();
+    const dispute = await stripe.disputes.retrieve(disputeId);
+    await this.recordStripeDispute(dispute);
+    return { resourceId: disputeId, resourceType: "dispute", synced: true };
+  }
+
+  async repairOrderPayment(orderId: string) {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      include: {
+        event: true,
+        items: {
+          include: {
+            ticketType: true,
+          },
+          orderBy: {
+            createdAt: "asc",
+          },
+        },
+        paymentTransactions: {
+          orderBy: {
+            createdAt: "desc",
+          },
+          take: 1,
+        },
+        tickets: {
+          orderBy: {
+            createdAt: "asc",
+          },
+        },
       },
     });
 
-    if (existing?.processedAt) {
-      this.logger.log(
-        `payments.paystack.webhook.duplicate eventId=${providerEventId} type=${eventType}`,
-      );
-      return { received: true, duplicate: true };
+    if (!order) {
+      throw new BadRequestException(`Order "${orderId}" was not found.`);
     }
 
-    const relatedEventId = await this.resolveRelatedEventIdFromOrderId(
-      event?.data?.metadata?.orderId ?? null,
-    );
-
-    await this.prisma.webhookEvent.upsert({
-      where: {
-        providerEventId,
-      },
-      create: {
-        eventId: relatedEventId,
-        provider: PaymentProvider.PAYSTACK,
-        providerEventId,
-        eventType,
-        payload: event as unknown as Prisma.InputJsonValue,
-        processedAt: null,
-      },
-      update: {
-        eventId: relatedEventId,
-        payload: event as unknown as Prisma.InputJsonValue,
-        processingError: null,
-      },
-    });
-
-    try {
-      if (eventType === "charge.success") {
-        await this.verifyAndApplyPaystackReference(reference);
-      }
-
-      await this.prisma.webhookEvent.update({
-        where: {
-          providerEventId,
-        },
-        data: {
-          processedAt: new Date(),
-          processingError: null,
-        },
-      });
-    } catch (error) {
-      this.logger.error(
-        `payments.paystack.webhook.failed eventId=${providerEventId} type=${eventType} reason="${error instanceof Error ? error.message : "Unknown error"}"`,
-      );
-      await this.prisma.webhookEvent.update({
-        where: {
-          providerEventId,
-        },
-        data: {
-          processingError: `[${eventType}][reference:${reference}] ${
-            error instanceof Error ? error.message : "Unknown webhook processing error."
-          }`,
-        },
-      });
-
-      throw error;
+    if (order.status === OrderStatus.PENDING) {
+      await this.reconcilePendingOrderWithProvider(order);
+      return { message: "Reconciled pending order with payment provider.", orderId, repaired: true };
     }
 
-    return { received: true };
+    if (order.status === OrderStatus.PAID && order.tickets.length === 0) {
+      await this.prisma.$transaction(async (tx) => {
+        await this.issueTicketsForPaidOrder(tx, order, order.paidAt ?? new Date());
+      });
+
+      return { message: "Issued missing tickets for paid order.", orderId, repaired: true };
+    }
+
+    return { message: "No repair action was required.", orderId, repaired: false };
   }
 
   async getStripeCheckoutState(checkoutSessionId: string): Promise<StripeCheckoutState> {
@@ -609,6 +722,29 @@ export class PaymentsService {
       checkoutStatus: session.status ?? null,
       isAwaitingPaymentConfirmation:
         session.payment_status !== "paid" && session.status !== "expired",
+    };
+  }
+
+  async getStripeConnectPaymentIntentState(
+    paymentIntentId: string,
+  ): Promise<StripeCheckoutState> {
+    const stripe = this.getStripeClient();
+    const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+
+    return {
+      checkoutSessionId: null,
+      checkoutUrl: null,
+      paymentStatus: this.mapStripePaymentIntentStatus(paymentIntent.status),
+      checkoutStatus: paymentIntent.status ?? null,
+      isAwaitingPaymentConfirmation: !["succeeded", "canceled"].includes(
+        paymentIntent.status ?? "",
+      ),
+      paymentIntentId: paymentIntent.id,
+      clientSecret: paymentIntent.client_secret ?? null,
+      connectedAccountId:
+        paymentIntent.transfer_data?.destination ??
+        paymentIntent.metadata?.connectedAccountId ??
+        null,
     };
   }
 
@@ -632,34 +768,68 @@ export class PaymentsService {
     status: OrderStatus;
     paymentProvider: PaymentProvider;
     checkoutSessionId: string | null;
+    paymentTransactions?: Array<{
+      providerPaymentIntentId: string | null;
+      connectedAccountId: string | null;
+    }>;
   }): Promise<StripeCheckoutState | null> {
-    if (
-      order.paymentProvider !== PaymentProvider.STRIPE ||
-      !order.checkoutSessionId ||
-      !process.env.STRIPE_SECRET_KEY
-    ) {
+    if (order.paymentProvider !== PaymentProvider.STRIPE || !process.env.STRIPE_SECRET_KEY) {
       return null;
     }
 
-    const checkoutState = await this.getStripeCheckoutState(order.checkoutSessionId);
+    const latestPaymentTransaction = order.paymentTransactions?.[0] ?? null;
+
+    if (order.checkoutSessionId) {
+      const checkoutState = await this.getStripeCheckoutState(order.checkoutSessionId);
+
+      this.logger.log(
+        `payments.stripe.reconcile.checked orderId=${order.id} checkoutSessionId=${order.checkoutSessionId} orderStatus=${order.status} paymentStatus=${checkoutState.paymentStatus ?? "unknown"} checkoutStatus=${checkoutState.checkoutStatus ?? "unknown"}`,
+      );
+
+      if (order.status === OrderStatus.PENDING) {
+        if (checkoutState.paymentStatus === "paid") {
+          const stripe = this.getStripeClient();
+          const session = await stripe.checkout.sessions.retrieve(order.checkoutSessionId);
+          await this.markOrderPaidFromStripeSession(session);
+        } else if (checkoutState.checkoutStatus === "expired") {
+          const stripe = this.getStripeClient();
+          const session = await stripe.checkout.sessions.retrieve(order.checkoutSessionId);
+          await this.markOrderCancelledFromStripeSession(session);
+        }
+      }
+
+      return checkoutState;
+    }
+
+    if (!latestPaymentTransaction?.providerPaymentIntentId) {
+      return null;
+    }
+
+    const paymentIntentState = await this.getStripeConnectPaymentIntentState(
+      latestPaymentTransaction.providerPaymentIntentId,
+    );
 
     this.logger.log(
-      `payments.stripe.reconcile.checked orderId=${order.id} checkoutSessionId=${order.checkoutSessionId} orderStatus=${order.status} paymentStatus=${checkoutState.paymentStatus ?? "unknown"} checkoutStatus=${checkoutState.checkoutStatus ?? "unknown"}`,
+      `payments.stripe.reconcile.connect_checked orderId=${order.id} paymentIntentId=${latestPaymentTransaction.providerPaymentIntentId} orderStatus=${order.status} paymentStatus=${paymentIntentState.paymentStatus ?? "unknown"} checkoutStatus=${paymentIntentState.checkoutStatus ?? "unknown"}`,
     );
 
     if (order.status === OrderStatus.PENDING) {
-      if (checkoutState.paymentStatus === "paid") {
+      if (paymentIntentState.checkoutStatus === "succeeded") {
         const stripe = this.getStripeClient();
-        const session = await stripe.checkout.sessions.retrieve(order.checkoutSessionId);
-        await this.markOrderPaidFromStripeSession(session);
-      } else if (checkoutState.checkoutStatus === "expired") {
+        const paymentIntent = await stripe.paymentIntents.retrieve(
+          latestPaymentTransaction.providerPaymentIntentId,
+        );
+        await this.markOrderPaidFromStripePaymentIntent(paymentIntent);
+      } else if (paymentIntentState.checkoutStatus === "canceled") {
         const stripe = this.getStripeClient();
-        const session = await stripe.checkout.sessions.retrieve(order.checkoutSessionId);
-        await this.markOrderCancelledFromStripeSession(session);
+        const paymentIntent = await stripe.paymentIntents.retrieve(
+          latestPaymentTransaction.providerPaymentIntentId,
+        );
+        await this.markOrderFailedFromStripePaymentIntent(paymentIntent);
       }
     }
 
-    return checkoutState;
+    return paymentIntentState;
   }
 
   async reconcilePendingOrderWithProvider(order: {
@@ -667,6 +837,10 @@ export class PaymentsService {
     status: OrderStatus;
     paymentProvider: PaymentProvider;
     checkoutSessionId: string | null;
+    paymentTransactions?: Array<{
+      providerPaymentIntentId: string | null;
+      connectedAccountId: string | null;
+    }>;
   }): Promise<StripeCheckoutState | null> {
     if (order.paymentProvider === PaymentProvider.STRIPE) {
       return this.reconcilePendingOrderWithStripe(order);
@@ -820,6 +994,157 @@ export class PaymentsService {
     );
   }
 
+  private async markOrderPaidFromStripePaymentIntent(paymentIntent: any) {
+    const orderId = paymentIntent.metadata?.orderId ?? null;
+
+    if (!orderId) {
+      this.logger.warn(
+        `payments.stripe.connect_mark_paid.missing_order_reference paymentIntentId=${paymentIntent.id}`,
+      );
+      throw new BadRequestException(
+        "Stripe payment intent did not include an order reference.",
+      );
+    }
+
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      include: {
+        tickets: {
+          select: {
+            id: true,
+          },
+          take: 1,
+        },
+      },
+    });
+
+    if (!order) {
+      this.logger.warn(
+        `payments.stripe.connect_mark_paid.order_not_found orderId=${orderId} paymentIntentId=${paymentIntent.id}`,
+      );
+      throw new BadRequestException(`Order "${orderId}" was not found.`);
+    }
+
+    if (order.status === OrderStatus.PAID && order.tickets.length > 0) {
+      this.logger.log(
+        `payments.stripe.connect_mark_paid.already_paid orderId=${order.id} paymentIntentId=${paymentIntent.id}`,
+      );
+      return;
+    }
+
+    const paidAt = order.paidAt ?? new Date();
+    const providerChargeId = this.extractStripeChargeId(paymentIntent);
+
+    const paidOrder = await this.prisma.$transaction(async (tx) => {
+      await tx.paymentTransaction.updateMany({
+        where: {
+          orderId,
+          provider: PaymentProvider.STRIPE,
+          providerPaymentIntentId: paymentIntent.id,
+        },
+        data: {
+          status: PaymentTransactionStatus.SUCCEEDED,
+          providerReference: paymentIntent.id,
+          providerChargeId,
+          connectedAccountId:
+            paymentIntent.transfer_data?.destination ??
+            paymentIntent.metadata?.connectedAccountId ??
+            null,
+          capturedAt: paidAt,
+          failureReason: null,
+          failedAt: null,
+        },
+      });
+
+      const paymentTransaction = await tx.paymentTransaction.findFirst({
+        where: {
+          orderId,
+          provider: PaymentProvider.STRIPE,
+          providerPaymentIntentId: paymentIntent.id,
+        },
+      });
+
+      if (paymentTransaction) {
+        await this.ensureOrganizerEarningForTransaction(tx, paymentTransaction.id);
+      }
+
+      const updatedOrder =
+        order.status === OrderStatus.PENDING
+          ? await tx.order.update({
+              where: { id: orderId },
+              data: {
+                status: OrderStatus.PAID,
+                paymentReference: paymentIntent.id,
+                paidAt,
+              },
+              include: {
+                event: true,
+                items: {
+                  include: {
+                    ticketType: true,
+                  },
+                  orderBy: {
+                    createdAt: "asc",
+                  },
+                },
+                tickets: true,
+              },
+            })
+          : await tx.order.findUniqueOrThrow({
+              where: { id: orderId },
+              include: {
+                event: true,
+                items: {
+                  include: {
+                    ticketType: true,
+                  },
+                  orderBy: {
+                    createdAt: "asc",
+                  },
+                },
+                tickets: true,
+              },
+            });
+
+      if (updatedOrder.tickets.length > 0) {
+        return updatedOrder;
+      }
+
+      await this.issueTicketsForPaidOrder(tx, updatedOrder, paidAt);
+
+      return tx.order.findUniqueOrThrow({
+        where: { id: updatedOrder.id },
+        include: {
+          event: true,
+          items: {
+            include: {
+              ticketType: true,
+            },
+            orderBy: {
+              createdAt: "asc",
+            },
+          },
+          tickets: {
+            orderBy: {
+              createdAt: "asc",
+            },
+          },
+        },
+      });
+    });
+
+    await this.notificationsService.notifyOrderPaid({
+      eventTitle: paidOrder.event.title,
+      orderId: paidOrder.id,
+      ticketCount: paidOrder.tickets.length,
+      userId: paidOrder.userId,
+    });
+
+    this.logger.log(
+      `payments.stripe.connect_mark_paid.completed orderId=${paidOrder.id} paymentIntentId=${paymentIntent.id} chargeId=${providerChargeId ?? "none"} tickets=${paidOrder.tickets.length}`,
+    );
+  }
+
   private async issueTicketsForPaidOrder(
     tx: Prisma.TransactionClient,
     order: {
@@ -967,6 +1292,256 @@ export class PaymentsService {
     );
   }
 
+  private async markOrderFailedFromStripePaymentIntent(paymentIntent: any) {
+    const orderId = paymentIntent.metadata?.orderId ?? null;
+
+    if (!orderId) {
+      this.logger.warn(
+        `payments.stripe.connect_mark_failed.missing_order_reference paymentIntentId=${paymentIntent.id}`,
+      );
+      return;
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.paymentTransaction.updateMany({
+        where: {
+          orderId,
+          provider: PaymentProvider.STRIPE,
+          providerPaymentIntentId: paymentIntent.id,
+        },
+        data: {
+          status: PaymentTransactionStatus.FAILED,
+          providerReference: paymentIntent.id,
+          failureReason:
+            paymentIntent.last_payment_error?.message ??
+            paymentIntent.cancellation_reason ??
+            "Stripe payment intent failed.",
+          failedAt: new Date(),
+        },
+      });
+
+      await tx.order.updateMany({
+        where: {
+          id: orderId,
+          status: OrderStatus.PENDING,
+        },
+        data: {
+          status: OrderStatus.FAILED,
+        },
+      });
+    });
+
+    this.logger.log(
+      `payments.stripe.connect_mark_failed.completed orderId=${orderId} paymentIntentId=${paymentIntent.id}`,
+    );
+  }
+
+  private async syncRefundsFromStripeCharge(charge: any) {
+    const paymentTransaction = await this.findPaymentTransactionForStripeCharge(charge);
+
+    if (!paymentTransaction) {
+      this.logger.warn(
+        `payments.stripe.refund.payment_transaction_not_found chargeId=${charge.id ?? "unknown"} paymentIntentId=${charge.payment_intent ?? "unknown"}`,
+      );
+      return;
+    }
+
+    const refundObjects = Array.isArray(charge.refunds?.data)
+      ? charge.refunds.data
+      : [];
+
+    const fallbackRefund =
+      refundObjects.length === 0 && charge.amount_refunded
+        ? [
+            {
+              amount: charge.amount_refunded,
+              created: charge.created,
+              id: `derived:${charge.id}`,
+              metadata: charge.metadata ?? {},
+              reason: charge.refunds?.data?.[0]?.reason ?? null,
+              refund_application_fee: false,
+              reverse_transfer: false,
+              status: "succeeded",
+            },
+          ]
+        : refundObjects;
+
+    const refundedAmount = this.fromPaymentSubunit(charge.amount_refunded ?? 0);
+    const isFullyRefunded =
+      refundedAmount.greaterThanOrEqualTo(paymentTransaction.grossAmount);
+    const refundedAt = new Date();
+
+    await this.prisma.$transaction(async (tx) => {
+      for (const refund of fallbackRefund) {
+        const providerRefundId =
+          typeof refund.id === "string" && refund.id.trim().length > 0
+            ? refund.id
+            : null;
+
+        if (!providerRefundId) {
+          continue;
+        }
+
+        await tx.refund.upsert({
+          where: {
+            provider_providerRefundId: {
+              provider: PaymentProvider.STRIPE,
+              providerRefundId,
+            },
+          },
+          create: {
+            orderId: paymentTransaction.orderId,
+            paymentTransactionId: paymentTransaction.id,
+            provider: PaymentProvider.STRIPE,
+            status: this.mapStripeRefundStatus(refund.status),
+            providerRefundId,
+            amount: this.fromPaymentSubunit(refund.amount ?? 0),
+            currency: (refund.currency ?? charge.currency ?? paymentTransaction.currency).toUpperCase(),
+            reverseTransfer: Boolean(refund.reverse_transfer),
+            refundApplicationFee: Boolean(refund.refund_application_fee),
+            reason: refund.reason ?? null,
+            requestedAt: this.fromStripeTimestamp(refund.created) ?? refundedAt,
+            processedAt:
+              refund.status === "succeeded"
+                ? this.fromStripeTimestamp(refund.created) ?? refundedAt
+                : null,
+            failedAt:
+              refund.status === "failed"
+                ? this.fromStripeTimestamp(refund.created) ?? refundedAt
+                : null,
+            metadata: (refund.metadata ?? {}) as Prisma.InputJsonValue,
+          },
+          update: {
+            orderId: paymentTransaction.orderId,
+            paymentTransactionId: paymentTransaction.id,
+            status: this.mapStripeRefundStatus(refund.status),
+            amount: this.fromPaymentSubunit(refund.amount ?? 0),
+            currency: (refund.currency ?? charge.currency ?? paymentTransaction.currency).toUpperCase(),
+            reverseTransfer: Boolean(refund.reverse_transfer),
+            refundApplicationFee: Boolean(refund.refund_application_fee),
+            reason: refund.reason ?? null,
+            processedAt:
+              refund.status === "succeeded"
+                ? this.fromStripeTimestamp(refund.created) ?? refundedAt
+                : null,
+            failedAt:
+              refund.status === "failed"
+                ? this.fromStripeTimestamp(refund.created) ?? refundedAt
+                : null,
+            metadata: (refund.metadata ?? {}) as Prisma.InputJsonValue,
+          },
+        });
+      }
+
+      await tx.paymentTransaction.update({
+        where: { id: paymentTransaction.id },
+        data: {
+          settlementState: isFullyRefunded
+            ? SettlementState.FAILED
+            : SettlementState.ON_HOLD,
+        },
+      });
+
+      await tx.organizerEarning.updateMany({
+        where: {
+          paymentTransactionId: paymentTransaction.id,
+        },
+        data: {
+          settlementState: isFullyRefunded
+            ? SettlementState.FAILED
+            : SettlementState.ON_HOLD,
+          settledAt: null,
+        },
+      });
+
+      if (paymentTransaction.orderId) {
+        await tx.order.update({
+          where: { id: paymentTransaction.orderId },
+          data: {
+            status: isFullyRefunded
+              ? OrderStatus.REFUNDED
+              : OrderStatus.PARTIALLY_REFUNDED,
+            refundedAt: refundedAt,
+          },
+        });
+      }
+    });
+  }
+
+  private async recordStripeDispute(dispute: any) {
+    if (!dispute.charge) {
+      this.logger.warn(
+        `payments.stripe.dispute.missing_charge disputeId=${dispute.id ?? "unknown"}`,
+      );
+      return;
+    }
+
+    const paymentTransaction = await this.prisma.paymentTransaction.findUnique({
+      where: {
+        provider_providerChargeId: {
+          provider: PaymentProvider.STRIPE,
+          providerChargeId: dispute.charge,
+        },
+      },
+    });
+
+    if (!paymentTransaction) {
+      this.logger.warn(
+        `payments.stripe.dispute.payment_transaction_not_found disputeId=${dispute.id ?? "unknown"} chargeId=${dispute.charge}`,
+      );
+      return;
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.dispute.upsert({
+        where: {
+          provider_providerDisputeId: {
+            provider: PaymentProvider.STRIPE,
+            providerDisputeId: dispute.id,
+          },
+        },
+        create: {
+          paymentTransactionId: paymentTransaction.id,
+          provider: PaymentProvider.STRIPE,
+          providerDisputeId: dispute.id,
+          providerChargeId: dispute.charge,
+          amount: this.fromPaymentSubunit(dispute.amount ?? 0),
+          currency: (dispute.currency ?? paymentTransaction.currency).toUpperCase(),
+          reason: dispute.reason ?? null,
+          status: dispute.status ?? "warning_needs_response",
+          evidenceDueBy: this.fromStripeTimestamp(dispute.evidence_details?.due_by),
+          needsResponse: Boolean(dispute.is_charge_refundable ?? dispute.evidence_details?.has_evidence === false),
+          metadata: (dispute as Prisma.InputJsonValue) ?? Prisma.JsonNull,
+        },
+        update: {
+          providerChargeId: dispute.charge,
+          amount: this.fromPaymentSubunit(dispute.amount ?? 0),
+          currency: (dispute.currency ?? paymentTransaction.currency).toUpperCase(),
+          reason: dispute.reason ?? null,
+          status: dispute.status ?? "warning_needs_response",
+          evidenceDueBy: this.fromStripeTimestamp(dispute.evidence_details?.due_by),
+          needsResponse: Boolean(dispute.is_charge_refundable ?? dispute.evidence_details?.has_evidence === false),
+          metadata: (dispute as Prisma.InputJsonValue) ?? Prisma.JsonNull,
+        },
+      });
+
+      await tx.paymentTransaction.update({
+        where: { id: paymentTransaction.id },
+        data: {
+          settlementState: SettlementState.ON_HOLD,
+        },
+      });
+
+      await tx.organizerEarning.updateMany({
+        where: { paymentTransactionId: paymentTransaction.id },
+        data: {
+          settlementState: SettlementState.ON_HOLD,
+          settledAt: null,
+        },
+      });
+    });
+  }
+
   private async verifyAndApplyPaystackReference(reference: string) {
     const verification = await this.verifyPaystackTransaction(reference);
 
@@ -1042,20 +1617,253 @@ export class PaymentsService {
   }
 
   private async resolveRelatedEventId(event: any) {
-    const session = event?.data?.object;
+    const object = event?.data?.object;
     const orderId =
-      session?.client_reference_id ?? session?.metadata?.orderId ?? null;
+      object?.client_reference_id ?? object?.metadata?.orderId ?? null;
 
-    if (!orderId) {
-      return null;
+    if (orderId) {
+      const order = await this.prisma.order.findUnique({
+        where: { id: orderId },
+        select: { eventId: true },
+      });
+
+      return order?.eventId ?? null;
     }
 
-    const order = await this.prisma.order.findUnique({
-      where: { id: orderId },
-      select: { eventId: true },
+    const providerChargeId = object?.charge ?? object?.id ?? null;
+    const paymentIntentId = object?.payment_intent ?? null;
+
+    if (providerChargeId) {
+      const paymentTransaction = await this.prisma.paymentTransaction.findUnique({
+        where: {
+          provider_providerChargeId: {
+            provider: PaymentProvider.STRIPE,
+            providerChargeId,
+          },
+        },
+        select: { eventId: true },
+      });
+
+      if (paymentTransaction?.eventId) {
+        return paymentTransaction.eventId;
+      }
+    }
+
+    if (paymentIntentId) {
+      const paymentTransaction = await this.prisma.paymentTransaction.findUnique({
+        where: {
+          provider_providerPaymentIntentId: {
+            provider: PaymentProvider.STRIPE,
+            providerPaymentIntentId: paymentIntentId,
+          },
+        },
+        select: { eventId: true },
+      });
+
+      return paymentTransaction?.eventId ?? null;
+    }
+
+    return null;
+  }
+
+  private async processStripeEvent(
+    event: any,
+    options: { allowDuplicateSkip: boolean; isReplay: boolean },
+  ) {
+    this.logger.log(
+      `payments.stripe.webhook.received eventId=${event.id} type=${event.type} replay=${options.isReplay}`,
+    );
+
+    const existing = await this.prisma.webhookEvent.findUnique({
+      where: {
+        providerEventId: event.id,
+      },
     });
 
-    return order?.eventId ?? null;
+    if (options.allowDuplicateSkip && existing?.processedAt) {
+      this.logger.log(
+        `payments.stripe.webhook.duplicate eventId=${event.id} type=${event.type}`,
+      );
+      return { received: true, duplicate: true };
+    }
+
+    const relatedEventId = await this.resolveRelatedEventId(event);
+
+    await this.prisma.webhookEvent.upsert({
+      where: {
+        providerEventId: event.id,
+      },
+      create: {
+        eventId: relatedEventId,
+        provider: PaymentProvider.STRIPE,
+        providerEventId: event.id,
+        eventType: event.type,
+        payload: event as unknown as Prisma.InputJsonValue,
+        deliveryAttempts: 1,
+        lastAttemptAt: new Date(),
+        processedAt: null,
+      },
+      update: {
+        deliveryAttempts: (existing?.deliveryAttempts ?? 0) + 1,
+        eventId: relatedEventId,
+        lastAttemptAt: new Date(),
+        payload: event as unknown as Prisma.InputJsonValue,
+        processingError: null,
+        processedAt: null,
+      },
+    });
+
+    try {
+      switch (event.type) {
+        case "checkout.session.completed": {
+          const session = event.data.object as any;
+          await this.markOrderPaidFromStripeSession(session);
+          break;
+        }
+        case "checkout.session.expired": {
+          const session = event.data.object as any;
+          await this.markOrderCancelledFromStripeSession(session);
+          break;
+        }
+        case "payment_intent.succeeded": {
+          await this.markOrderPaidFromStripePaymentIntent(event.data.object as any);
+          break;
+        }
+        case "payment_intent.payment_failed": {
+          await this.markOrderFailedFromStripePaymentIntent(event.data.object as any);
+          break;
+        }
+        case "charge.refunded": {
+          await this.syncRefundsFromStripeCharge(event.data.object as any);
+          break;
+        }
+        case "charge.dispute.created": {
+          await this.recordStripeDispute(event.data.object as any);
+          break;
+        }
+        case "account.updated": {
+          await this.organizerStripeAccountService.syncFromStripeWebhook(
+            event.data.object as any,
+          );
+          break;
+        }
+        default:
+          break;
+      }
+
+      await this.prisma.webhookEvent.update({
+        where: {
+          providerEventId: event.id,
+        },
+        data: {
+          processedAt: new Date(),
+          processingError: null,
+        },
+      });
+    } catch (error) {
+      await this.prisma.webhookEvent.update({
+        where: {
+          providerEventId: event.id,
+        },
+        data: {
+          processingError: this.toWebhookProcessingError(event, error),
+        },
+      });
+
+      throw error;
+    }
+
+    return { received: true, replayed: options.isReplay };
+  }
+
+  private async processPaystackEvent(
+    event: any,
+    options: { allowDuplicateSkip: boolean; isReplay: boolean },
+  ) {
+    const reference = event?.data?.reference;
+    const eventType = event?.event ?? "unknown";
+
+    if (!reference) {
+      throw new BadRequestException("Paystack webhook did not include a transaction reference.");
+    }
+
+    const providerEventId = `paystack:${eventType}:${reference}`;
+
+    this.logger.log(
+      `payments.paystack.webhook.received eventId=${providerEventId} type=${eventType} replay=${options.isReplay}`,
+    );
+
+    const existing = await this.prisma.webhookEvent.findUnique({
+      where: {
+        providerEventId,
+      },
+    });
+
+    if (options.allowDuplicateSkip && existing?.processedAt) {
+      this.logger.log(
+        `payments.paystack.webhook.duplicate eventId=${providerEventId} type=${eventType}`,
+      );
+      return { received: true, duplicate: true };
+    }
+
+    const relatedEventId = await this.resolveRelatedEventIdFromOrderId(
+      event?.data?.metadata?.orderId ?? null,
+    );
+
+    await this.prisma.webhookEvent.upsert({
+      where: {
+        providerEventId,
+      },
+      create: {
+        eventId: relatedEventId,
+        provider: PaymentProvider.PAYSTACK,
+        providerEventId,
+        eventType,
+        payload: event as unknown as Prisma.InputJsonValue,
+        deliveryAttempts: 1,
+        lastAttemptAt: new Date(),
+        processedAt: null,
+      },
+      update: {
+        deliveryAttempts: (existing?.deliveryAttempts ?? 0) + 1,
+        eventId: relatedEventId,
+        lastAttemptAt: new Date(),
+        payload: event as unknown as Prisma.InputJsonValue,
+        processingError: null,
+        processedAt: null,
+      },
+    });
+
+    try {
+      if (eventType === "charge.success") {
+        await this.verifyAndApplyPaystackReference(reference);
+      }
+
+      await this.prisma.webhookEvent.update({
+        where: {
+          providerEventId,
+        },
+        data: {
+          processedAt: new Date(),
+          processingError: null,
+        },
+      });
+    } catch (error) {
+      await this.prisma.webhookEvent.update({
+        where: {
+          providerEventId,
+        },
+        data: {
+          processingError: `[${eventType}][reference:${reference}] ${
+            error instanceof Error ? error.message : "Unknown webhook processing error."
+          }`,
+        },
+      });
+
+      throw error;
+    }
+
+    return { received: true, replayed: options.isReplay };
   }
 
   private async resolveRelatedEventIdFromOrderId(orderId: string | null) {
@@ -1079,6 +1887,149 @@ export class PaymentsService {
       session?.client_reference_id ?? session?.metadata?.orderId ?? "unknown";
 
     return `[${event?.type ?? "unknown"}][order:${orderId}] ${message}`;
+  }
+
+  private async ensureOrganizerEarningForTransaction(
+    tx: Prisma.TransactionClient,
+    paymentTransactionId: string,
+  ) {
+    const existingEarning = await tx.organizerEarning.findFirst({
+      where: {
+        paymentTransactionId,
+      },
+    });
+
+    if (existingEarning) {
+      return tx.organizerEarning.update({
+        where: { id: existingEarning.id },
+        data: {
+          grossAmount: existingEarning.grossAmount,
+        },
+      });
+    }
+
+    const paymentTransaction = await tx.paymentTransaction.findUniqueOrThrow({
+      where: { id: paymentTransactionId },
+    });
+
+    return tx.organizerEarning.create({
+      data: {
+        organizerId: paymentTransaction.organizerId,
+        eventId: paymentTransaction.eventId,
+        orderId: paymentTransaction.orderId,
+        resaleListingId: paymentTransaction.resaleListingId,
+        paymentTransactionId: paymentTransaction.id,
+        grossAmount: paymentTransaction.grossAmount,
+        platformFeeAmount: paymentTransaction.platformFeeAmount,
+        netAmount: paymentTransaction.organizerNetAmount,
+        currency: paymentTransaction.currency,
+        settlementState: paymentTransaction.settlementState,
+      },
+    });
+  }
+
+  private async findPaymentTransactionForStripeCharge(charge: any) {
+    if (charge.id) {
+      const byChargeId = await this.prisma.paymentTransaction.findUnique({
+        where: {
+          provider_providerChargeId: {
+            provider: PaymentProvider.STRIPE,
+            providerChargeId: charge.id,
+          },
+        },
+      });
+
+      if (byChargeId) {
+        return byChargeId;
+      }
+    }
+
+    if (typeof charge.payment_intent === "string") {
+      return this.prisma.paymentTransaction.findUnique({
+        where: {
+          provider_providerPaymentIntentId: {
+            provider: PaymentProvider.STRIPE,
+            providerPaymentIntentId: charge.payment_intent,
+          },
+        },
+      });
+    }
+
+    return null;
+  }
+
+  private mapStripePaymentIntentStatus(status: string | null | undefined) {
+    switch (status) {
+      case "succeeded":
+        return "paid";
+      case "processing":
+        return "processing";
+      case "requires_action":
+        return "requires_action";
+      case "requires_payment_method":
+        return "requires_payment_method";
+      case "canceled":
+        return "failed";
+      default:
+        return status ?? null;
+    }
+  }
+
+  private mapStripeRefundStatus(status: string | null | undefined) {
+    switch (status) {
+      case "succeeded":
+        return RefundStatus.SUCCEEDED;
+      case "failed":
+        return RefundStatus.FAILED;
+      case "canceled":
+        return RefundStatus.CANCELLED;
+      case "pending":
+      case "requires_action":
+        return RefundStatus.PROCESSING;
+      default:
+        return RefundStatus.REQUESTED;
+    }
+  }
+
+  private toStripeRefundReason(reason: string | null) {
+    if (!reason) {
+      return undefined;
+    }
+
+    switch (reason) {
+      case "duplicate":
+      case "fraudulent":
+      case "requested_by_customer":
+        return reason;
+      default:
+        return undefined;
+    }
+  }
+
+  private extractStripeChargeId(paymentIntent: any) {
+    if (typeof paymentIntent.latest_charge === "string") {
+      return paymentIntent.latest_charge;
+    }
+
+    if (paymentIntent.latest_charge?.id) {
+      return paymentIntent.latest_charge.id;
+    }
+
+    const charges = paymentIntent.charges?.data;
+
+    if (Array.isArray(charges) && charges[0]?.id) {
+      return charges[0].id;
+    }
+
+    return null;
+  }
+
+  private fromStripeTimestamp(timestamp: number | null | undefined) {
+    if (!timestamp) {
+      return null;
+    }
+
+    return new Date(timestamp * 1000);
   }
 
   private getStripeClient() {
@@ -1161,6 +2112,10 @@ export class PaymentsService {
 
   private toPaymentSubunit(amount: Prisma.Decimal) {
     return Math.round(Number(amount) * 100);
+  }
+
+  private fromPaymentSubunit(amount: number) {
+    return new Prisma.Decimal(amount).div(100).toDecimalPlaces(2);
   }
 
   private toEventCode(slug: string) {

@@ -1,3 +1,4 @@
+import { PaymentSheetError, useStripe } from "@stripe/stripe-react-native";
 import { useQuery } from "@tanstack/react-query";
 import * as ExpoLinking from "expo-linking";
 import { Link, useLocalSearchParams, useRouter } from "expo-router";
@@ -14,17 +15,25 @@ import {
 import { useAuth } from "@/components/providers/auth-provider";
 import { SupportCard } from "@/components/support/support-card";
 import { ActionButton, Card, Screen } from "@/components/ui";
+import { getStripePublishableKey } from "@/lib/config/env";
 import { getPublicEventBySlug } from "@/lib/events/public-events-client";
 import { reportMobileRuntimeIssue } from "@/lib/monitoring/runtime-monitoring";
 import {
+  type CheckoutOrderResponse,
   createCheckoutOrder,
   getCheckoutQuote,
   getOrderById,
 } from "@/lib/orders/orders-client";
 import { palette } from "@/styles/theme";
 
-function buildAppReturnUrl(pathname: "/checkout/success" | "/checkout/cancel") {
-  return ExpoLinking.createURL(pathname, { scheme: "ticketsystem" });
+function buildAppReturnUrl(
+  pathname: "/checkout/success" | "/checkout/cancel",
+  orderId?: string,
+) {
+  const normalizedPath = pathname.replace(/^\//, "");
+  const query = orderId ? `?orderId=${encodeURIComponent(orderId)}` : "";
+
+  return `ticketsystem://${normalizedPath}${query}`;
 }
 
 function createIdempotencyKey() {
@@ -83,6 +92,7 @@ function describeFeePolicy(policy: {
 
 export function CheckoutStartScreen() {
   const router = useRouter();
+  const { initPaymentSheet, presentPaymentSheet } = useStripe();
   const params = useLocalSearchParams<{
     eventSlug?: string;
     offerRequestId?: string;
@@ -95,6 +105,7 @@ export function CheckoutStartScreen() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isAwaitingPaymentReturn, setIsAwaitingPaymentReturn] = useState(false);
+  const [pendingOrderId, setPendingOrderId] = useState<string | null>(null);
   const [idempotencyKey] = useState(createIdempotencyKey);
   const eventSlug = typeof params.eventSlug === "string" ? params.eventSlug : "";
   const offerIntentId =
@@ -308,11 +319,58 @@ export function CheckoutStartScreen() {
   const resolvedEvent = event!;
   const resolvedTicketType = selectedTicketType;
   const subtotal = resolvedTicketType.priceValue * quantity;
+  const stripePublishableKey = getStripePublishableKey();
+
+  async function presentStripeCheckout(order: CheckoutOrderResponse) {
+    if (!stripePublishableKey) {
+      throw new Error(
+        "Stripe mobile checkout is not configured on this build. Set EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY and rebuild the app.",
+      );
+    }
+
+    if (!order.clientSecret) {
+      throw new Error("Stripe payment details were not returned by the backend.");
+    }
+
+    const paymentSheet = await initPaymentSheet({
+      allowsDelayedPaymentMethods: true,
+      defaultBillingDetails: {
+        email: activeSession.user.email,
+      },
+      merchantDisplayName: "Maya",
+      paymentIntentClientSecret: order.clientSecret,
+      returnURL: buildAppReturnUrl("/checkout/success", order.id),
+    });
+
+    if (paymentSheet.error) {
+      throw new Error(paymentSheet.error.message);
+    }
+
+    const result = await presentPaymentSheet();
+
+    if (result.error) {
+      if (result.error.code === PaymentSheetError.Canceled) {
+        router.replace({
+          pathname: "/checkout/cancel",
+          params: { orderId: order.id },
+        });
+        return;
+      }
+
+      throw new Error(result.error.message);
+    }
+
+    router.replace({
+      pathname: "/checkout/success",
+      params: { orderId: order.id },
+    });
+  }
 
   async function beginPayment() {
     setErrorMessage(null);
     setIsSubmitting(true);
     setIsAwaitingPaymentReturn(false);
+    setPendingOrderId(null);
 
     try {
       if (requiresOfferIntent && !offerIntentId) {
@@ -325,6 +383,7 @@ export function CheckoutStartScreen() {
         ? getPaymentProviderForCurrency(quoteQuery.data.currency)
         : undefined;
       const isPaystackCheckout = paymentProvider === "PAYSTACK";
+      const isStripeCheckout = paymentProvider === "STRIPE";
       const order = await createCheckoutOrder(
         {
           cancelReturnUrl: isPaystackCheckout
@@ -348,6 +407,14 @@ export function CheckoutStartScreen() {
         },
         activeSession.accessToken,
       );
+      setPendingOrderId(order.id);
+
+      if (isStripeCheckout && order.clientSecret) {
+        setIsAwaitingPaymentReturn(true);
+        await presentStripeCheckout(order);
+        setIsSubmitting(false);
+        return;
+      }
 
       if (!order.checkoutUrl) {
         if (order.status === "PAID" || order.isAwaitingPaymentConfirmation) {
@@ -361,8 +428,8 @@ export function CheckoutStartScreen() {
         throw new Error("Checkout URL was not returned by the backend.");
       }
 
-      const successReturnUrl = buildAppReturnUrl("/checkout/success");
-      const cancelReturnUrl = buildAppReturnUrl("/checkout/cancel");
+      const successReturnUrl = buildAppReturnUrl("/checkout/success", order.id);
+      const cancelReturnUrl = buildAppReturnUrl("/checkout/cancel", order.id);
       if (Platform.OS === "ios" && isPaystackCheckout) {
         router.push({
           pathname: "/checkout/paystack-inline",
@@ -529,13 +596,20 @@ export function CheckoutStartScreen() {
             </Text>
           ) : null}
           {isAwaitingPaymentReturn ? (
-            <Card tone="accent">
-              <Text style={styles.sectionTitle}>Waiting for payment return</Text>
+          <Card tone="accent">
+              <Text style={styles.sectionTitle}>Completing secure payment</Text>
               <Text style={styles.copy}>
-                Secure checkout opened in your browser. Complete payment there and you will be
-                returned here automatically for payment confirmation.
+                {quoteQuery.data?.currency.toUpperCase() === "NGN"
+                  ? "Secure checkout opened in your browser. Complete payment there and you will be returned here automatically for payment confirmation."
+                  : "Stripe payment is in progress. If extra authentication is needed, Maya will guide you back automatically."}
               </Text>
-              <Link href="/checkout/cancel" style={styles.secondaryLink}>
+              <Link
+                href={{
+                  pathname: "/checkout/cancel",
+                  params: pendingOrderId ? { orderId: pendingOrderId } : undefined,
+                }}
+                style={styles.secondaryLink}
+              >
                 I closed checkout, continue here
               </Link>
             </Card>

@@ -40,7 +40,7 @@ export class AuthUserResponseDto {
   @ApiProperty({
     type: String,
     isArray: true,
-    enum: ["EVENT_OWNER"],
+    enum: ["EVENT_OWNER", "PLATFORM_ADMIN"],
   })
   platformRoles!: string[];
 

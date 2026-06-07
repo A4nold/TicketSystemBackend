@@ -5,7 +5,11 @@ import {
   UnauthorizedException,
 } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
-import { PushDeviceStatus, StaffRole, UserStatus } from "@prisma/client";
+import {
+  PushDeviceStatus,
+  StaffRole,
+  UserStatus,
+} from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { createHash, randomBytes } from "crypto";
 
@@ -17,6 +21,10 @@ import { RegisterDto } from "./dto/register.dto";
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
+  private static readonly ORGANIZER_ONBOARDING_STATUS = {
+    NOT_STARTED: "NOT_STARTED",
+    PROFILE_INCOMPLETE: "PROFILE_INCOMPLETE",
+  } as const;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -108,6 +116,48 @@ export class AuthService {
     }
 
     return this.toAuthUser(user);
+  }
+
+  async upgradeToOrganizer(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: this.authUserSelect(),
+    });
+
+    if (!user) {
+      throw new UnauthorizedException("Authenticated user was not found.");
+    }
+
+    if (user.status !== "ACTIVE") {
+      throw new UnauthorizedException("This account is not active.");
+    }
+
+    const organizerDisplayName =
+      [user.profile?.firstName, user.profile?.lastName]
+        .filter(Boolean)
+        .join(" ")
+        .trim() || null;
+
+    const upgradedUser = await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        ...(user.accountType === "ORGANIZER" ? {} : { accountType: "ORGANIZER" }),
+        organizerProfile: {
+          upsert: {
+            create: {
+              displayName: organizerDisplayName,
+              onboardingStatus: organizerDisplayName
+                ? AuthService.ORGANIZER_ONBOARDING_STATUS.PROFILE_INCOMPLETE
+                : AuthService.ORGANIZER_ONBOARDING_STATUS.NOT_STARTED,
+            },
+            update: {},
+          },
+        },
+      },
+      select: this.authUserSelect(),
+    });
+
+    return this.issueToken(upgradedUser);
   }
 
   async deleteAccount(userId: string) {
@@ -436,7 +486,11 @@ export class AuthService {
       role: membership.role,
       acceptedAt: membership.acceptedAt?.toISOString() ?? null,
     }));
-    const platformRoles = this.derivePlatformRoles(user.accountType);
+    const platformRoles = this.derivePlatformRoles({
+      accountType: user.accountType,
+      email: user.email,
+      userId: user.id,
+    });
 
     return {
       id: user.id,
@@ -451,12 +505,45 @@ export class AuthService {
     };
   }
 
-  private derivePlatformRoles(accountType: "ATTENDEE" | "ORGANIZER") {
-    if (accountType === "ORGANIZER") {
-      return ["EVENT_OWNER"];
+  private derivePlatformRoles(input: {
+    accountType: "ATTENDEE" | "ORGANIZER";
+    email: string;
+    userId: string;
+  }) {
+    const roles = new Set<string>();
+
+    if (input.accountType === "ORGANIZER") {
+      roles.add("EVENT_OWNER");
     }
 
-    return [];
+    if (this.isPlatformAdmin(input)) {
+      roles.add("PLATFORM_ADMIN");
+    }
+
+    return Array.from(roles);
+  }
+
+  private isPlatformAdmin(input: { email: string; userId: string }) {
+    const adminIds = this.parsePlatformAdminList(process.env.PLATFORM_ADMIN_USER_IDS);
+    const adminEmails = this.parsePlatformAdminList(process.env.PLATFORM_ADMIN_EMAILS).map(
+      (value) => value.toLowerCase(),
+    );
+
+    return (
+      adminIds.includes(input.userId) ||
+      adminEmails.includes(input.email.trim().toLowerCase())
+    );
+  }
+
+  private parsePlatformAdminList(value: string | undefined) {
+    if (!value) {
+      return [];
+    }
+
+    return value
+      .split(",")
+      .map((item) => item.trim())
+      .filter((item) => item.length > 0);
   }
 
   private deriveAppRoles(

@@ -11,6 +11,7 @@ import {
   getCurrentAttendee,
   loginAttendee,
   registerAttendee,
+  upgradeCurrentAccountToOrganizer,
   type LoginPayload,
   type RegisterPayload,
 } from "@/lib/auth/auth-client";
@@ -30,6 +31,7 @@ type AuthContextValue = {
   signIn: (payload: LoginPayload) => Promise<boolean>;
   signUp: (payload: RegisterPayload) => Promise<boolean>;
   signOut: () => Promise<void>;
+  upgradeToOrganizer: () => Promise<boolean>;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -131,6 +133,35 @@ export function AuthProvider({ children }: PropsWithChildren) {
         await clearStoredSession();
         setSession(null);
         setErrorMessage(null);
+      },
+      upgradeToOrganizer: async () => {
+        if (!session?.accessToken) {
+          setErrorMessage("You need to be signed in before upgrading to organizer.");
+          return false;
+        }
+
+        setIsAuthenticating(true);
+        setErrorMessage(null);
+
+        try {
+          const authResponse = await upgradeCurrentAccountToOrganizer(session.accessToken);
+          const nextSession = {
+            ...authResponse,
+            user: await getCurrentAttendee(authResponse.accessToken),
+          };
+          setSession(nextSession);
+          await persistSession(nextSession);
+          return true;
+        } catch (error) {
+          setErrorMessage(
+            error instanceof Error
+              ? error.message
+              : "Organizer upgrade failed. Please try again.",
+          );
+          return false;
+        } finally {
+          setIsAuthenticating(false);
+        }
       },
     }),
     [bootstrapped, errorMessage, isAuthenticating, session],

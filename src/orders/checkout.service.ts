@@ -7,8 +7,12 @@ import {
 import { OrderStatus, PaymentProvider, Prisma } from "@prisma/client";
 
 import { AuthenticatedUser } from "../auth/types/authenticated-user.type";
-import { isOfferRangePricingEnabled } from "../common/feature-flags";
+import {
+  isOfferRangePricingEnabled,
+  isStripeConnectCheckoutEnabled,
+} from "../common/feature-flags";
 import { NotificationsService } from "../notifications/notifications.service";
+import { OrganizerPaymentsQueryService } from "../payments/organizer-payments-query.service";
 import { PaymentsService } from "../payments/payments.service";
 import { PrismaService } from "../prisma/prisma.service";
 import {
@@ -26,6 +30,7 @@ export class CheckoutService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly paymentsService: PaymentsService,
+    private readonly organizerPaymentsQueryService: OrganizerPaymentsQueryService,
     private readonly purchasedTicketIssuanceService: PurchasedTicketIssuanceService,
     private readonly notificationsService: NotificationsService,
   ) {}
@@ -48,10 +53,20 @@ export class CheckoutService {
       });
 
       if (existingOrder) {
+        const checkoutState = await this.reconcileExistingOrder(existingOrder);
+        const refreshedOrder = checkoutState
+          ? await this.prisma.order.findFirst({
+              where: {
+                id: existingOrder.id,
+                userId: user.id,
+              },
+              include: this.orderInclude(),
+            })
+          : existingOrder;
         this.logger.log(
           `checkout.create.reused orderId=${existingOrder.id} userId=${user.id} eventId=${existingOrder.eventId} idempotencyKey=${payload.idempotencyKey}`,
         );
-        return toOrderResponse(existingOrder);
+        return toOrderResponse(refreshedOrder ?? existingOrder, checkoutState ?? undefined);
       }
     }
 
@@ -69,6 +84,10 @@ export class CheckoutService {
     const { event, feePolicy, requestedItems, pricedItems, totals } = quote;
     const paymentProvider =
       payload.paymentProvider ?? this.resolveDefaultPaymentProvider(totals.currency);
+    const shouldUseStripeConnect =
+      paymentProvider === PaymentProvider.STRIPE &&
+      isStripeConnectCheckoutEnabled() &&
+      totals.total.greaterThan(new Prisma.Decimal(0));
     if (payload.offerIntentId) {
       const consumed = await (this.prisma as any).ticketOfferRequest.updateMany({
         where: {
@@ -112,7 +131,9 @@ export class CheckoutService {
         feeAmount: totals.fee,
         totalAmount: totals.total,
         paymentProvider,
-        checkoutSessionId: this.generateCheckoutSessionId(),
+        checkoutSessionId: shouldUseStripeConnect
+          ? null
+          : this.generateCheckoutSessionId(),
         idempotencyKey: payload.idempotencyKey,
         items: {
           create: requestedItems.map((item) => {
@@ -180,10 +201,156 @@ export class CheckoutService {
       });
     }
     let checkoutSessionId = order.checkoutSessionId;
+    let paymentTransactionId: string | null = null;
+    let paymentIntentId: string | null = null;
+    let clientSecret: string | null = null;
+    let connectedAccountId: string | null = null;
     let checkoutUrl: string | null = null;
     let paymentStatus: string | null = null;
     let checkoutStatus: string | null = null;
     let isAwaitingPaymentConfirmation = false;
+
+    if (shouldUseStripeConnect) {
+      if (order.currency.toUpperCase() !== "EUR") {
+        throw new BadRequestException(
+          "Stripe Connect checkout is currently enabled for EUR orders only.",
+        );
+      }
+
+      const organizerReadiness =
+        await this.organizerPaymentsQueryService.getOrganizerStripeReadiness(
+          event.organizerId,
+        );
+
+      if (
+        !organizerReadiness.isReadyForPaidEvents ||
+        !organizerReadiness.connectedAccountId
+      ) {
+        throw new BadRequestException({
+          code: "ORGANIZER_PAYMENT_ACCOUNT_NOT_READY",
+          message:
+            "The event organizer must complete Stripe onboarding before paid checkout can start.",
+        });
+      }
+
+      const organizerNetAmount = totals.total.sub(totals.fee);
+      const createdPaymentTransaction = await this.prisma.paymentTransaction.create({
+        data: {
+          organizerId: event.organizerId,
+          eventId: event.id,
+          orderId: order.id,
+          provider: PaymentProvider.STRIPE,
+          type: "PRIMARY_TICKET_PURCHASE",
+          status: "PENDING",
+          providerReference: `pending:${order.id}`,
+          connectedAccountId: organizerReadiness.connectedAccountId,
+          amount: totals.total,
+          currency: totals.currency,
+          grossAmount: totals.total,
+          platformFeeAmount: totals.fee,
+          organizerNetAmount,
+          idempotencyKey: payload.idempotencyKey ?? `order:${order.id}:payment-transaction`,
+          metadata: {
+            eventSlug: event.slug,
+            orderId: order.id,
+            userId: user.id,
+          },
+        },
+      });
+
+      paymentTransactionId = createdPaymentTransaction.id;
+      connectedAccountId = organizerReadiness.connectedAccountId;
+
+      await this.prisma.platformFee.create({
+        data: {
+          paymentTransactionId: createdPaymentTransaction.id,
+          amount: totals.fee,
+          currency: totals.currency,
+          responsibility: feePolicy.responsibility,
+          model: feePolicy.model,
+          percentRate: feePolicy.percentRate,
+          fixedAmount: feePolicy.fixedAmount,
+          fixedFeeApplication: feePolicy.fixedFeeApplication,
+          pricingRuleSnapshot: {
+            displayName: feePolicy.displayName,
+            fixedAmount: feePolicy.fixedAmount.toFixed(2),
+            fixedFeeApplication: feePolicy.fixedFeeApplication,
+            model: feePolicy.model,
+            percentRate: feePolicy.percentRate.toString(),
+            responsibility: feePolicy.responsibility,
+          } as Prisma.InputJsonValue,
+        },
+      });
+
+      try {
+        const paymentIntent =
+          await this.paymentsService.createStripeConnectPaymentIntent({
+            connectedAccountId,
+            event: {
+              slug: order.event.slug,
+              title: order.event.title,
+            },
+            feeAmount: order.feeAmount,
+            feePolicy,
+            id: order.id,
+            currency: order.currency,
+            paymentTransactionId: createdPaymentTransaction.id,
+            totalAmount: order.totalAmount,
+            userEmail: user.email,
+            userId: order.userId,
+          });
+
+        paymentIntentId = paymentIntent.paymentIntentId;
+        clientSecret = paymentIntent.clientSecret;
+        paymentStatus = paymentIntent.paymentStatus;
+        checkoutStatus = paymentIntent.checkoutStatus;
+        isAwaitingPaymentConfirmation =
+          paymentIntent.isAwaitingPaymentConfirmation;
+
+        await this.prisma.paymentTransaction.update({
+          where: { id: createdPaymentTransaction.id },
+          data: {
+            status: "REQUIRES_ACTION",
+            providerReference: paymentIntent.paymentIntentId,
+            providerPaymentIntentId: paymentIntent.paymentIntentId,
+          },
+        });
+      } catch (error) {
+        await this.prisma.paymentTransaction.update({
+          where: { id: createdPaymentTransaction.id },
+          data: {
+            status: "FAILED",
+            failedAt: new Date(),
+            failureReason:
+              error instanceof Error ? error.message : "Stripe Connect checkout failed.",
+          },
+        });
+        throw error;
+      }
+
+      return toOrderResponse({
+        ...order,
+        paymentTransactions: [
+          {
+            id: paymentTransactionId,
+            status: "REQUIRES_ACTION",
+            connectedAccountId,
+            providerPaymentIntentId: paymentIntentId,
+          },
+        ],
+        checkoutSessionId: null,
+        feePolicy,
+      }, {
+        checkoutSessionId: null,
+        checkoutUrl,
+        paymentStatus,
+        checkoutStatus,
+        isAwaitingPaymentConfirmation,
+        paymentIntentId,
+        clientSecret,
+        connectedAccountId,
+      });
+    }
 
     if (
       order.paymentProvider === PaymentProvider.STRIPE &&
@@ -298,6 +465,17 @@ export class CheckoutService {
     return toOrderResponse({
       ...order,
       checkoutSessionId,
+      paymentTransactions:
+        paymentTransactionId && paymentIntentId
+          ? [
+              {
+                id: paymentTransactionId,
+                status: "REQUIRES_ACTION",
+                connectedAccountId,
+                providerPaymentIntentId: paymentIntentId,
+              },
+            ]
+          : undefined,
       checkoutUrl,
       feePolicy,
       paymentStatus,
@@ -737,6 +915,12 @@ export class CheckoutService {
           createdAt: "asc" as const,
         },
       },
+      paymentTransactions: {
+        orderBy: {
+          createdAt: "desc" as const,
+        },
+        take: 1,
+      },
     };
   }
 
@@ -748,5 +932,22 @@ export class CheckoutService {
     return currency.toUpperCase() === "NGN"
       ? PaymentProvider.PAYSTACK
       : PaymentProvider.STRIPE;
+  }
+
+  private async reconcileExistingOrder(order: {
+    id: string;
+    status: OrderStatus;
+    paymentProvider: PaymentProvider;
+    checkoutSessionId: string | null;
+    paymentTransactions?: Array<{
+      providerPaymentIntentId: string | null;
+      connectedAccountId: string | null;
+    }>;
+  }) {
+    try {
+      return await this.paymentsService.reconcilePendingOrderWithProvider(order);
+    } catch {
+      return null;
+    }
   }
 }

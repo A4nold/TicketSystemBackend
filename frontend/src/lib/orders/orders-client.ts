@@ -47,9 +47,12 @@ export type CheckoutQuoteResponse = {
 };
 
 export type CheckoutOrderResponse = {
+  cancelledAt?: string | null;
   checkoutSessionId: string | null;
   checkoutStatus: string | null;
   checkoutUrl: string | null;
+  clientSecret: string | null;
+  connectedAccountId: string | null;
   currency: string;
   event: {
     id: string;
@@ -68,6 +71,7 @@ export type CheckoutOrderResponse = {
   };
   id: string;
   isAwaitingPaymentConfirmation: boolean;
+  idempotencyKey?: string | null;
   items: Array<{
     currency: string;
     quantity: number;
@@ -78,8 +82,10 @@ export type CheckoutOrderResponse = {
   }>;
   paidAt: string | null;
   paymentProvider: string;
+  paymentIntentId: string | null;
   paymentReference: string | null;
   paymentStatus: string | null;
+  paymentTransactionId: string | null;
   status: string;
   subtotalAmount: string;
   tickets: Array<{

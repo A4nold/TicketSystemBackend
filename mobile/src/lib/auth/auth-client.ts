@@ -84,3 +84,12 @@ export async function deleteCurrentAccount(accessToken: string) {
     method: "DELETE",
   });
 }
+
+export async function upgradeCurrentAccountToOrganizer(accessToken: string) {
+  return apiFetch<AuthResponse>("/api/auth/upgrade-to-organizer", {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+    method: "POST",
+  });
+}

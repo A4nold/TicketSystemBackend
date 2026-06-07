@@ -30,7 +30,7 @@ export function RecentOrderPanel({ orderId }: RecentOrderPanelProps) {
             Recent purchase
           </p>
           <p className="text-sm leading-6 text-foreground/85">
-            Refreshing your latest issued tickets from the backend.
+            Refreshing your latest issued tickets.
           </p>
         </div>
       </Panel>
