@@ -10,6 +10,7 @@ const KNOWN_PREFIXES = [
   "/tickets/",
   "/transfer/",
   "/staff/",
+  "/organizer",
   "/privacy-policy",
   "/(auth)/",
   "/(public)/",

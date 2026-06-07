@@ -5,7 +5,6 @@ import DateTimePicker, {
 } from "@react-native-community/datetimepicker";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import * as ImagePicker from "expo-image-picker";
-import * as WebBrowser from "expo-web-browser";
 import { useEffect, useMemo, useState } from "react";
 import {
   Image,
@@ -68,6 +67,10 @@ import {
   getStripeConnectAccountStatus,
   refreshStripeConnectOnboardingLink,
 } from "@/lib/payments/stripe-connect-client";
+import {
+  buildStripeConnectRedirectUrls,
+  openStripeConnectOnboardingSession,
+} from "@/lib/payments/stripe-connect-onboarding";
 import { palette } from "@/styles/theme";
 
 const STATUS_OPTIONS: EventEditorState["status"][] = [
@@ -758,11 +761,16 @@ export function OrganizerEventScreen() {
 
     try {
       const account = stripeAccountQuery.data;
+      const redirectUrls = buildStripeConnectRedirectUrls("/organizer/setup");
+      const stripeLinkPayload = {
+        refreshUrl: redirectUrls.refreshUrl,
+        returnUrl: redirectUrls.returnUrl,
+      };
       const result = account?.connectedAccountId
-        ? await refreshStripeConnectOnboardingLink(session.accessToken)
-        : await createStripeConnectOnboardingLink(session.accessToken);
+        ? await refreshStripeConnectOnboardingLink(session.accessToken, stripeLinkPayload)
+        : await createStripeConnectOnboardingLink(session.accessToken, stripeLinkPayload);
 
-      await WebBrowser.openBrowserAsync(result.onboardingUrl);
+      await openStripeConnectOnboardingSession(result.onboardingUrl, redirectUrls.appReturnUrl);
       await stripeAccountQuery.refetch();
       setNotice("Returned from Stripe. Payment readiness refreshed.");
     } catch (error) {

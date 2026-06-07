@@ -1,8 +1,16 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useFocusEffect, useRouter } from "expo-router";
-import * as WebBrowser from "expo-web-browser";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import {
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 
 import { useAuth } from "@/components/providers/auth-provider";
 import { ActionButton, Card, Screen } from "@/components/ui";
@@ -28,6 +36,10 @@ import {
   getStripeConnectAccountStatus,
   refreshStripeConnectOnboardingLink,
 } from "@/lib/payments/stripe-connect-client";
+import {
+  buildStripeConnectRedirectUrls,
+  openStripeConnectOnboardingSession,
+} from "@/lib/payments/stripe-connect-onboarding";
 import { palette } from "@/styles/theme";
 
 function getStripeActionLabel(input: {
@@ -242,6 +254,7 @@ export function OrganizerSetupScreen() {
         await refreshSetupQueries();
         setCurrentStep(null);
         setPendingStripeReturnRefresh(false);
+        setScreenError(null);
         if (message) {
           setScreenMessage(message);
         }
@@ -360,15 +373,23 @@ export function OrganizerSetupScreen() {
     setPendingStripeReturnRefresh(true);
 
     try {
+      const redirectUrls = buildStripeConnectRedirectUrls("/organizer/setup");
+      const stripeLinkPayload = {
+        refreshUrl: redirectUrls.refreshUrl,
+        returnUrl: redirectUrls.returnUrl,
+      };
       const response =
         stripeAccountQuery.data.connectedAccountId && !stripeAccountQuery.data.isReadyForPaidEvents
-          ? await refreshStripeConnectOnboardingLink(session.accessToken)
+          ? await refreshStripeConnectOnboardingLink(session.accessToken, stripeLinkPayload)
           : stripeAccountQuery.data.connectedAccountId
             ? null
-            : await createStripeConnectOnboardingLink(session.accessToken);
+            : await createStripeConnectOnboardingLink(session.accessToken, stripeLinkPayload);
 
       if (response?.onboardingUrl) {
-        await WebBrowser.openBrowserAsync(response.onboardingUrl);
+        await openStripeConnectOnboardingSession(
+          response.onboardingUrl,
+          redirectUrls.appReturnUrl,
+        );
         await refreshAfterStripeReturn("Returned from Stripe. Refreshing verification state.");
       } else {
         await refreshAfterStripeReturn("Stripe account status refreshed.");
@@ -413,7 +434,15 @@ export function OrganizerSetupScreen() {
       subtitle="Set up your organizer profile and payout path."
       compactHeader
     >
-      <ScrollView contentContainerStyle={styles.content}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        style={styles.flex}
+      >
+      <ScrollView
+        contentContainerStyle={styles.content}
+        keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
+        keyboardShouldPersistTaps="handled"
+      >
         <Card tone="accent" padded={false}>
           <View style={styles.heroShell}>
             <Text style={styles.heroEyebrow}>Setup checklist</Text>
@@ -882,6 +911,7 @@ export function OrganizerSetupScreen() {
           </Card>
         ) : null}
       </ScrollView>
+      </KeyboardAvoidingView>
     </Screen>
   );
 }
@@ -889,7 +919,7 @@ export function OrganizerSetupScreen() {
 const styles = StyleSheet.create({
   content: {
     gap: 16,
-    paddingBottom: 28,
+    paddingBottom: 48,
     paddingHorizontal: 20,
   },
   copy: {
@@ -904,6 +934,9 @@ const styles = StyleSheet.create({
   },
   fieldGroup: {
     gap: 8,
+  },
+  flex: {
+    flex: 1,
   },
   heroCopy: {
     color: palette.muted,

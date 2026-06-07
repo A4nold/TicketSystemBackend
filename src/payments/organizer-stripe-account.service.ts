@@ -29,6 +29,7 @@ export class OrganizerStripeAccountService {
     this.assertConnectEnabled();
     this.assertOrganizer(user);
 
+    await this.tryRefreshStripeAccount(user.id);
     return this.organizerPaymentsQueryService.getOrganizerStripeReadiness(user.id);
   }
 
@@ -332,6 +333,26 @@ export class OrganizerStripeAccountService {
     ].filter(Boolean);
 
     return segments.length > 0 ? segments.join(" | ") : null;
+  }
+
+  private async tryRefreshStripeAccount(organizerId: string) {
+    const paymentAccount = await this.paymentAccountRepository.findStripeAccountByOrganizerId(
+      organizerId,
+    );
+
+    if (!paymentAccount?.externalAccountId) {
+      return;
+    }
+
+    try {
+      const stripe = this.getStripeClient();
+      const stripeAccount = await stripe.accounts.retrieve(paymentAccount.externalAccountId);
+      await this.syncStripeAccountForOrganizer(organizerId, stripeAccount);
+    } catch (error) {
+      this.logger.warn(
+        `payments.stripe.account_sync_on_read_failed organizerId=${organizerId} accountId=${paymentAccount.externalAccountId} reason="${error instanceof Error ? error.message : "Unknown error"}"`,
+      );
+    }
   }
 
   private resolveReturnUrl(providedUrl?: string) {

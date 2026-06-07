@@ -1,6 +1,5 @@
 import { useRouter } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
-import * as WebBrowser from "expo-web-browser";
 import { useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 
@@ -23,6 +22,10 @@ import {
   getStripeConnectAccountStatus,
   refreshStripeConnectOnboardingLink,
 } from "@/lib/payments/stripe-connect-client";
+import {
+  buildStripeConnectRedirectUrls,
+  openStripeConnectOnboardingSession,
+} from "@/lib/payments/stripe-connect-onboarding";
 import { palette } from "@/styles/theme";
 
 function formatMoney(value: string, currency: string) {
@@ -104,15 +107,23 @@ export function OrganizerHomeScreen() {
     setIsOpeningStripe(true);
 
     try {
+      const redirectUrls = buildStripeConnectRedirectUrls("/organizer");
+      const stripeLinkPayload = {
+        refreshUrl: redirectUrls.refreshUrl,
+        returnUrl: redirectUrls.returnUrl,
+      };
       const response =
         account?.connectedAccountId && !account.isReadyForPaidEvents
-          ? await refreshStripeConnectOnboardingLink(session.accessToken)
+          ? await refreshStripeConnectOnboardingLink(session.accessToken, stripeLinkPayload)
           : account?.connectedAccountId
             ? null
-            : await createStripeConnectOnboardingLink(session.accessToken);
+            : await createStripeConnectOnboardingLink(session.accessToken, stripeLinkPayload);
 
       if (response?.onboardingUrl) {
-        await WebBrowser.openBrowserAsync(response.onboardingUrl);
+        await openStripeConnectOnboardingSession(
+          response.onboardingUrl,
+          redirectUrls.appReturnUrl,
+        );
         setPaymentMessage("Returned from Stripe. Refreshing account readiness.");
       } else {
         setPaymentMessage("Stripe status refreshed.");
