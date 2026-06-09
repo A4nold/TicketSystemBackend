@@ -7,6 +7,7 @@ import { PaymentTransactionRepository } from "./repositories/payment-transaction
 import { RefundRepository } from "./repositories/refund.repository";
 import { DisputeRepository } from "./repositories/dispute.repository";
 import {
+  OrganizerPaystackAccountReadiness,
   OrganizerDisputeSummary,
   OrganizerPayoutVisibilitySummary,
   OrganizerRefundSummary,
@@ -53,6 +54,64 @@ export class OrganizerPaymentsQueryService {
       isReadyForPaidEvents: profile?.isReadyForPaidEvents ?? false,
       readinessCheckedAt: profile?.readinessCheckedAt ?? null,
       firstReadyAt: profile?.firstReadyAt ?? null,
+    };
+  }
+
+  async getOrganizerPaystackReadiness(
+    organizerId: string,
+  ): Promise<OrganizerPaystackAccountReadiness> {
+    const [profile, paystackAccount] = await Promise.all([
+      this.paymentAccountRepository.findOrganizerPaymentProfile(organizerId),
+      this.paymentAccountRepository.findPaystackAccountByOrganizerId(organizerId),
+    ]);
+
+    const paystackMetadata =
+      paystackAccount?.metadata &&
+      typeof paystackAccount.metadata === "object" &&
+      !Array.isArray(paystackAccount.metadata)
+        ? ((paystackAccount.metadata as Record<string, unknown>).paystack as
+            | Record<string, unknown>
+            | undefined)
+        : undefined;
+
+    return {
+      organizerId,
+      subaccountCode: paystackAccount?.externalAccountCode ?? null,
+      status: paystackAccount?.status ?? null,
+      onboardingStatus: paystackAccount?.onboardingStatus ?? null,
+      verificationStatus: paystackAccount?.verificationStatus ?? null,
+      payoutsEnabled: paystackAccount?.payoutsEnabled ?? false,
+      chargesEnabled: paystackAccount?.chargesEnabled ?? false,
+      detailsSubmitted: paystackAccount?.detailsSubmitted ?? false,
+      country: paystackAccount?.country ?? null,
+      defaultCurrency: paystackAccount?.defaultCurrency ?? null,
+      disabledReason: paystackAccount?.disabledReason ?? null,
+      isReadyForPaidEvents: profile?.isReadyForPaidEvents ?? false,
+      onboardingCompletedAt: paystackAccount?.onboardingCompletedAt ?? null,
+      lastSyncedAt: paystackAccount?.lastSyncedAt ?? null,
+      readinessCheckedAt: profile?.readinessCheckedAt ?? null,
+      firstReadyAt: profile?.firstReadyAt ?? null,
+      requirementsSummary: paystackAccount?.requirementsSummary ?? null,
+      businessName:
+        typeof paystackMetadata?.businessName === "string"
+          ? paystackMetadata.businessName
+          : null,
+      accountHolderName:
+        typeof paystackMetadata?.accountHolderName === "string"
+          ? paystackMetadata.accountHolderName
+          : null,
+      bankCode:
+        typeof paystackMetadata?.bankCode === "string" ? paystackMetadata.bankCode : null,
+      maskedAccountNumber:
+        typeof paystackMetadata?.maskedAccountNumber === "string"
+          ? paystackMetadata.maskedAccountNumber
+          : null,
+      settlementSchedule:
+        typeof paystackMetadata?.settlementSchedule === "string"
+          ? paystackMetadata.settlementSchedule
+          : null,
+      isVerified: paystackMetadata?.isVerified === true,
+      isActive: paystackMetadata?.isActive === true,
     };
   }
 

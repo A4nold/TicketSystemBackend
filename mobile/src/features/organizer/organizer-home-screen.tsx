@@ -16,6 +16,7 @@ import {
   listOrganizerEvents,
 } from "@/lib/organizer/events-client";
 import { getOrganizerProfile } from "@/lib/organizer/organizer-profile-client";
+import { getPaystackOrganizerAccountStatus } from "@/lib/payments/paystack-organizer-account-client";
 import {
   createStripeConnectOnboardingLink,
   getOrganizerPayoutVisibility,
@@ -37,6 +38,7 @@ function formatMoney(value: string, currency: string) {
 }
 
 function getPaymentActionLabel(input: {
+  provider: "STRIPE" | "PAYSTACK" | "MANUAL" | null | undefined;
   connectedAccountId: string | null;
   isReadyForPaidEvents: boolean;
   onboardingStatus: string | null;
@@ -45,6 +47,10 @@ function getPaymentActionLabel(input: {
     pastDue: string[];
   };
 }) {
+  if (input.provider === "PAYSTACK") {
+    return input.isReadyForPaidEvents ? "Review Paystack status" : "Continue Paystack setup";
+  }
+
   if (!input.connectedAccountId) {
     return "Connect Stripe";
   }
@@ -58,6 +64,18 @@ function getPaymentActionLabel(input: {
   }
 
   return "Resume Stripe onboarding";
+}
+
+function getSelectedProviderLabel(provider: "STRIPE" | "PAYSTACK" | "MANUAL" | null | undefined) {
+  if (provider === "PAYSTACK") {
+    return "Paystack";
+  }
+
+  if (provider === "MANUAL") {
+    return "Manual";
+  }
+
+  return "Stripe";
 }
 
 export function OrganizerHomeScreen() {
@@ -82,6 +100,15 @@ export function OrganizerHomeScreen() {
     queryFn: () => getStripeConnectAccountStatus(session!.accessToken),
     queryKey: ["organizer-stripe-account", session?.accessToken],
   });
+  const paystackAccountQuery = useQuery({
+    enabled: Boolean(
+      session?.accessToken &&
+        hasSurfaceAccess &&
+        organizerProfileQuery.data?.selectedPaymentProvider === "PAYSTACK",
+    ),
+    queryFn: () => getPaystackOrganizerAccountStatus(session!.accessToken),
+    queryKey: ["organizer-paystack-account", session?.accessToken],
+  });
   const payoutVisibilityQuery = useQuery({
     enabled: Boolean(session?.accessToken && hasSurfaceAccess),
     queryFn: () => getOrganizerPayoutVisibility(session!.accessToken),
@@ -92,10 +119,13 @@ export function OrganizerHomeScreen() {
     manageableEventIds.includes(event.id),
   );
   const setupStep = deriveOrganizerSetupStep({
+    paystackAccount: paystackAccountQuery.data,
     profile: organizerProfileQuery.data,
     stripeAccount: stripeAccountQuery.data,
   });
   const organizerSetupComplete = setupStep === "complete";
+  const selectedPaymentProvider = organizerProfileQuery.data?.selectedPaymentProvider ?? null;
+  const payoutVisibility = payoutVisibilityQuery.data;
 
   async function handleStripeAction() {
     if (!session?.accessToken) {
@@ -258,7 +288,9 @@ export function OrganizerHomeScreen() {
             <View style={styles.sectionShell}>
               <Text style={styles.sectionTitle}>Payments</Text>
               <Text style={styles.copy}>
-                Connect Stripe so paid events can publish and revenue can settle to your account.
+                {selectedPaymentProvider
+                  ? `${getSelectedProviderLabel(selectedPaymentProvider)} controls payout readiness. Maya keeps revenue totals consistent here across providers.`
+                  : "Choose a payout provider so paid events can publish and organizer revenue can settle correctly."}
               </Text>
 
               {!organizerProfileQuery.data || !isOrganizerProfileReadyForPayments(organizerProfileQuery.data) ? (
@@ -276,11 +308,61 @@ export function OrganizerHomeScreen() {
               ) : (
                 <>
 
-                  {stripeAccountQuery.isLoading ? (
+                  {selectedPaymentProvider === "PAYSTACK" && paystackAccountQuery.isLoading ? (
+                    <Text style={styles.copy}>Checking Paystack payout readiness.</Text>
+                  ) : null}
+
+                  {selectedPaymentProvider !== "PAYSTACK" && stripeAccountQuery.isLoading ? (
                     <Text style={styles.copy}>Checking Stripe account readiness.</Text>
                   ) : null}
 
-                  {stripeAccountQuery.data ? (
+                  {selectedPaymentProvider === "PAYSTACK" && paystackAccountQuery.data ? (
+                    <>
+                      <View style={styles.paymentStatusRow}>
+                        <View style={styles.metricCardInline}>
+                          <Text style={styles.metricLabelInline}>Paid events</Text>
+                          <Text style={styles.metricValueInline}>
+                            {paystackAccountQuery.data.isReadyForPaidEvents ? "Ready" : "Action needed"}
+                          </Text>
+                        </View>
+                        <View style={styles.metricCardInline}>
+                          <Text style={styles.metricLabelInline}>Subaccount</Text>
+                          <Text style={styles.metricValueInline}>
+                            {paystackAccountQuery.data.subaccountCode ?? "Pending"}
+                          </Text>
+                        </View>
+                      </View>
+
+                      <Text style={styles.copy}>
+                        {paystackAccountQuery.data.isReadyForPaidEvents
+                          ? "Paystack is connected and ready for paid event publishing."
+                          : paystackAccountQuery.data.detailsSubmitted
+                            ? "Paystack payout details are saved, but verification or activation still needs attention."
+                            : "No Paystack organizer payout profile is linked yet."}
+                      </Text>
+
+                      {paystackAccountQuery.data.requirementsSummary ? (
+                        <Text style={styles.warningText}>
+                          {paystackAccountQuery.data.requirementsSummary}
+                        </Text>
+                      ) : null}
+
+                      <ActionButton
+                        onPress={() => {
+                          router.push("/organizer/setup" as never);
+                        }}
+                        title={getPaymentActionLabel({
+                          provider: "PAYSTACK",
+                          connectedAccountId: paystackAccountQuery.data.subaccountCode,
+                          isReadyForPaidEvents: paystackAccountQuery.data.isReadyForPaidEvents,
+                          onboardingStatus: paystackAccountQuery.data.onboardingStatus,
+                          requirements: { currentlyDue: [], pastDue: [] },
+                        })}
+                      />
+                    </>
+                  ) : null}
+
+                  {selectedPaymentProvider !== "PAYSTACK" && stripeAccountQuery.data ? (
                     <>
                       <View style={styles.paymentStatusRow}>
                         <View style={styles.metricCardInline}>
@@ -311,33 +393,13 @@ export function OrganizerHomeScreen() {
                         </Text>
                       ) : null}
 
-                      {payoutVisibilityQuery.data ? (
-                        <View style={styles.paymentStatusRow}>
-                          <View style={styles.metricCardInline}>
-                            <Text style={styles.metricLabelInline}>Net earnings</Text>
-                            <Text style={styles.metricValueInline}>
-                              {formatMoney(
-                                payoutVisibilityQuery.data.netEarnings,
-                                payoutVisibilityQuery.data.currency,
-                              )}
-                            </Text>
-                          </View>
-                          <View style={styles.metricCardInline}>
-                            <Text style={styles.metricLabelInline}>On hold</Text>
-                            <Text style={styles.metricValueInline}>
-                              {formatMoney(
-                                payoutVisibilityQuery.data.onHoldAmount,
-                                payoutVisibilityQuery.data.currency,
-                              )}
-                            </Text>
-                          </View>
-                        </View>
-                      ) : null}
-
                       <ActionButton
                         loading={isOpeningStripe}
                         onPress={() => void handleStripeAction()}
-                        title={getPaymentActionLabel(stripeAccountQuery.data)}
+                        title={getPaymentActionLabel({
+                          provider: "STRIPE",
+                          ...stripeAccountQuery.data,
+                        })}
                       />
                     </>
                   ) : null}
@@ -351,6 +413,40 @@ export function OrganizerHomeScreen() {
                   ) : null}
 
                   {paymentMessage ? <Text style={styles.copy}>{paymentMessage}</Text> : null}
+
+                  {payoutVisibility ? (
+                    <View style={styles.revenueShell}>
+                      <Text style={styles.sectionHint}>Revenue snapshot</Text>
+                      <View style={styles.paymentStatusRow}>
+                        <View style={styles.metricCardInline}>
+                          <Text style={styles.metricLabelInline}>Gross sales</Text>
+                          <Text style={styles.metricValueInline}>
+                            {formatMoney(payoutVisibility.grossSales, payoutVisibility.currency)}
+                          </Text>
+                        </View>
+                        <View style={styles.metricCardInline}>
+                          <Text style={styles.metricLabelInline}>Net earnings</Text>
+                          <Text style={styles.metricValueInline}>
+                            {formatMoney(payoutVisibility.netEarnings, payoutVisibility.currency)}
+                          </Text>
+                        </View>
+                      </View>
+                      <View style={styles.paymentStatusRow}>
+                        <View style={styles.metricCardInline}>
+                          <Text style={styles.metricLabelInline}>Platform fees</Text>
+                          <Text style={styles.metricValueInline}>
+                            {formatMoney(payoutVisibility.platformFees, payoutVisibility.currency)}
+                          </Text>
+                        </View>
+                        <View style={styles.metricCardInline}>
+                          <Text style={styles.metricLabelInline}>Refunded</Text>
+                          <Text style={styles.metricValueInline}>
+                            {formatMoney(payoutVisibility.refundedAmount, payoutVisibility.currency)}
+                          </Text>
+                        </View>
+                      </View>
+                    </View>
+                  ) : null}
                 </>
               )}
             </View>
@@ -538,6 +634,13 @@ const styles = StyleSheet.create({
     gap: 14,
     padding: 18,
   },
+  sectionHint: {
+    color: palette.muted,
+    fontSize: 12,
+    fontWeight: "800",
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+  },
   sectionTitle: {
     color: palette.ink,
     fontSize: 22,
@@ -550,6 +653,9 @@ const styles = StyleSheet.create({
   },
   paymentStatusRow: {
     flexDirection: "row",
+    gap: 10,
+  },
+  revenueShell: {
     gap: 10,
   },
   warningText: {

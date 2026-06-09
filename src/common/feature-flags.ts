@@ -22,3 +22,7 @@ export function isStripeConnectEventPublishGuardEnabled() {
 export function isStripeConnectCheckoutEnabled() {
   return parseBooleanFlag(process.env.ENABLE_STRIPE_CONNECT_CHECKOUT, false);
 }
+
+export function isPaystackOrganizerOnboardingEnabled() {
+  return parseBooleanFlag(process.env.ENABLE_PAYSTACK_ORGANIZER_ONBOARDING, false);
+}

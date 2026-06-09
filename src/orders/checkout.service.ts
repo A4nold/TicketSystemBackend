@@ -412,12 +412,82 @@ export class CheckoutService {
       process.env.PAYSTACK_SECRET_KEY
     ) {
       try {
+        const organizerReadiness =
+          await this.organizerPaymentsQueryService.getOrganizerPaystackReadiness(
+            event.organizerId,
+          );
+
+        if (
+          !organizerReadiness.isReadyForPaidEvents ||
+          !organizerReadiness.subaccountCode
+        ) {
+          throw new BadRequestException({
+            code: "ORGANIZER_PAYMENT_ACCOUNT_NOT_READY",
+            message:
+              "The event organizer must complete Paystack onboarding before paid checkout can start.",
+          });
+        }
+
+        const organizerNetAmount = totals.total.sub(totals.fee);
+        const createdPaymentTransaction = await this.prisma.paymentTransaction.create({
+          data: {
+            organizerId: event.organizerId,
+            eventId: event.id,
+            orderId: order.id,
+            provider: PaymentProvider.PAYSTACK,
+            type: "PRIMARY_TICKET_PURCHASE",
+            status: "PENDING",
+            providerReference: `pending:${order.id}`,
+            providerCheckoutId: order.checkoutSessionId,
+            connectedAccountId: organizerReadiness.subaccountCode,
+            amount: totals.total,
+            currency: totals.currency,
+            grossAmount: totals.total,
+            platformFeeAmount: totals.fee,
+            organizerNetAmount,
+            idempotencyKey: payload.idempotencyKey ?? `order:${order.id}:payment-transaction`,
+            metadata: {
+              eventSlug: event.slug,
+              orderId: order.id,
+              provider: "PAYSTACK",
+              subaccountCode: organizerReadiness.subaccountCode,
+              userId: user.id,
+            },
+          },
+        });
+
+        paymentTransactionId = createdPaymentTransaction.id;
+        connectedAccountId = organizerReadiness.subaccountCode;
+
+        await this.prisma.platformFee.create({
+          data: {
+            paymentTransactionId: createdPaymentTransaction.id,
+            amount: totals.fee,
+            currency: totals.currency,
+            responsibility: feePolicy.responsibility,
+            model: feePolicy.model,
+            percentRate: feePolicy.percentRate,
+            fixedAmount: feePolicy.fixedAmount,
+            fixedFeeApplication: feePolicy.fixedFeeApplication,
+            pricingRuleSnapshot: {
+              displayName: feePolicy.displayName,
+              fixedAmount: feePolicy.fixedAmount.toFixed(2),
+              fixedFeeApplication: feePolicy.fixedFeeApplication,
+              model: feePolicy.model,
+              percentRate: feePolicy.percentRate.toString(),
+              responsibility: feePolicy.responsibility,
+            } as Prisma.InputJsonValue,
+          },
+        });
+
         const session = await this.paymentsService.createPaystackCheckoutTransaction({
           cancelReturnUrl: payload.cancelReturnUrl,
           feeAmount: order.feeAmount,
           feePolicy,
           id: order.id,
           currency: order.currency,
+          paymentTransactionId: createdPaymentTransaction.id,
+          paystackSubaccountCode: organizerReadiness.subaccountCode,
           totalAmount: order.totalAmount,
           userEmail: user.email,
           userId: order.userId,
@@ -451,10 +521,29 @@ export class CheckoutService {
           },
         });
 
+        await this.prisma.paymentTransaction.update({
+          where: { id: createdPaymentTransaction.id },
+          data: {
+            providerCheckoutId: session.checkoutSessionId,
+            providerReference: session.checkoutSessionId,
+          },
+        });
+
         this.logger.log(
           `checkout.create.session_created orderId=${order.id} checkoutSessionId=${checkoutSessionId} paymentStatus=${paymentStatus ?? "unknown"} checkoutStatus=${checkoutStatus ?? "unknown"} awaitingConfirmation=${isAwaitingPaymentConfirmation}`,
         );
       } catch (error) {
+        if (paymentTransactionId) {
+          await this.prisma.paymentTransaction.update({
+            where: { id: paymentTransactionId },
+            data: {
+              failedAt: new Date(),
+              failureReason:
+                error instanceof Error ? error.message : "Paystack checkout failed.",
+              status: "FAILED",
+            },
+          });
+        }
         this.logger.error(
           `checkout.create.session_failed orderId=${order.id} userId=${user.id} provider=${order.paymentProvider} reason="${error instanceof Error ? error.message : "Unknown error"}"`,
         );
@@ -765,7 +854,7 @@ export class CheckoutService {
       user,
     );
 
-    const feePolicy = resolveFeePolicy();
+    const feePolicy = resolveFeePolicy(pricedItems[0]?.currency);
     const totals = this.calculateOrderTotals(pricedItems, requestedItems, feePolicy);
 
     return {

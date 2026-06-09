@@ -27,6 +27,10 @@ function formatMoney(value: string, currency: string) {
   }).format(Number(value));
 }
 
+function formatProvider(provider: "STRIPE" | "PAYSTACK" | "MANUAL") {
+  return provider === "MANUAL" ? "Manual" : provider;
+}
+
 export function OrganizerEventSalesScreen() {
   const { eventId: routeEventId, slug, title } = useLocalSearchParams<{
     eventId?: string;
@@ -173,13 +177,25 @@ export function OrganizerEventSalesScreen() {
               recentTransactions.map((transaction) => (
                 <View key={transaction.id} style={styles.transactionCard}>
                   <View style={styles.transactionHeader}>
-                    <Text style={styles.transactionTitle}>
-                      {transaction.ticketCount} ticket{transaction.ticketCount === 1 ? "" : "s"}
-                    </Text>
-                    <View style={styles.statusPill}>
-                      <Text style={styles.statusPillText}>
-                        {transaction.status.replaceAll("_", " ")}
+                    <View style={styles.transactionTitleGroup}>
+                      <Text style={styles.transactionTitle}>
+                        {transaction.ticketCount} ticket{transaction.ticketCount === 1 ? "" : "s"}
                       </Text>
+                      <Text style={styles.transactionProvider}>
+                        {formatProvider(transaction.provider)}
+                      </Text>
+                    </View>
+                    <View style={styles.pillRow}>
+                      <View style={styles.providerPill}>
+                        <Text style={styles.providerPillText}>
+                          {formatProvider(transaction.provider)}
+                        </Text>
+                      </View>
+                      <View style={styles.statusPill}>
+                        <Text style={styles.statusPillText}>
+                          {transaction.status.replaceAll("_", " ")}
+                        </Text>
+                      </View>
                     </View>
                   </View>
                   <Text style={styles.transactionMeta}>{formatDateTime(transaction.createdAt)}</Text>
@@ -276,6 +292,11 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 22,
   },
+  pillRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 8,
+  },
   metricCard: {
     backgroundColor: "#ffffff",
     borderColor: "#e2d6c8",
@@ -302,6 +323,21 @@ const styles = StyleSheet.create({
     color: palette.ink,
     fontSize: 22,
     fontWeight: "800",
+  },
+  providerPill: {
+    alignItems: "center",
+    backgroundColor: palette.accentSoft,
+    borderRadius: 999,
+    justifyContent: "center",
+    minHeight: 32,
+    minWidth: 84,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  providerPillText: {
+    color: palette.accentDeep,
+    fontSize: 12,
+    fontWeight: "700",
   },
   refundCopy: {
     color: palette.muted,
@@ -362,10 +398,20 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "700",
   },
+  transactionProvider: {
+    color: palette.muted,
+    fontSize: 12,
+    fontWeight: "700",
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+  },
   transactionTitle: {
     color: palette.ink,
-    flex: 1,
     fontSize: 16,
     fontWeight: "700",
+  },
+  transactionTitleGroup: {
+    flex: 1,
+    gap: 4,
   },
 });

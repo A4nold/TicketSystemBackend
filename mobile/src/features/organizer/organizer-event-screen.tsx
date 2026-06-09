@@ -57,6 +57,7 @@ import {
   updateOrganizerTicketType,
 } from "@/lib/organizer/events-client";
 import { getOrganizerProfile } from "@/lib/organizer/organizer-profile-client";
+import { getPaystackOrganizerAccountStatus } from "@/lib/payments/paystack-organizer-account-client";
 import {
   acceptOrganizerOffer,
   listOrganizerOffers,
@@ -139,7 +140,7 @@ function getPaidEventSetupMessage(input: {
   }
 
   if (input.provider === "PAYSTACK") {
-    return "Paystack organizer payout onboarding is not active in this mobile flow yet. Review provider setup before publishing paid events.";
+    return "Finish Paystack payout setup before publishing paid events.";
   }
 
   if (input.setupStep === "payments") {
@@ -419,6 +420,15 @@ export function OrganizerEventScreen() {
     queryFn: () => getStripeConnectAccountStatus(session!.accessToken),
     queryKey: ["organizer-stripe-account", session?.accessToken],
   });
+  const paystackAccountQuery = useQuery({
+    enabled: Boolean(
+      session?.accessToken &&
+        hasSurfaceAccess &&
+        organizerProfileQuery.data?.selectedPaymentProvider === "PAYSTACK",
+    ),
+    queryFn: () => getPaystackOrganizerAccountStatus(session!.accessToken),
+    queryKey: ["organizer-paystack-account", session?.accessToken],
+  });
   const pristineEventForm = eventDetailQuery.data ? toEventEditorState(eventDetailQuery.data) : null;
   const pristineTicketTypeForm = useMemo(() => {
     const currentTicketType = eventDetailQuery.data?.ticketTypes.find(
@@ -446,6 +456,7 @@ export function OrganizerEventScreen() {
       ticketTypeRequiresStripeReadiness(ticketType),
     ) || ticketTypeRequiresStripeReadiness(ticketTypeForm);
   const organizerSetupStep = deriveOrganizerSetupStep({
+    paystackAccount: paystackAccountQuery.data,
     profile: organizerProfileQuery.data,
     stripeAccount: stripeAccountQuery.data,
   });
@@ -730,6 +741,7 @@ export function OrganizerEventScreen() {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ["organizer-events", session?.accessToken] }),
       queryClient.invalidateQueries({ queryKey: ["organizer-profile", session?.accessToken] }),
+      queryClient.invalidateQueries({ queryKey: ["organizer-paystack-account", session?.accessToken] }),
       queryClient.invalidateQueries({ queryKey: ["organizer-stripe-account", session?.accessToken] }),
       queryClient.invalidateQueries({
         queryKey: ["organizer-event-detail", selectedSummary?.slug, session?.accessToken],
@@ -810,7 +822,11 @@ export function OrganizerEventScreen() {
             setupStep: organizerSetupStep,
           }),
         );
-        await Promise.all([stripeAccountQuery.refetch(), organizerProfileQuery.refetch()]);
+        await Promise.all([
+          stripeAccountQuery.refetch(),
+          paystackAccountQuery.refetch(),
+          organizerProfileQuery.refetch(),
+        ]);
       } else {
         setErrorMessage(getErrorMessage(error, "Event details couldn't be saved right now."));
       }

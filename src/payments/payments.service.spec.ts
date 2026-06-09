@@ -144,6 +144,43 @@ describe("PaymentsService Paystack", () => {
     );
   });
 
+  it("passes paystack split allocation fields when an organizer subaccount exists", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      json: () =>
+        Promise.resolve({
+          status: true,
+          message: "Authorization URL created",
+          data: {
+            authorization_url: "https://checkout.paystack.com/access-code",
+            reference: "order-order123-mock",
+          },
+        }),
+      ok: true,
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await service.createPaystackCheckoutTransaction({
+      ...createCheckoutOrder(),
+      paystackSubaccountCode: "ACCT_paystack_123",
+      paymentTransactionId: "txn_123",
+    });
+
+    const requestBody = JSON.parse(fetchMock.mock.calls[0]![1].body);
+    expect(requestBody).toEqual(
+      expect.objectContaining({
+        bearer: "account",
+        subaccount: "ACCT_paystack_123",
+        transaction_charge: 150,
+      }),
+    );
+    expect(requestBody.metadata).toEqual(
+      expect.objectContaining({
+        orderId: "order_123",
+        paymentTransactionId: "txn_123",
+      }),
+    );
+  });
+
   it("rejects Paystack webhooks with an invalid signature", async () => {
     const rawBody = Buffer.from(JSON.stringify({ event: "charge.success" }));
 

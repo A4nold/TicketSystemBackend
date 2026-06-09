@@ -26,6 +26,8 @@ type CheckoutOrder = {
   feePolicy: FeePolicy;
   id: string;
   currency: string;
+  paystackSubaccountCode?: string | null;
+  paymentTransactionId?: string | null;
   totalAmount: Prisma.Decimal;
   successReturnUrl?: string;
   userEmail: string;
@@ -236,15 +238,21 @@ export class PaymentsService {
       {
         body: JSON.stringify({
           amount: this.toPaymentSubunit(order.totalAmount),
+          bearer: order.paystackSubaccountCode ? "account" : undefined,
           callback_url: callbackUrl,
           currency: order.currency.toUpperCase(),
           email: order.userEmail,
           metadata: {
             eventSlug: order.event.slug,
             orderId: order.id,
+            paymentTransactionId: order.paymentTransactionId ?? null,
             userId: order.userId,
           },
           reference,
+          subaccount: order.paystackSubaccountCode ?? undefined,
+          transaction_charge: order.paystackSubaccountCode
+            ? this.toPaymentSubunit(order.feeAmount)
+            : undefined,
         }),
         method: "POST",
       },
@@ -1577,6 +1585,36 @@ export class PaymentsService {
       );
     }
 
+    const paidAt = order.paidAt ?? new Date();
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.paymentTransaction.updateMany({
+        where: {
+          orderId: order.id,
+          provider: PaymentProvider.PAYSTACK,
+        },
+        data: {
+          status: PaymentTransactionStatus.SUCCEEDED,
+          providerReference: reference,
+          providerCheckoutId: reference,
+          capturedAt: paidAt,
+          failedAt: null,
+          failureReason: null,
+        },
+      });
+
+      const paymentTransaction = await tx.paymentTransaction.findFirst({
+        where: {
+          orderId: order.id,
+          provider: PaymentProvider.PAYSTACK,
+        },
+      });
+
+      if (paymentTransaction) {
+        await this.ensureOrganizerEarningForTransaction(tx, paymentTransaction.id);
+      }
+    });
+
     await this.markOrderPaidFromStripeSession({
       client_reference_id: order.id,
       id: reference,
@@ -1608,6 +1646,19 @@ export class PaymentsService {
       data: {
         cancelledAt: new Date(),
         status: OrderStatus.CANCELLED,
+      },
+    });
+
+    await this.prisma.paymentTransaction.updateMany({
+      where: {
+        orderId: order.id,
+        provider: PaymentProvider.PAYSTACK,
+      },
+      data: {
+        canceledAt: new Date(),
+        providerCheckoutId: reference,
+        providerReference: reference,
+        status: PaymentTransactionStatus.CANCELLED,
       },
     });
 

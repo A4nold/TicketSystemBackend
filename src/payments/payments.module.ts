@@ -4,6 +4,8 @@ import { NotificationsModule } from "../notifications/notifications.module";
 import { AdminPaymentsController } from "./admin-payments.controller";
 import { AdminPaymentsGuard } from "./admin-payments.guard";
 import { AdminPaymentsOperationsService } from "./admin-payments-operations.service";
+import { OrganizerPaystackPaymentsController } from "./organizer-paystack-payments.controller";
+import { OrganizerPaystackAccountService } from "./organizer-paystack-account.service";
 import { OrganizerPaymentsController } from "./organizer-payments.controller";
 import { OrganizerPaymentsQueryService } from "./organizer-payments-query.service";
 import { OrganizerStripeAccountService } from "./organizer-stripe-account.service";
@@ -25,6 +27,7 @@ import { PaymentsService } from "./payments.service";
     PaymentsController,
     PaymentsReturnsController,
     OrganizerPaymentsController,
+    OrganizerPaystackPaymentsController,
     AdminPaymentsController,
   ],
   providers: [
@@ -32,6 +35,7 @@ import { PaymentsService } from "./payments.service";
     AdminPaymentsOperationsService,
     PaymentsService,
     OrganizerPaymentsQueryService,
+    OrganizerPaystackAccountService,
     OrganizerStripeAccountService,
     PaymentAccountRepository,
     DisputeRepository,
@@ -46,6 +50,7 @@ import { PaymentsService } from "./payments.service";
     AdminPaymentsOperationsService,
     PaymentsService,
     OrganizerPaymentsQueryService,
+    OrganizerPaystackAccountService,
     OrganizerStripeAccountService,
     PaymentAccountRepository,
     DisputeRepository,

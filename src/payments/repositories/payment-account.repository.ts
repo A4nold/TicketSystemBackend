@@ -24,6 +24,17 @@ export class PaymentAccountRepository {
     });
   }
 
+  findPaystackAccountByOrganizerId(organizerId: string) {
+    return this.prisma.paymentAccount.findUnique({
+      where: {
+        organizerId_provider: {
+          organizerId,
+          provider: PaymentProvider.PAYSTACK,
+        },
+      },
+    });
+  }
+
   findByProviderAndExternalAccountId(
     provider: PaymentProvider,
     externalAccountId: string,

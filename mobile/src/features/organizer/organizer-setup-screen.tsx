@@ -32,6 +32,15 @@ import {
   type PaymentProviderCode,
 } from "@/lib/payments/payment-provider-client";
 import {
+  createPaystackOrganizerAccount,
+  getPaystackOrganizerAccountStatus,
+  listPaystackBanks,
+  resolvePaystackBankAccount,
+  updatePaystackOrganizerAccount,
+  type PaystackBankSummary,
+  type ResolvedPaystackBankAccount,
+} from "@/lib/payments/paystack-organizer-account-client";
+import {
   createStripeConnectOnboardingLink,
   getStripeConnectAccountStatus,
   refreshStripeConnectOnboardingLink,
@@ -124,6 +133,13 @@ function getReachableSetupSteps(input: {
       >
     | null
     | undefined;
+  paystackAccount:
+    | {
+        detailsSubmitted: boolean;
+        isReadyForPaidEvents: boolean;
+      }
+    | null
+    | undefined;
   stripeAccount:
     | {
         connectedAccountId: string | null;
@@ -150,6 +166,10 @@ function getReachableSetupSteps(input: {
     reachable.add("payments");
   }
 
+  if (input.profile?.selectedPaymentProvider === "PAYSTACK" && input.paystackAccount?.detailsSubmitted) {
+    reachable.add("verification");
+  }
+
   if (input.stripeAccount?.connectedAccountId) {
     reachable.add("verification");
   }
@@ -172,11 +192,20 @@ export function OrganizerSetupScreen() {
   const [defaultPayoutCurrency, setDefaultPayoutCurrency] = useState("");
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [isSavingProvider, setIsSavingProvider] = useState(false);
+  const [isSavingPaystackAccount, setIsSavingPaystackAccount] = useState(false);
   const [isOpeningStripe, setIsOpeningStripe] = useState(false);
   const [isRefreshingAfterReturn, setIsRefreshingAfterReturn] = useState(false);
   const [pendingStripeReturnRefresh, setPendingStripeReturnRefresh] = useState(false);
   const [screenError, setScreenError] = useState<string | null>(null);
   const [screenMessage, setScreenMessage] = useState<string | null>(null);
+  const [paystackBusinessName, setPaystackBusinessName] = useState("");
+  const [paystackAccountHolderName, setPaystackAccountHolderName] = useState("");
+  const [paystackBankSearch, setPaystackBankSearch] = useState("");
+  const [paystackBankCode, setPaystackBankCode] = useState("");
+  const [paystackAccountNumber, setPaystackAccountNumber] = useState("");
+  const [resolvedPaystackAccount, setResolvedPaystackAccount] =
+    useState<ResolvedPaystackBankAccount | null>(null);
+  const [isResolvingPaystackAccount, setIsResolvingPaystackAccount] = useState(false);
 
   const organizerProfileQuery = useQuery({
     enabled: Boolean(session?.accessToken),
@@ -188,6 +217,20 @@ export function OrganizerSetupScreen() {
     enabled: Boolean(session?.accessToken),
     queryFn: () => getStripeConnectAccountStatus(session!.accessToken),
     queryKey: ["organizer-stripe-account", session?.accessToken],
+  });
+  const paystackAccountQuery = useQuery({
+    enabled: Boolean(
+      session?.accessToken && organizerProfileQuery.data?.selectedPaymentProvider === "PAYSTACK",
+    ),
+    queryFn: () => getPaystackOrganizerAccountStatus(session!.accessToken),
+    queryKey: ["organizer-paystack-account", session?.accessToken],
+  });
+  const paystackBanksQuery = useQuery({
+    enabled: Boolean(
+      session?.accessToken && organizerProfileQuery.data?.selectedPaymentProvider === "PAYSTACK",
+    ),
+    queryFn: () => listPaystackBanks(session!.accessToken),
+    queryKey: ["paystack-banks", session?.accessToken],
   });
   const providerAvailabilityQuery = useQuery({
     enabled: Boolean(
@@ -208,17 +251,19 @@ export function OrganizerSetupScreen() {
     () =>
       deriveOrganizerSetupStep({
         profile: organizerProfileQuery.data,
+        paystackAccount: paystackAccountQuery.data,
         stripeAccount: stripeAccountQuery.data,
       }),
-    [organizerProfileQuery.data, stripeAccountQuery.data],
+    [organizerProfileQuery.data, paystackAccountQuery.data, stripeAccountQuery.data],
   );
   const reachableSteps = useMemo(
     () =>
       getReachableSetupSteps({
         profile: organizerProfileQuery.data,
+        paystackAccount: paystackAccountQuery.data,
         stripeAccount: stripeAccountQuery.data,
       }),
-    [organizerProfileQuery.data, stripeAccountQuery.data],
+    [organizerProfileQuery.data, paystackAccountQuery.data, stripeAccountQuery.data],
   );
 
   useEffect(() => {
@@ -231,6 +276,48 @@ export function OrganizerSetupScreen() {
     setCountry(organizerProfileQuery.data.country ?? "");
     setDefaultPayoutCurrency(organizerProfileQuery.data.defaultPayoutCurrency ?? "");
   }, [organizerProfileQuery.data]);
+
+  useEffect(() => {
+    if (paystackAccountQuery.data) {
+      setPaystackBusinessName(
+        paystackAccountQuery.data.businessName ??
+          organizerProfileQuery.data?.businessName ??
+          organizerProfileQuery.data?.displayName ??
+          "",
+      );
+      setPaystackAccountHolderName(paystackAccountQuery.data.accountHolderName ?? "");
+      setPaystackBankCode(paystackAccountQuery.data.bankCode ?? "");
+      setPaystackBankSearch(paystackAccountQuery.data.bankCode ?? "");
+      return;
+    }
+
+    setPaystackBusinessName(
+      organizerProfileQuery.data?.businessName ?? organizerProfileQuery.data?.displayName ?? "",
+    );
+  }, [organizerProfileQuery.data, paystackAccountQuery.data]);
+
+  useEffect(() => {
+    setResolvedPaystackAccount(null);
+    setScreenMessage((current) =>
+      current?.startsWith("Resolved account owner:") ? null : current,
+    );
+  }, [paystackBankCode, paystackAccountNumber]);
+
+  const filteredPaystackBanks = useMemo(() => {
+    const banks = paystackBanksQuery.data ?? [];
+    const query = paystackBankSearch.trim().toLowerCase();
+
+    if (!query) {
+      return banks.slice(0, 8);
+    }
+
+    return banks
+      .filter(
+        (bank) =>
+          bank.name.toLowerCase().includes(query) || bank.code.toLowerCase().includes(query),
+      )
+      .slice(0, 8);
+  }, [paystackBankSearch, paystackBanksQuery.data]);
 
   useEffect(() => {
     setCurrentStep((existing) => {
@@ -262,7 +349,7 @@ export function OrganizerSetupScreen() {
         setIsRefreshingAfterReturn(false);
       }
     },
-    [organizerProfileQuery, queryClient, session?.accessToken, stripeAccountQuery],
+    [organizerProfileQuery, queryClient, session?.accessToken, stripeAccountQuery, paystackAccountQuery],
   );
 
   useFocusEffect(
@@ -290,6 +377,15 @@ export function OrganizerSetupScreen() {
       queryClient.invalidateQueries({ queryKey: ["organizer-stripe-account", session?.accessToken] }),
       queryClient.invalidateQueries({ queryKey: ["organizer-payout-visibility", session?.accessToken] }),
     ]);
+
+    if (organizerProfileQuery.data?.selectedPaymentProvider === "PAYSTACK") {
+      await Promise.all([
+        paystackAccountQuery.refetch(),
+        queryClient.invalidateQueries({
+          queryKey: ["organizer-paystack-account", session?.accessToken],
+        }),
+      ]);
+    }
   }
 
   async function handleIdentitySubmit() {
@@ -426,7 +522,112 @@ export function OrganizerSetupScreen() {
     }
   }
 
+  async function handlePaystackAccountSubmit() {
+    if (!session?.accessToken) {
+      return;
+    }
+
+    const trimmedBusinessName = paystackBusinessName.trim();
+    const trimmedAccountHolderName = paystackAccountHolderName.trim();
+    const trimmedBankCode = paystackBankCode.trim();
+    const trimmedAccountNumber = paystackAccountNumber.trim();
+
+    if (!trimmedBusinessName) {
+      setScreenError("Add the organizer business name for this Paystack payout profile.");
+      return;
+    }
+
+    if (!trimmedBankCode) {
+      setScreenError("Add the Paystack bank code for this payout profile.");
+      return;
+    }
+
+    if (trimmedAccountNumber.length < 6) {
+      setScreenError("Add the account number for this payout profile.");
+      return;
+    }
+
+    if (!resolvedPaystackAccount) {
+      setScreenError("Resolve the bank account first so Maya can confirm the payout owner.");
+      return;
+    }
+
+    setScreenError(null);
+    setScreenMessage(null);
+    setIsSavingPaystackAccount(true);
+
+    try {
+      const payload = {
+        accountHolderName: trimmedAccountHolderName || resolvedPaystackAccount.accountName,
+        accountNumber: trimmedAccountNumber,
+        bankCode: trimmedBankCode,
+        businessName: trimmedBusinessName,
+      };
+
+      if (paystackAccountQuery.data?.detailsSubmitted) {
+        await updatePaystackOrganizerAccount(session.accessToken, payload);
+        setScreenMessage("Paystack payout details updated.");
+      } else {
+        await createPaystackOrganizerAccount(session.accessToken, payload);
+        setScreenMessage(
+          "Paystack payout details saved and the payout account is now connected.",
+        );
+      }
+
+      setPaystackAccountNumber("");
+      await refreshSetupQueries();
+      setCurrentStep("verification");
+    } catch (error) {
+      setScreenError(
+        error instanceof Error ? error.message : "Paystack payout details couldn't be saved.",
+      );
+    } finally {
+      setIsSavingPaystackAccount(false);
+    }
+  }
+
+  async function handleResolvePaystackAccount() {
+    if (!session?.accessToken) {
+      return;
+    }
+
+    const trimmedBankCode = paystackBankCode.trim();
+    const trimmedAccountNumber = paystackAccountNumber.trim();
+
+    if (!trimmedBankCode) {
+      setScreenError("Pick a bank before resolving the account.");
+      return;
+    }
+
+    if (trimmedAccountNumber.length < 6) {
+      setScreenError("Add the account number before resolving it.");
+      return;
+    }
+
+    setScreenError(null);
+    setScreenMessage(null);
+    setIsResolvingPaystackAccount(true);
+
+    try {
+      const resolved = await resolvePaystackBankAccount(session.accessToken, {
+        accountNumber: trimmedAccountNumber,
+        bankCode: trimmedBankCode,
+      });
+      setResolvedPaystackAccount(resolved);
+      setPaystackAccountHolderName((existing) => existing || resolved.accountName);
+      setScreenMessage(`Resolved account owner: ${resolved.accountName}`);
+    } catch (error) {
+      setResolvedPaystackAccount(null);
+      setScreenError(
+        error instanceof Error ? error.message : "Paystack account resolution failed.",
+      );
+    } finally {
+      setIsResolvingPaystackAccount(false);
+    }
+  }
+
   const step = currentStep ?? derivedStep;
+  const paystackAccountLocked = Boolean(paystackAccountQuery.data?.subaccountCode);
 
   return (
     <Screen
@@ -505,7 +706,7 @@ export function OrganizerSetupScreen() {
           </Card>
         ) : null}
 
-        {organizerProfileQuery.isLoading || stripeAccountQuery.isLoading ? (
+        {organizerProfileQuery.isLoading || stripeAccountQuery.isLoading || paystackAccountQuery.isLoading ? (
           <Card>
             <Text style={styles.sectionTitle}>Loading organizer setup</Text>
             <Text style={styles.copy}>Checking your saved profile and payout readiness.</Text>
@@ -535,7 +736,7 @@ export function OrganizerSetupScreen() {
                     hasCompletedOrganizerIdentity(organizerProfileQuery.data)
                       ? hasCompletedOrganizerLocation(organizerProfileQuery.data)
                         ? organizerProfileQuery.data?.selectedPaymentProvider
-                          ? "payments"
+                          ? derivedStep
                           : "provider"
                         : "location"
                       : "identity",
@@ -746,17 +947,17 @@ export function OrganizerSetupScreen() {
           </Card>
         ) : null}
 
-        {!stripeAccountQuery.isLoading && step === "payments" && stripeAccountQuery.data ? (
+        {!stripeAccountQuery.isLoading && !paystackAccountQuery.isLoading && step === "payments" ? (
           <Card padded={false}>
             <View style={styles.sectionShell}>
               <Text style={styles.sectionTitle}>Connect payouts</Text>
               <Text style={styles.copy}>
                 {organizerProfileQuery.data?.selectedPaymentProvider === "STRIPE"
-                  ? "Stripe Connect handles organizer payouts for this setup path. We’ll send you to Stripe and bring you back here when you’re done."
-                  : "Your selected provider will appear here once its organizer onboarding path is active for this rollout."}
+                  ? "Connect or refresh your Stripe payout account."
+                  : "Add your payout details, resolve the account, then save."}
               </Text>
 
-              {organizerProfileQuery.data?.selectedPaymentProvider === "STRIPE" ? (
+              {organizerProfileQuery.data?.selectedPaymentProvider === "STRIPE" && stripeAccountQuery.data ? (
                 <>
                   <Text style={styles.value}>
                     {stripeAccountQuery.data.connectedAccountId
@@ -778,7 +979,7 @@ export function OrganizerSetupScreen() {
                     </View>
                   </View>
                   <Text style={styles.copy}>
-                    Status: {stripeAccountQuery.data.status ?? "Unknown"}
+                    {stripeAccountQuery.data.status ?? "Unknown"}
                     {stripeAccountQuery.data.lastSyncedAt
                       ? ` • Last synced ${new Date(stripeAccountQuery.data.lastSyncedAt).toLocaleString()}`
                       : ""}
@@ -800,6 +1001,157 @@ export function OrganizerSetupScreen() {
                     />
                   ) : null}
                 </>
+              ) : organizerProfileQuery.data?.selectedPaymentProvider === "PAYSTACK" ? (
+                <>
+                  <View style={styles.fieldGroup}>
+                    <Text style={styles.label}>Business name</Text>
+                    <TextInput
+                      autoCapitalize="words"
+                      editable={!paystackAccountLocked}
+                      onChangeText={setPaystackBusinessName}
+                      placeholder="Campus Night Limited"
+                      placeholderTextColor={palette.muted}
+                      style={styles.input}
+                      value={paystackBusinessName}
+                    />
+                  </View>
+
+                  <View style={styles.fieldGroup}>
+                    <Text style={styles.label}>Account holder name</Text>
+                    <TextInput
+                      autoCapitalize="words"
+                      editable={!paystackAccountLocked}
+                      onChangeText={setPaystackAccountHolderName}
+                      placeholder="Campus Night Limited"
+                      placeholderTextColor={palette.muted}
+                      style={styles.input}
+                      value={paystackAccountHolderName}
+                    />
+                  </View>
+
+                  <View style={styles.fieldGroup}>
+                    <Text style={styles.label}>Find your bank</Text>
+                    <TextInput
+                      autoCapitalize="words"
+                      editable={!paystackAccountLocked}
+                      onChangeText={setPaystackBankSearch}
+                      placeholder="Search bank name"
+                      placeholderTextColor={palette.muted}
+                      style={styles.input}
+                      value={paystackBankSearch}
+                    />
+                  </View>
+
+                  {paystackBanksQuery.isLoading ? (
+                    <Text style={styles.copy}>Loading Paystack bank list…</Text>
+                  ) : null}
+
+                  {filteredPaystackBanks.length ? (
+                    <View style={styles.bankList}>
+                      {filteredPaystackBanks.map((bank: PaystackBankSummary) => {
+                        const isSelected = paystackBankCode === bank.code;
+
+                        return (
+                          <Pressable
+                            disabled={paystackAccountLocked}
+                            key={bank.code}
+                            onPress={() => {
+                              setPaystackBankCode(bank.code);
+                              setPaystackBankSearch(bank.name);
+                            }}
+                            style={[
+                              styles.bankOption,
+                              isSelected ? styles.bankOptionSelected : null,
+                            ]}
+                          >
+                            <Text
+                              style={[
+                                styles.bankOptionTitle,
+                                isSelected ? styles.bankOptionTitleSelected : null,
+                              ]}
+                            >
+                              {bank.name}
+                            </Text>
+                            <Text style={styles.bankOptionMeta}>{bank.code}</Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  ) : null}
+
+                  <View style={styles.fieldGroup}>
+                    <Text style={styles.label}>Bank code</Text>
+                    <TextInput
+                      autoCapitalize="characters"
+                      editable={!paystackAccountLocked}
+                      onChangeText={setPaystackBankCode}
+                      placeholder="058"
+                      placeholderTextColor={palette.muted}
+                      style={styles.input}
+                      value={paystackBankCode}
+                    />
+                  </View>
+
+                  <View style={styles.fieldGroup}>
+                    <Text style={styles.label}>Account number</Text>
+                    <TextInput
+                      editable={!paystackAccountLocked}
+                      keyboardType="number-pad"
+                      onChangeText={setPaystackAccountNumber}
+                      placeholder={
+                        paystackAccountQuery.data?.maskedAccountNumber ?? "0123456789"
+                      }
+                      placeholderTextColor={palette.muted}
+                      style={styles.input}
+                      value={paystackAccountNumber}
+                    />
+                  </View>
+
+                  {paystackAccountQuery.data?.requirementsSummary ? (
+                    <Text style={styles.copy}>{paystackAccountQuery.data.requirementsSummary}</Text>
+                  ) : null}
+
+                  {paystackAccountLocked ? (
+                    <Card tone="warning">
+                      <Text style={styles.metricLabel}>Connected payout account</Text>
+                      <Text style={styles.copy}>
+                        This payout account is already connected. Editing live details will come in
+                        a follow-up wave.
+                      </Text>
+                    </Card>
+                  ) : null}
+
+                  {resolvedPaystackAccount ? (
+                    <Card tone="accent">
+                      <Text style={styles.metricLabel}>Resolved account owner</Text>
+                      <Text style={styles.value}>{resolvedPaystackAccount.accountName}</Text>
+                      <Text style={styles.providerMeta}>
+                        {resolvedPaystackAccount.accountNumber} • {resolvedPaystackAccount.bankCode}
+                      </Text>
+                    </Card>
+                  ) : null}
+
+                  <ActionButton
+                    disabled={paystackAccountLocked}
+                    loading={isResolvingPaystackAccount}
+                    onPress={() => void handleResolvePaystackAccount()}
+                    title="Resolve account name"
+                    variant="secondary"
+                  />
+
+                  <ActionButton
+                    disabled={paystackAccountLocked}
+                    loading={isSavingPaystackAccount}
+                    onPress={() => void handlePaystackAccountSubmit()}
+                    title={
+                      paystackAccountLocked
+                        ? "Paystack account connected"
+                        : paystackAccountQuery.data?.detailsSubmitted
+                        ? "Update Paystack payout details"
+                        : "Save Paystack payout details"
+                    }
+                  />
+                </>
               ) : (
                 <ActionButton
                   onPress={() => {
@@ -813,14 +1165,18 @@ export function OrganizerSetupScreen() {
           </Card>
         ) : null}
 
-        {!stripeAccountQuery.isLoading && step === "verification" && stripeAccountQuery.data ? (
+        {!stripeAccountQuery.isLoading && !paystackAccountQuery.isLoading && step === "verification" ? (
           <Card padded={false}>
             <View style={styles.sectionShell}>
               <Text style={styles.sectionTitle}>Verification</Text>
               <Text style={styles.copy}>
-                We’re checking whether Stripe has everything needed for paid event publishing and
-                payouts.
+                {organizerProfileQuery.data?.selectedPaymentProvider === "STRIPE"
+                  ? "We’re checking whether Stripe has everything needed for paid event publishing and payouts."
+                  : "We’ve created the Paystack payout profile. Maya is now checking whether the subaccount is active and verified for paid events."}
               </Text>
+              {organizerProfileQuery.data?.selectedPaymentProvider === "STRIPE" &&
+              stripeAccountQuery.data ? (
+                <>
               <Text style={styles.value}>
                 {stripeAccountQuery.data.isReadyForPaidEvents
                   ? "Stripe is ready for paid events."
@@ -889,6 +1245,72 @@ export function OrganizerSetupScreen() {
                 title="Refresh verification state"
                 variant="secondary"
               />
+                </>
+              ) : organizerProfileQuery.data?.selectedPaymentProvider === "PAYSTACK" &&
+                paystackAccountQuery.data ? (
+                <>
+                  <Text style={styles.value}>
+                    {paystackAccountQuery.data.detailsSubmitted
+                      ? "Paystack payout details are saved."
+                      : "Paystack payout details still need attention."}
+                  </Text>
+
+                  <View style={styles.metricRow}>
+                    <View style={styles.metricCard}>
+                      <Text style={styles.metricLabel}>Business</Text>
+                      <Text style={styles.metricValueSmall}>
+                        {paystackAccountQuery.data.businessName ?? "Pending"}
+                      </Text>
+                    </View>
+                    <View style={styles.metricCard}>
+                      <Text style={styles.metricLabel}>Bank code</Text>
+                      <Text style={styles.metricValueSmall}>
+                        {paystackAccountQuery.data.bankCode ?? "Pending"}
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={styles.metricRow}>
+                    <View style={styles.metricCard}>
+                      <Text style={styles.metricLabel}>Account</Text>
+                      <Text style={styles.metricValueSmall}>
+                        {paystackAccountQuery.data.maskedAccountNumber ?? "Pending"}
+                      </Text>
+                    </View>
+                    <View style={styles.metricCard}>
+                      <Text style={styles.metricLabel}>Verification</Text>
+                      <Text style={styles.metricValueSmall}>
+                        {paystackAccountQuery.data.verificationStatus ?? "Pending"}
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={styles.metricRow}>
+                    <View style={styles.metricCard}>
+                      <Text style={styles.metricLabel}>Subaccount</Text>
+                      <Text style={styles.metricValueSmall}>
+                        {paystackAccountQuery.data.subaccountCode ?? "Pending"}
+                      </Text>
+                    </View>
+                    <View style={styles.metricCard}>
+                      <Text style={styles.metricLabel}>Payouts</Text>
+                      <Text style={styles.metricValueSmall}>
+                        {paystackAccountQuery.data.payoutsEnabled ? "Enabled" : "Pending"}
+                      </Text>
+                    </View>
+                  </View>
+
+                  {paystackAccountQuery.data.requirementsSummary ? (
+                    <Text style={styles.copy}>{paystackAccountQuery.data.requirementsSummary}</Text>
+                  ) : null}
+
+                  <ActionButton
+                    onPress={() => {
+                      setCurrentStep("payments");
+                    }}
+                    title="Review payout details"
+                    variant="secondary"
+                  />
+                </>
+              ) : null}
             </View>
           </Card>
         ) : null}
@@ -921,6 +1343,35 @@ const styles = StyleSheet.create({
     gap: 16,
     paddingBottom: 48,
     paddingHorizontal: 20,
+  },
+  bankList: {
+    gap: 8,
+  },
+  bankOption: {
+    backgroundColor: palette.card,
+    borderColor: palette.divider,
+    borderRadius: 14,
+    borderWidth: 1,
+    gap: 4,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  bankOptionMeta: {
+    color: palette.muted,
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  bankOptionSelected: {
+    borderColor: palette.accent,
+    borderWidth: 2,
+  },
+  bankOptionTitle: {
+    color: palette.ink,
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  bankOptionTitleSelected: {
+    color: palette.accentDeep,
   },
   copy: {
     color: palette.muted,

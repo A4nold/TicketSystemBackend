@@ -8,6 +8,7 @@ export type OrganizerEventSalesTransaction = {
   orderId: string | null;
   organizerNetAmount: string;
   platformFeeAmount: string;
+  provider: "STRIPE" | "PAYSTACK" | "MANUAL";
   status: string;
   ticketCount: number;
 };

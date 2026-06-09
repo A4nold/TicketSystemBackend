@@ -24,6 +24,9 @@ export class EventSalesTransactionDto {
   @ApiProperty()
   id!: string;
 
+  @ApiProperty()
+  provider!: string;
+
   @ApiProperty({ nullable: true })
   orderId!: string | null;
 

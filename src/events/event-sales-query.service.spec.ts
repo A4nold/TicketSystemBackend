@@ -60,6 +60,7 @@ describe("EventSalesQueryService", () => {
         orderId: "order_1",
         organizerNetAmount: new Prisma.Decimal("90.00"),
         platformFeeAmount: new Prisma.Decimal("10.00"),
+        provider: "STRIPE",
         status: "SUCCEEDED",
       },
       {
@@ -83,6 +84,7 @@ describe("EventSalesQueryService", () => {
         orderId: "order_2",
         organizerNetAmount: new Prisma.Decimal("45.00"),
         platformFeeAmount: new Prisma.Decimal("5.00"),
+        provider: "PAYSTACK",
         status: "PROCESSING",
       },
     ]);
@@ -137,6 +139,7 @@ describe("EventSalesQueryService", () => {
       expect.objectContaining({
         grossAmount: "100.00",
         id: "pt_1",
+        provider: "STRIPE",
         ticketCount: 3,
       }),
     );
@@ -173,6 +176,7 @@ describe("EventSalesQueryService", () => {
         orderId: "order_1",
         organizerNetAmount: new Prisma.Decimal("90.00"),
         platformFeeAmount: new Prisma.Decimal("10.00"),
+        provider: "PAYSTACK",
         status: "SUCCEEDED",
       },
       {
@@ -186,6 +190,7 @@ describe("EventSalesQueryService", () => {
         orderId: "order_2",
         organizerNetAmount: new Prisma.Decimal("36.00"),
         platformFeeAmount: new Prisma.Decimal("4.00"),
+        provider: "STRIPE",
         status: "SUCCEEDED",
       },
     ]);
@@ -242,6 +247,7 @@ describe("EventSalesQueryService", () => {
     });
     expect(result.recentTransactions).toHaveLength(1);
     expect(result.recentTransactions[0]?.id).toBe("pt_1");
+    expect(result.recentTransactions[0]?.provider).toBe("PAYSTACK");
     expect(result.nextCursor).toBe("pt_1");
   });
 });

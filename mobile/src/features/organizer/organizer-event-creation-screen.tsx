@@ -38,6 +38,7 @@ import {
   uploadOrganizerEventHeaderMedia,
 } from "@/lib/organizer/events-client";
 import { getOrganizerProfile } from "@/lib/organizer/organizer-profile-client";
+import { getPaystackOrganizerAccountStatus } from "@/lib/payments/paystack-organizer-account-client";
 import { getStripeConnectAccountStatus } from "@/lib/payments/stripe-connect-client";
 import { palette } from "@/styles/theme";
 
@@ -124,7 +125,7 @@ function getPublishIntentMessage(input: {
   }
 
   if (input.provider === "PAYSTACK") {
-    return "This event can be published, but Paystack organizer payout onboarding is still limited in this mobile flow. Review setup before paid sales.";
+    return "This event shell can publish now, but finish Paystack payout setup before paid ticket sales go live.";
   }
 
   if (input.setupStep === "payments") {
@@ -313,7 +314,17 @@ export function OrganizerEventCreationScreen() {
     queryFn: () => getStripeConnectAccountStatus(session!.accessToken),
     queryKey: ["organizer-stripe-account", session?.accessToken],
   });
+  const paystackAccountQuery = useQuery({
+    enabled: Boolean(
+      session?.accessToken &&
+        hasOrganizerAccess &&
+        organizerProfileQuery.data?.selectedPaymentProvider === "PAYSTACK",
+    ),
+    queryFn: () => getPaystackOrganizerAccountStatus(session!.accessToken),
+    queryKey: ["organizer-paystack-account", session?.accessToken],
+  });
   const organizerSetupStep = deriveOrganizerSetupStep({
+    paystackAccount: paystackAccountQuery.data,
     profile: organizerProfileQuery.data,
     stripeAccount: stripeAccountQuery.data,
   });

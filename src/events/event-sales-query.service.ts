@@ -155,6 +155,7 @@ export class EventSalesQueryService {
         orderId: transaction.orderId,
         organizerNetAmount: transaction.organizerNetAmount.toFixed(2),
         platformFeeAmount: transaction.platformFeeAmount.toFixed(2),
+        provider: transaction.provider,
         status: transaction.status,
         ticketCount:
           transaction.order?.items.reduce((sum, item) => sum + item.quantity, 0) ?? 0,

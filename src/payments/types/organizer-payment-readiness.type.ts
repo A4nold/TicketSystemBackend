@@ -21,6 +21,33 @@ export type OrganizerStripeAccountReadiness = {
   firstReadyAt: Date | null;
 };
 
+export type OrganizerPaystackAccountReadiness = {
+  organizerId: string;
+  subaccountCode: string | null;
+  status: string | null;
+  onboardingStatus: string | null;
+  verificationStatus: string | null;
+  payoutsEnabled: boolean;
+  chargesEnabled: boolean;
+  detailsSubmitted: boolean;
+  country: string | null;
+  defaultCurrency: string | null;
+  disabledReason: string | null;
+  isReadyForPaidEvents: boolean;
+  onboardingCompletedAt: Date | null;
+  lastSyncedAt: Date | null;
+  readinessCheckedAt: Date | null;
+  firstReadyAt: Date | null;
+  requirementsSummary: string | null;
+  businessName: string | null;
+  accountHolderName: string | null;
+  bankCode: string | null;
+  maskedAccountNumber: string | null;
+  settlementSchedule: string | null;
+  isVerified: boolean;
+  isActive: boolean;
+};
+
 export type OrganizerPaymentTransactionSummary = {
   id: string;
   organizerId: string;

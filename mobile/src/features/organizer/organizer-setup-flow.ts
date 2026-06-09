@@ -1,4 +1,5 @@
 import type { OrganizerProfile } from "@/lib/organizer/organizer-profile-client";
+import type { PaystackOrganizerAccountStatus } from "@/lib/payments/paystack-organizer-account-client";
 import type { StripeConnectAccountStatus } from "@/lib/payments/stripe-connect-client";
 
 export type OrganizerSetupStep =
@@ -28,9 +29,10 @@ export function isOrganizerProfileReadyForPayments(
 
 export function deriveOrganizerSetupStep(input: {
   profile: OrganizerProfile | null | undefined;
+  paystackAccount: PaystackOrganizerAccountStatus | null | undefined;
   stripeAccount: StripeConnectAccountStatus | null | undefined;
 }) {
-  const { profile, stripeAccount } = input;
+  const { profile, paystackAccount, stripeAccount } = input;
 
   if (!profile || profile.onboardingStatus === "NOT_STARTED") {
     return "intro" satisfies OrganizerSetupStep;
@@ -46,6 +48,18 @@ export function deriveOrganizerSetupStep(input: {
 
   if (!profile.selectedPaymentProvider) {
     return "provider" satisfies OrganizerSetupStep;
+  }
+
+  if (profile.selectedPaymentProvider === "PAYSTACK") {
+    if (!paystackAccount?.detailsSubmitted) {
+      return "payments" satisfies OrganizerSetupStep;
+    }
+
+    if (!paystackAccount.isReadyForPaidEvents) {
+      return "verification" satisfies OrganizerSetupStep;
+    }
+
+    return "complete" satisfies OrganizerSetupStep;
   }
 
   if (!stripeAccount?.connectedAccountId) {

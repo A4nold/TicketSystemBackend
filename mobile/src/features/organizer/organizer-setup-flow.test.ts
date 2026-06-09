@@ -6,6 +6,7 @@ describe("deriveOrganizerSetupStep", () => {
   it("starts at intro when no organizer profile exists", () => {
     expect(
       deriveOrganizerSetupStep({
+        paystackAccount: null,
         profile: null,
         stripeAccount: null,
       }),
@@ -15,6 +16,7 @@ describe("deriveOrganizerSetupStep", () => {
   it("moves to location after identity is saved", () => {
     expect(
       deriveOrganizerSetupStep({
+        paystackAccount: null,
         profile: {
           businessName: null,
           country: null,
@@ -38,6 +40,7 @@ describe("deriveOrganizerSetupStep", () => {
   it("moves to provider after profile details are complete but no provider is selected", () => {
     expect(
       deriveOrganizerSetupStep({
+        paystackAccount: null,
         profile: {
           businessName: "Campus Night Limited",
           country: "IE",
@@ -83,6 +86,7 @@ describe("deriveOrganizerSetupStep", () => {
   it("moves to payments after a provider is selected", () => {
     expect(
       deriveOrganizerSetupStep({
+        paystackAccount: null,
         profile: {
           businessName: "Campus Night Limited",
           country: "IE",
@@ -128,6 +132,7 @@ describe("deriveOrganizerSetupStep", () => {
   it("moves to verification when Stripe exists but is not ready", () => {
     expect(
       deriveOrganizerSetupStep({
+        paystackAccount: null,
         profile: {
           businessName: "Campus Night Limited",
           country: "IE",
@@ -173,6 +178,7 @@ describe("deriveOrganizerSetupStep", () => {
   it("completes once Stripe is ready for paid events", () => {
     expect(
       deriveOrganizerSetupStep({
+        paystackAccount: null,
         profile: {
           businessName: "Campus Night Limited",
           country: "IE",
@@ -213,5 +219,54 @@ describe("deriveOrganizerSetupStep", () => {
         },
       }),
     ).toBe("complete");
+  });
+
+  it("moves Paystack organizers to verification once payout details are saved", () => {
+    expect(
+      deriveOrganizerSetupStep({
+        paystackAccount: {
+          accountHolderName: "Campus Night Limited",
+          bankCode: "058",
+          businessName: "Campus Night Limited",
+          chargesEnabled: false,
+          country: "NG",
+          defaultCurrency: "NGN",
+          detailsSubmitted: true,
+          disabledReason: null,
+          firstReadyAt: null,
+          isActive: false,
+          isReadyForPaidEvents: false,
+          isVerified: false,
+          lastSyncedAt: null,
+          maskedAccountNumber: "****6789",
+          onboardingCompletedAt: null,
+          onboardingStatus: "IN_PROGRESS",
+          organizerId: "user_1",
+          payoutsEnabled: false,
+          readinessCheckedAt: null,
+          requirementsSummary: "Paystack payout details saved.",
+          settlementSchedule: null,
+          status: "PENDING",
+          subaccountCode: null,
+          verificationStatus: "PENDING",
+        },
+        profile: {
+          businessName: "Campus Night Limited",
+          country: "NG",
+          createdAt: "",
+          defaultPayoutCurrency: "NGN",
+          displayName: "Campus Night",
+          id: "org_profile_1",
+          onboardingStatus: "PAYMENT_SETUP_PENDING",
+          providerSelectedAt: "",
+          providerSelectionSource: "MANUAL",
+          recommendedProvider: "PAYSTACK",
+          selectedPaymentProvider: "PAYSTACK",
+          updatedAt: "",
+          userId: "user_1",
+        },
+        stripeAccount: null,
+      }),
+    ).toBe("verification");
   });
 });

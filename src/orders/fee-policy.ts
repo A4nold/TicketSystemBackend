@@ -22,14 +22,24 @@ export type AppliedFeeTotals = {
   total: Prisma.Decimal;
 };
 
-export function resolveFeePolicy(): FeePolicy {
+export function resolveFeePolicy(currency?: string): FeePolicy {
+  const normalizedCurrency = currency?.trim().toUpperCase();
+
   return {
     displayName: process.env.CHECKOUT_FEE_DISPLAY_NAME?.trim() || "Service fee",
-    fixedAmount: parseDecimalEnv("CHECKOUT_FEE_FIXED_AMOUNT", "0.69"),
+    fixedAmount: parseCurrencyAwareDecimalEnv(
+      "CHECKOUT_FEE_FIXED_AMOUNT",
+      normalizedCurrency,
+      "0.49",
+    ),
     fixedFeeApplication:
       process.env.CHECKOUT_FEE_FIXED_APPLICATION === "PER_ORDER" ? "PER_ORDER" : "PER_TICKET",
     model: "BLENDED",
-    percentRate: parseDecimalEnv("CHECKOUT_FEE_PERCENT_RATE", "0.0695"),
+    percentRate: parseCurrencyAwareDecimalEnv(
+      "CHECKOUT_FEE_PERCENT_RATE",
+      normalizedCurrency,
+      "0.0495",
+    ),
     responsibility:
       process.env.CHECKOUT_FEE_RESPONSIBILITY === "ORGANIZER" ? "ORGANIZER" : "BUYER",
   };
@@ -77,4 +87,25 @@ function parseDecimalEnv(name: string, fallback: string) {
   } catch {
     return new Prisma.Decimal(fallback);
   }
+}
+
+function parseCurrencyAwareDecimalEnv(
+  baseName: string,
+  currency: string | undefined,
+  fallback: string,
+) {
+  if (currency) {
+    const overrideName = `${baseName}_${currency}`;
+    const overrideRaw = process.env[overrideName]?.trim();
+
+    if (overrideRaw) {
+      try {
+        return new Prisma.Decimal(overrideRaw);
+      } catch {
+        return parseDecimalEnv(baseName, fallback);
+      }
+    }
+  }
+
+  return parseDecimalEnv(baseName, fallback);
 }
