@@ -6,7 +6,7 @@ import { useAuth } from "@/components/providers/auth-provider";
 import { ActionButton, Card, Screen } from "@/components/ui";
 import { hasOrganizerSurfaceAccess } from "@/features/auth/organizer-access";
 import { ApiError } from "@/lib/api/client";
-import { formatDateTime } from "@/lib/formatters";
+import { formatDateTime, getCurrencyLocale } from "@/lib/formatters";
 import { getOrganizerEventBySlug } from "@/lib/organizer/events-client";
 import { getOrganizerEventSales } from "@/lib/organizer/sales-client";
 import { palette } from "@/styles/theme";
@@ -20,7 +20,7 @@ function getErrorText(error: unknown, fallback: string) {
 }
 
 function formatMoney(value: string, currency: string) {
-  return new Intl.NumberFormat("en-IE", {
+  return new Intl.NumberFormat(getCurrencyLocale(currency), {
     style: "currency",
     currency,
     maximumFractionDigits: 2,

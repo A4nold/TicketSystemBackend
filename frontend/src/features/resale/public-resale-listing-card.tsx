@@ -6,17 +6,16 @@ import { useState, useTransition } from "react";
 
 import { useAuth } from "@/components/providers/auth-provider";
 import { ApiError } from "@/lib/api/client";
+import { formatCurrencyAmount } from "@/lib/formatters";
 import {
   buyResaleListing,
   type PublicResaleListing,
 } from "@/lib/resale/resale-client";
 
 function formatCurrency(price: string, currency: string) {
-  return new Intl.NumberFormat("en-IE", {
-    style: "currency",
-    currency,
+  return formatCurrencyAmount(price, currency, {
     maximumFractionDigits: 2,
-  }).format(Number(price));
+  });
 }
 
 function formatDateTime(date: string | null) {

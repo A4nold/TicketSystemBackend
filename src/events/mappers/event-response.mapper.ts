@@ -1,4 +1,5 @@
 import { Prisma } from "@prisma/client";
+import { coerceTimezone } from "../../common/timezone";
 
 type EventOrganizerShape = {
   id: string;
@@ -120,6 +121,8 @@ export function toStaffMembershipResponse(membership: EventStaffMembershipShape)
 }
 
 export function toEventSummaryResponse(event: EventSummarySource) {
+  const timezone = coerceTimezone(event.timezone, "Europe/Dublin");
+
   return {
     id: event.id,
     slug: event.slug,
@@ -128,7 +131,7 @@ export function toEventSummaryResponse(event: EventSummarySource) {
     venueName: event.venueName,
     venueAddress: event.venueAddress,
     currency: event.currency,
-    timezone: event.timezone,
+    timezone,
     startsAt: event.startsAt,
     endsAt: event.endsAt,
     status: event.status,

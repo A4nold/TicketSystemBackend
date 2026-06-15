@@ -13,7 +13,10 @@ import {
 
 import { useAuth } from "@/components/providers/auth-provider";
 import { ActionButton, Card, EmptyStateCard, LoadingStateCard, Screen } from "@/components/ui";
+import { ApiError } from "@/lib/api/client";
+import { getApiBaseUrl } from "@/lib/config/env";
 import { listPublicEvents } from "@/lib/events/public-events-client";
+import { getCurrencyLocale } from "@/lib/formatters";
 import { palette } from "@/styles/theme";
 
 type CardVariant = "compact" | "featured";
@@ -25,6 +28,18 @@ type EventSummaryForCard = {
     pricingMode: "FIXED" | "FREE" | "OFFER_RANGE";
   }>;
 };
+
+function getDiscoveryErrorMessage(error: unknown) {
+  if (error instanceof ApiError) {
+    return error.message;
+  }
+
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
+  return "Public events could not be loaded.";
+}
 
 function getPriceLabel(event: EventSummaryForCard) {
   if (!event.ticketTypes.length) {
@@ -38,10 +53,11 @@ function getPriceLabel(event: EventSummaryForCard) {
     .filter((ticket) => ticket.pricingMode !== "FREE" && ticket.priceValue > 0)
     .map((ticket) => ticket.priceValue);
   const currency = event.ticketTypes[0]?.currency ?? "EUR";
+  const locale = getCurrencyLocale(currency);
 
   if (hasFree && paidPrices.length) {
     const max = Math.max(...paidPrices);
-    return `Free - ${new Intl.NumberFormat("en-IE", { style: "currency", currency }).format(max)}`;
+    return `Free - ${new Intl.NumberFormat(locale, { style: "currency", currency }).format(max)}`;
   }
 
   if (hasFree) {
@@ -56,10 +72,10 @@ function getPriceLabel(event: EventSummaryForCard) {
   const max = Math.max(...paidPrices);
 
   if (min === max) {
-    return new Intl.NumberFormat("en-IE", { style: "currency", currency }).format(min);
+    return new Intl.NumberFormat(locale, { style: "currency", currency }).format(min);
   }
 
-  return `From ${new Intl.NumberFormat("en-IE", { style: "currency", currency }).format(min)}`;
+  return `From ${new Intl.NumberFormat(locale, { style: "currency", currency }).format(min)}`;
 }
 
 function EventCard({
@@ -214,7 +230,10 @@ export function DiscoveryScreen() {
         {eventsQuery.isError ? (
           <Card tone="warning">
             <Text style={styles.sectionTitle}>Discovery is unavailable right now</Text>
-            <Text style={styles.copy}>Public events could not be loaded.</Text>
+            <Text style={styles.copy}>{getDiscoveryErrorMessage(eventsQuery.error)}</Text>
+            {__DEV__ ? (
+              <Text style={styles.copy}>API base: {getApiBaseUrl()}</Text>
+            ) : null}
             <ActionButton onPress={() => void eventsQuery.refetch()} title="Retry discovery" />
           </Card>
         ) : null}

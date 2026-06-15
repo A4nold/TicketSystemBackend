@@ -2,6 +2,7 @@ import { PublicHomeDiscoverySections } from "@/features/public/home/public-home-
 import { PublicHomeHero } from "@/features/public/home/public-home-hero";
 import type { MarketplaceEventCardModel } from "@/features/public/marketplace/marketplace-event-card";
 import { apiFetch } from "@/lib/api/client";
+import { formatCurrencyAmount } from "@/lib/formatters";
 
 type ApiEventOrganizer = {
   email: string;
@@ -57,11 +58,9 @@ const spotlightStats = [
 ];
 
 function formatCurrency(price: number, currency: string) {
-  return new Intl.NumberFormat("en-IE", {
-    style: "currency",
-    currency,
+  return formatCurrencyAmount(price, currency, {
     maximumFractionDigits: 0,
-  }).format(price);
+  });
 }
 
 function formatEventDate(startsAt: string, timezone: string) {

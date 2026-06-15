@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { createTicketOfferRequest } from "@/lib/offers/offers-client";
 
 import { useAuth } from "@/components/providers/auth-provider";
+import { formatCurrencyAmount } from "@/lib/formatters";
 
 type CheckoutStartCtaProps = Readonly<{
   eventId: string;
@@ -70,18 +71,14 @@ export function CheckoutStartCta({
   }, [ticketType.maxPerOrder, ticketType.quantity]);
 
   const totalLabel = useMemo(() => {
-    return new Intl.NumberFormat("en-IE", {
-      currency: ticketType.currency,
+    return formatCurrencyAmount(ticketType.priceValue * quantity, ticketType.currency, {
       maximumFractionDigits: 2,
-      style: "currency",
-    }).format(ticketType.priceValue * quantity);
+    });
   }, [quantity, ticketType.priceValue, ticketType.currency]);
   const offeredPriceLabel = useMemo(() => {
-    return new Intl.NumberFormat("en-IE", {
-      currency: ticketType.currency,
+    return formatCurrencyAmount(offeredPrice, ticketType.currency, {
       maximumFractionDigits: 2,
-      style: "currency",
-    }).format(offeredPrice);
+    });
   }, [offeredPrice, ticketType.currency]);
 
   function updateQuantity(nextValue: number) {

@@ -8,6 +8,7 @@ import {
 import { Prisma, StaffRole } from "@prisma/client";
 
 import { AuthenticatedUser } from "../auth/types/authenticated-user.type";
+import { isValidTimezone, normalizeTimezone } from "../common/timezone";
 import { PostEventNotificationSweepService } from "../notifications/post-event-notification-sweep.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { EventPaymentReadinessService } from "./event-payment-readiness.service";
@@ -33,6 +34,7 @@ export class EventLifecycleService {
     }
 
     this.assertEventDates(payload);
+    this.assertValidTimezone(payload.timezone);
 
     const slug = await this.ensureUniqueSlug(
       payload.slug ? this.slugify(payload.slug) : this.slugify(payload.title),
@@ -50,7 +52,7 @@ export class EventLifecycleService {
           venueName: payload.venueName?.trim(),
           venueAddress: payload.venueAddress?.trim(),
           currency: this.normalizeCurrency(payload.currency),
-          timezone: payload.timezone.trim(),
+          timezone: normalizeTimezone(payload.timezone),
           startsAt,
           endsAt,
           status: payload.status,
@@ -126,6 +128,9 @@ export class EventLifecycleService {
 
     this.assertEventDates(payload, existingEvent);
     this.assertCurrencyChangeAllowed(payload, existingEvent);
+    if (payload.timezone !== undefined) {
+      this.assertValidTimezone(payload.timezone);
+    }
     await this.assertPaidEventPublicationReadiness(existingEvent, payload);
 
     const wasPostEventPublished = this.isPostEventContentPublished(existingEvent);
@@ -152,7 +157,7 @@ export class EventLifecycleService {
           ? { currency: this.normalizeCurrency(payload.currency) }
           : {}),
         ...(payload.timezone !== undefined
-          ? { timezone: payload.timezone.trim() }
+          ? { timezone: normalizeTimezone(payload.timezone) }
           : {}),
         ...(payload.startsAt !== undefined
           ? { startsAt: new Date(payload.startsAt) }
@@ -248,6 +253,16 @@ export class EventLifecycleService {
     }
 
     return toEventDetailResponse(event);
+  }
+
+  private assertValidTimezone(timezone: string) {
+    const normalized = normalizeTimezone(timezone);
+
+    if (!isValidTimezone(normalized)) {
+      throw new BadRequestException(
+        `Timezone "${timezone}" is not a valid IANA timezone.`,
+      );
+    }
   }
 
   private async assertPaidEventPublicationReadiness(

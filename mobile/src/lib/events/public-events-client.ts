@@ -1,4 +1,5 @@
 import { apiFetch } from "@/lib/api/client";
+import { getCurrencyLocale } from "@/lib/formatters";
 
 type ApiEventOrganizer = {
   email: string;
@@ -100,6 +101,21 @@ export type PublicEventShareAction =
   | "PUBLIC_EVENT_PAGE_VIEWED"
   | "GET_TICKET_FROM_PUBLIC_PAGE_CLICKED";
 
+function normalizeTimezone(timezone: string) {
+  const trimmed = timezone.trim();
+
+  if (trimmed.toLowerCase() === "africa/nigeria") {
+    return "Africa/Lagos";
+  }
+
+  try {
+    new Intl.DateTimeFormat("en-IE", { timeZone: trimmed });
+    return trimmed;
+  } catch {
+    return "UTC";
+  }
+}
+
 function formatCurrency(price: string, currency: string) {
   const amount = Number(price);
 
@@ -107,7 +123,7 @@ function formatCurrency(price: string, currency: string) {
     return `${price} ${currency}`;
   }
 
-  return new Intl.NumberFormat("en-IE", {
+  return new Intl.NumberFormat(getCurrencyLocale(currency), {
     currency,
     maximumFractionDigits: 2,
     style: "currency",
@@ -115,12 +131,13 @@ function formatCurrency(price: string, currency: string) {
 }
 
 function formatSchedule(startsAt: string, endsAt: string | null, timezone: string) {
+  const safeTimezone = normalizeTimezone(timezone);
   const startLabel = new Intl.DateTimeFormat("en-IE", {
     day: "numeric",
     hour: "numeric",
     minute: "2-digit",
     month: "short",
-    timeZone: timezone,
+    timeZone: safeTimezone,
     weekday: "short",
   }).format(new Date(startsAt));
 
@@ -131,7 +148,7 @@ function formatSchedule(startsAt: string, endsAt: string | null, timezone: strin
   const endLabel = new Intl.DateTimeFormat("en-IE", {
     hour: "numeric",
     minute: "2-digit",
-    timeZone: timezone,
+    timeZone: safeTimezone,
   }).format(new Date(endsAt));
 
   return `${startLabel} - ${endLabel}`;
@@ -149,6 +166,7 @@ function getVenueLabel(event: ApiEventDetail) {
 
 function mapAvailability(ticketType: ApiEventTicketType, timezone: string) {
   const now = Date.now();
+  const safeTimezone = normalizeTimezone(timezone);
   const saleStartsAt = ticketType.saleStartsAt ?? null;
   const saleEndsAt = ticketType.saleEndsAt ?? null;
 
@@ -165,7 +183,7 @@ function mapAvailability(ticketType: ApiEventTicketType, timezone: string) {
     const opensAt = new Intl.DateTimeFormat("en-IE", {
       dateStyle: "medium",
       timeStyle: "short",
-      timeZone: timezone,
+      timeZone: safeTimezone,
     }).format(new Date(saleStartsAt));
 
     return {
@@ -222,6 +240,7 @@ function mapTicketType(ticketType: ApiEventTicketType, timezone: string): Public
 }
 
 function mapSummary(event: ApiEventSummary): PublicEventSummary {
+  const timezone = normalizeTimezone(event.timezone);
   return {
     allowResale: event.allowResale,
     coverImageUrl: event.coverImageUrl,
@@ -230,18 +249,19 @@ function mapSummary(event: ApiEventSummary): PublicEventSummary {
     id: event.id,
     issuedTicketsCount: event.issuedTicketsCount,
     organizerName: getOrganizerName(event.organizer),
-    scheduleLabel: formatSchedule(event.startsAt, event.endsAt, event.timezone),
+    scheduleLabel: formatSchedule(event.startsAt, event.endsAt, timezone),
     slug: event.slug,
     startsAt: event.startsAt,
     status: event.status,
-    ticketTypes: event.ticketTypes.map((ticketType) => mapTicketType(ticketType, event.timezone)),
-    timezone: event.timezone,
+    ticketTypes: event.ticketTypes.map((ticketType) => mapTicketType(ticketType, timezone)),
+    timezone,
     title: event.title,
     venueLabel: getVenueLabel(event),
   };
 }
 
 function mapDetail(event: ApiEventDetail): PublicEventDetail {
+  const timezone = normalizeTimezone(event.timezone);
   return {
     allowResale: event.allowResale,
     coverImageUrl: event.coverImageUrl,
@@ -249,12 +269,12 @@ function mapDetail(event: ApiEventDetail): PublicEventDetail {
     endsAt: event.endsAt,
     id: event.id,
     organizerName: getOrganizerName(event.organizer),
-    scheduleLabel: formatSchedule(event.startsAt, event.endsAt, event.timezone),
+    scheduleLabel: formatSchedule(event.startsAt, event.endsAt, timezone),
     slug: event.slug,
     startsAt: event.startsAt,
     status: event.status,
-    ticketTypes: event.ticketTypes.map((ticketType) => mapTicketType(ticketType, event.timezone)),
-    timezone: event.timezone,
+    ticketTypes: event.ticketTypes.map((ticketType) => mapTicketType(ticketType, timezone)),
+    timezone,
     title: event.title,
     trustCopy: event.allowResale
       ? "Tickets, transfers, and resale activity stay connected inside the same wallet experience."

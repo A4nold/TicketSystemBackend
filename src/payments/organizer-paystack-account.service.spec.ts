@@ -135,4 +135,76 @@ describe("OrganizerPaystackAccountService", () => {
       subaccountCode: "ACCT_sub_123",
     });
   });
+
+  it("refreshes an existing paystack subaccount and updates readiness", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      json: () =>
+        Promise.resolve({
+          data: {
+            account_number: "0123456789",
+            active: true,
+            bank: 12,
+            business_name: "Campus Night Limited",
+            id: 321,
+            is_verified: true,
+            settlement_schedule: "AUTO",
+            subaccount_code: "ACCT_sub_123",
+          },
+        }),
+      ok: true,
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    prisma.organizerProfile.findUnique.mockResolvedValue({
+      country: "NG",
+      defaultPayoutCurrency: "NGN",
+    });
+    prisma.organizerPaymentProfile.findUnique.mockResolvedValue({
+      firstReadyAt: null,
+    });
+    paymentAccountRepository.findPaystackAccountByOrganizerId.mockResolvedValue({
+      externalAccountCode: "ACCT_sub_123",
+      metadata: {
+        paystack: {
+          accountHolderName: "Campus Night Limited",
+          bankCode: "058",
+          businessName: "Campus Night Limited",
+        },
+      },
+    });
+    organizerPaymentsQueryService.getOrganizerPaystackReadiness.mockResolvedValue({
+      organizerId: "org_123",
+      isReadyForPaidEvents: true,
+      subaccountCode: "ACCT_sub_123",
+    });
+
+    const result = await service.refreshAccountStatusForOrganizer("org_123");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://api.paystack.co/subaccount/ACCT_sub_123",
+      expect.objectContaining({
+        method: "GET",
+      }),
+    );
+    expect(prisma.paymentAccount.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        update: expect.objectContaining({
+          payoutsEnabled: true,
+          verificationStatus: "VERIFIED",
+        }),
+      }),
+    );
+    expect(prisma.organizerPaymentProfile.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        update: expect.objectContaining({
+          isReadyForPaidEvents: true,
+        }),
+      }),
+    );
+    expect(result).toEqual({
+      organizerId: "org_123",
+      isReadyForPaidEvents: true,
+      subaccountCode: "ACCT_sub_123",
+    });
+  });
 });

@@ -27,6 +27,7 @@ import {
   getPublicEventBySlug,
   type PublicEventShareAction,
 } from "@/lib/events/public-events-client";
+import { getCurrencyLocale } from "@/lib/formatters";
 import { createTicketOfferRequest } from "@/lib/offers/offers-client";
 import { palette } from "@/styles/theme";
 
@@ -484,10 +485,13 @@ export function PublicEventScreen({
                       <Text style={styles.quantityButtonText}>-</Text>
                     </Pressable>
                     <Text style={styles.quantityValue}>
-                      {new Intl.NumberFormat("en-IE", {
-                        currency: selectedTicketType.currency,
-                        style: "currency",
-                      }).format(offerPrice)}
+                      {new Intl.NumberFormat(
+                        getCurrencyLocale(selectedTicketType.currency),
+                        {
+                          currency: selectedTicketType.currency,
+                          style: "currency",
+                        },
+                      ).format(offerPrice)}
                     </Text>
                     <Pressable
                       onPress={() =>

@@ -12,6 +12,7 @@ import {
   isStripeConnectCheckoutEnabled,
 } from "../common/feature-flags";
 import { NotificationsService } from "../notifications/notifications.service";
+import { OrganizerPaystackAccountService } from "../payments/organizer-paystack-account.service";
 import { OrganizerPaymentsQueryService } from "../payments/organizer-payments-query.service";
 import { PaymentsService } from "../payments/payments.service";
 import { PrismaService } from "../prisma/prisma.service";
@@ -30,6 +31,7 @@ export class CheckoutService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly paymentsService: PaymentsService,
+    private readonly organizerPaystackAccountService: OrganizerPaystackAccountService,
     private readonly organizerPaymentsQueryService: OrganizerPaymentsQueryService,
     private readonly purchasedTicketIssuanceService: PurchasedTicketIssuanceService,
     private readonly notificationsService: NotificationsService,
@@ -413,7 +415,7 @@ export class CheckoutService {
     ) {
       try {
         const organizerReadiness =
-          await this.organizerPaymentsQueryService.getOrganizerPaystackReadiness(
+          await this.organizerPaystackAccountService.refreshAccountStatusForOrganizer(
             event.organizerId,
           );
 

@@ -18,7 +18,7 @@ import { CollapsibleSection } from "@/components/section-primitives";
 import { SupportCard } from "@/components/support/support-card";
 import { ActionButton, Card, EmptyStateCard, LoadingStateCard, Screen } from "@/components/ui";
 import { getTicketStatusMeta, groupTicketsByEvent } from "@/features/wallet/wallet-model";
-import { formatDateTime } from "@/lib/formatters";
+import { formatDateTime, getCurrencyLocale } from "@/lib/formatters";
 import { getOrderById } from "@/lib/orders/orders-client";
 import type { OwnedTicketSummary } from "@/lib/tickets/tickets-client";
 import { listOwnedTickets } from "@/lib/tickets/tickets-client";
@@ -156,10 +156,13 @@ export function WalletHomeScreen() {
             <View style={styles.purchaseMetaRow}>
               <Text style={styles.purchaseMetaLabel}>💳 Total</Text>
               <Text style={styles.purchaseMetaValue}>
-                {new Intl.NumberFormat("en-IE", {
-                  currency: recentOrderQuery.data.currency,
-                  style: "currency",
-                }).format(Number(recentOrderQuery.data.totalAmount))}
+                {new Intl.NumberFormat(
+                  getCurrencyLocale(recentOrderQuery.data.currency),
+                  {
+                    currency: recentOrderQuery.data.currency,
+                    style: "currency",
+                  },
+                ).format(Number(recentOrderQuery.data.totalAmount))}
               </Text>
             </View>
             {recentOrderQuery.data.tickets[0] ? (

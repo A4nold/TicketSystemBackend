@@ -59,6 +59,52 @@ describe("public-events-client", () => {
     expect(events[0]?.ticketTypes[0]?.availabilityLabel).toBe("Available");
   });
 
+  it("normalizes known invalid timezone aliases for discovery payloads", async () => {
+    vi.spyOn(global, "fetch").mockResolvedValue({
+      json: async () => [
+        {
+          allowResale: false,
+          coverImageUrl: null,
+          description: "Naira event",
+          endsAt: "2026-06-21T22:00:00.000Z",
+          id: "event-ngn-1",
+          issuedTicketsCount: 0,
+          organizer: {
+            email: "organizer@example.com",
+            firstName: null,
+            id: "user-ngn-1",
+            lastName: null,
+          },
+          slug: "naira-night",
+          startsAt: "2026-06-21T19:00:00.000Z",
+          status: "PUBLISHED",
+          ticketTypes: [
+            {
+              currency: "NGN",
+              description: null,
+              id: "type-ngn-1",
+              isActive: true,
+              maxPerOrder: 2,
+              name: "General",
+              price: "3000.00",
+              quantity: 100,
+            },
+          ],
+          timezone: "Africa/Nigeria",
+          title: "Naira Night",
+          venueAddress: "Lagos",
+          venueName: "Mainland",
+        },
+      ],
+      ok: true,
+    } as Response);
+
+    const events = await listPublicEvents();
+
+    expect(events[0]?.timezone).toBe("Africa/Lagos");
+    expect(events[0]?.scheduleLabel).toBeTruthy();
+  });
+
   it("marks inactive ticket types as unavailable on event detail", async () => {
     vi.spyOn(global, "fetch").mockResolvedValue({
       json: async () => ({

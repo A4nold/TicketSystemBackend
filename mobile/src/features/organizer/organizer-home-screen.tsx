@@ -10,7 +10,7 @@ import {
   deriveOrganizerSetupStep,
   isOrganizerProfileReadyForPayments,
 } from "@/features/organizer/organizer-setup-flow";
-import { formatDateTime } from "@/lib/formatters";
+import { formatDateTime, getCurrencyLocale } from "@/lib/formatters";
 import {
   getOrganizerManageableEventIds,
   listOrganizerEvents,
@@ -30,7 +30,7 @@ import {
 import { palette } from "@/styles/theme";
 
 function formatMoney(value: string, currency: string) {
-  return new Intl.NumberFormat("en-IE", {
+  return new Intl.NumberFormat(getCurrencyLocale(currency), {
     currency,
     maximumFractionDigits: 2,
     style: "currency",

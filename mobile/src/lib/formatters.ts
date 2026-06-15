@@ -9,6 +9,10 @@ export function formatDateTime(date: string | null) {
   }).format(new Date(date));
 }
 
+export function getCurrencyLocale(currency: string) {
+  return currency.toUpperCase() === "NGN" ? "en-NG" : "en-IE";
+}
+
 export function formatMoney(value: string, currency: string) {
   const amount = Number(value);
 
@@ -16,7 +20,7 @@ export function formatMoney(value: string, currency: string) {
     return `${value} ${currency}`;
   }
 
-  return new Intl.NumberFormat("en-IE", {
+  return new Intl.NumberFormat(getCurrencyLocale(currency), {
     currency,
     style: "currency",
   }).format(amount / 100);

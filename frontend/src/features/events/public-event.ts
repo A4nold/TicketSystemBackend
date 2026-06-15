@@ -1,4 +1,5 @@
 import { apiFetch } from "@/lib/api/client";
+import { formatCurrencyAmount } from "@/lib/formatters";
 
 type ApiEventOrganizer = {
   id: string;
@@ -128,11 +129,9 @@ export type PublicEventSummary = {
 };
 
 function formatCurrency(price: string, currency: string) {
-  return new Intl.NumberFormat("en-IE", {
-    style: "currency",
-    currency,
+  return formatCurrencyAmount(price, currency, {
     maximumFractionDigits: 2,
-  }).format(Number(price));
+  });
 }
 
 function formatDateTime(date: string, timezone: string) {

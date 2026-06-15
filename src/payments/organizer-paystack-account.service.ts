@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotImplementedException,
   NotFoundException,
 } from "@nestjs/common";
@@ -42,6 +43,7 @@ type PaystackCreateSubaccountResponse = {
     settlement_schedule?: string | null;
     currency?: string | null;
     business_name?: string | null;
+    account_name?: string | null;
     account_number?: string | null;
     bank?: number | string | null;
   };
@@ -49,6 +51,8 @@ type PaystackCreateSubaccountResponse = {
 
 @Injectable()
 export class OrganizerPaystackAccountService {
+  private readonly logger = new Logger(OrganizerPaystackAccountService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly organizerPaymentsQueryService: OrganizerPaymentsQueryService,
@@ -58,7 +62,27 @@ export class OrganizerPaystackAccountService {
   async getAccountStatus(user: AuthenticatedUser) {
     this.assertPaystackEnabled();
     this.assertOrganizer(user);
-    return this.organizerPaymentsQueryService.getOrganizerPaystackReadiness(user.id);
+    return this.refreshAccountStatusForOrganizer(user.id);
+  }
+
+  async refreshAccountStatusForOrganizer(organizerId: string) {
+    const existingAccount =
+      await this.paymentAccountRepository.findPaystackAccountByOrganizerId(organizerId);
+
+    if (!existingAccount?.externalAccountCode) {
+      return this.organizerPaymentsQueryService.getOrganizerPaystackReadiness(organizerId);
+    }
+
+    try {
+      const subaccount = await this.getPaystackSubaccount(existingAccount.externalAccountCode);
+      await this.syncExistingPaystackSubaccountForOrganizer(organizerId, subaccount);
+    } catch (error) {
+      this.logger.warn(
+        `payments.paystack.account_refresh.failed organizerId=${organizerId} subaccountCode=${existingAccount.externalAccountCode} reason="${error instanceof Error ? error.message : "Unknown error"}"`,
+      );
+    }
+
+    return this.organizerPaymentsQueryService.getOrganizerPaystackReadiness(organizerId);
   }
 
   async listBanks(user: AuthenticatedUser) {
@@ -177,33 +201,91 @@ export class OrganizerPaystackAccountService {
     },
     subaccount: NonNullable<PaystackCreateSubaccountResponse["data"]>,
   ) {
+    await this.persistPaystackSubaccountStatus(organizerId, {
+      accountHolderName: resolvedAccount.accountName,
+      accountNumber: resolvedAccount.accountNumber,
+      bankCode: resolvedAccount.bankCode,
+      bankId: resolvedAccount.bankId,
+      businessName: payload.businessName.trim(),
+      subaccount,
+    });
+  }
+
+  private async syncExistingPaystackSubaccountForOrganizer(
+    organizerId: string,
+    subaccount: NonNullable<PaystackCreateSubaccountResponse["data"]>,
+  ) {
+    const existingAccount =
+      await this.paymentAccountRepository.findPaystackAccountByOrganizerId(organizerId);
+    const paystackMetadata =
+      existingAccount?.metadata &&
+      typeof existingAccount.metadata === "object" &&
+      !Array.isArray(existingAccount.metadata)
+        ? ((existingAccount.metadata as Record<string, unknown>).paystack as
+            | Record<string, unknown>
+            | undefined)
+        : undefined;
+
+    await this.persistPaystackSubaccountStatus(organizerId, {
+      accountHolderName:
+        typeof paystackMetadata?.accountHolderName === "string"
+          ? paystackMetadata.accountHolderName
+          : subaccount.account_name?.trim() ?? "",
+      accountNumber: subaccount.account_number?.trim() ?? "",
+      bankCode:
+        typeof paystackMetadata?.bankCode === "string" ? paystackMetadata.bankCode : "",
+      bankId:
+        typeof subaccount.bank === "number"
+          ? subaccount.bank
+          : typeof subaccount.bank === "string" && /^\d+$/.test(subaccount.bank)
+            ? Number(subaccount.bank)
+            : null,
+      businessName:
+        typeof paystackMetadata?.businessName === "string"
+          ? paystackMetadata.businessName
+          : subaccount.business_name?.trim() ?? "",
+      subaccount,
+    });
+  }
+
+  private async persistPaystackSubaccountStatus(
+    organizerId: string,
+    input: {
+      accountHolderName: string;
+      accountNumber: string;
+      bankCode: string;
+      bankId: number | null;
+      businessName: string;
+      subaccount: NonNullable<PaystackCreateSubaccountResponse["data"]>;
+    },
+  ) {
     const { normalizedCountry, normalizedCurrency } =
       await this.validateOrganizerPayoutRegion(organizerId);
     const now = new Date();
-    const subaccountCode = subaccount.subaccount_code?.trim();
-    const externalAccountId = String(subaccount.id ?? subaccountCode ?? organizerId);
-    const isActive = subaccount.active === true;
-    const isVerified = subaccount.is_verified === true;
+    const subaccountCode = input.subaccount.subaccount_code?.trim();
+    const externalAccountId = String(input.subaccount.id ?? subaccountCode ?? organizerId);
+    const isActive = input.subaccount.active === true;
+    const isVerified = input.subaccount.is_verified === true;
     const isReadyForPaidEvents = isActive && isVerified;
-
-    const trimmedBusinessName = payload.businessName.trim();
-    const trimmedAccountHolderName = resolvedAccount.accountName;
-    const normalizedBankCode = resolvedAccount.bankCode;
-    const normalizedAccountNumber = resolvedAccount.accountNumber;
+    const normalizedAccountNumber = input.accountNumber.trim();
 
     const accountMetadata = {
       paystack: {
-        accountHolderName: trimmedAccountHolderName,
-        accountNumberLast4: normalizedAccountNumber.slice(-4),
-        bankCode: normalizedBankCode,
-        bankId: resolvedAccount.bankId,
-        businessName: trimmedBusinessName,
+        accountHolderName: input.accountHolderName,
+        accountNumberLast4: normalizedAccountNumber
+          ? normalizedAccountNumber.slice(-4)
+          : null,
+        bankCode: input.bankCode || null,
+        bankId: input.bankId,
+        businessName: input.businessName,
         isActive,
         isVerified,
-        maskedAccountNumber: this.maskAccountNumber(normalizedAccountNumber),
+        maskedAccountNumber: normalizedAccountNumber
+          ? this.maskAccountNumber(normalizedAccountNumber)
+          : null,
         onboardingPhase: isReadyForPaidEvents ? "SUBACCOUNT_READY" : "SUBACCOUNT_CREATED",
-        settlementSchedule: subaccount.settlement_schedule ?? null,
-        subaccountRaw: subaccount,
+        settlementSchedule: input.subaccount.settlement_schedule ?? null,
+        subaccountRaw: input.subaccount,
       },
     } satisfies Prisma.InputJsonValue;
 
@@ -284,6 +366,10 @@ export class OrganizerPaystackAccountService {
           : {}),
       },
     });
+
+    this.logger.log(
+      `payments.paystack.account_synced organizerId=${organizerId} subaccountCode=${subaccountCode ?? "missing"} active=${isActive} verified=${isVerified} ready=${isReadyForPaidEvents}`,
+    );
   }
 
   private async resolvePaystackBankAccount(
@@ -337,6 +423,21 @@ export class OrganizerPaystackAccountService {
       }),
       method: "POST",
     });
+
+    if (!response.data?.subaccount_code) {
+      throw new BadRequestException("Paystack did not return a valid organizer subaccount.");
+    }
+
+    return response.data;
+  }
+
+  private async getPaystackSubaccount(subaccountCode: string) {
+    const response = await this.paystackFetch<PaystackCreateSubaccountResponse>(
+      `/subaccount/${encodeURIComponent(subaccountCode)}`,
+      {
+        method: "GET",
+      },
+    );
 
     if (!response.data?.subaccount_code) {
       throw new BadRequestException("Paystack did not return a valid organizer subaccount.");

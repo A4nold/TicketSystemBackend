@@ -17,6 +17,7 @@ import { SupportCard } from "@/components/support/support-card";
 import { ActionButton, Card, Screen } from "@/components/ui";
 import { getStripePublishableKey } from "@/lib/config/env";
 import { getPublicEventBySlug } from "@/lib/events/public-events-client";
+import { getCurrencyLocale } from "@/lib/formatters";
 import { reportMobileRuntimeIssue } from "@/lib/monitoring/runtime-monitoring";
 import {
   type CheckoutOrderResponse,
@@ -45,7 +46,7 @@ function createIdempotencyKey() {
 }
 
 function formatMoney(value: number, currency = "EUR") {
-  return new Intl.NumberFormat("en-IE", {
+  return new Intl.NumberFormat(getCurrencyLocale(currency), {
     currency,
     maximumFractionDigits: 2,
     style: "currency",

@@ -5,8 +5,8 @@ import { Platform, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useAuth } from "@/components/providers/auth-provider";
 import { SupportCard } from "@/components/support/support-card";
 import { ActionButton, Card, Screen } from "@/components/ui";
+import { formatDateTime, getCurrencyLocale } from "@/lib/formatters";
 import { getOrderById } from "@/lib/orders/orders-client";
-import { formatDateTime } from "@/lib/formatters";
 import { palette } from "@/styles/theme";
 
 export function CheckoutReturnScreen({ mode }: { mode: "cancel" | "success" }) {
@@ -28,11 +28,13 @@ export function CheckoutReturnScreen({ mode }: { mode: "cancel" | "success" }) {
   const isSuccess = order?.status === "PAID";
   const isPending = order?.status === "PENDING" || order?.isAwaitingPaymentConfirmation === true;
   const isCancelled = order?.status === "CANCELLED";
+  const formatCurrency = (value: string, currency: string) =>
+    new Intl.NumberFormat(getCurrencyLocale(currency), {
+      currency,
+      style: "currency",
+    }).format(Number(value));
   const orderTotalLabel = order
-    ? new Intl.NumberFormat("en-IE", {
-        currency: order.currency,
-        style: "currency",
-      }).format(Number(order.totalAmount))
+    ? formatCurrency(order.totalAmount, order.currency)
     : null;
 
   return (
@@ -120,10 +122,7 @@ export function CheckoutReturnScreen({ mode }: { mode: "cancel" | "success" }) {
                       </Text>
                     </View>
                     <Text style={styles.lineItemPrice}>
-                      {new Intl.NumberFormat("en-IE", {
-                        currency: item.currency,
-                        style: "currency",
-                      }).format(Number(item.totalPrice))}
+                      {formatCurrency(item.totalPrice, item.currency)}
                     </Text>
                   </View>
                 ))}

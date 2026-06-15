@@ -9,6 +9,7 @@ import { Panel } from "@/components/ui/panel";
 import { ProtectedSurfaceGate } from "@/features/auth/protected-surface-gate";
 import { ApiError } from "@/lib/api/client";
 import { useAuth } from "@/components/providers/auth-provider";
+import { formatCurrencyAmount } from "@/lib/formatters";
 import { createCheckoutOrder, getCheckoutQuote } from "@/lib/orders/orders-client";
 
 type CheckoutStartReviewProps = Readonly<{
@@ -49,11 +50,9 @@ function getErrorText(error: unknown) {
 }
 
 function formatMoney(value: string, currency: string) {
-  return new Intl.NumberFormat("en-IE", {
-    currency,
+  return formatCurrencyAmount(value, currency, {
     maximumFractionDigits: 2,
-    style: "currency",
-  }).format(Number(value));
+  });
 }
 
 function getPaymentProviderForCurrency(currency: string) {
