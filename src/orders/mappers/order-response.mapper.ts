@@ -69,6 +69,8 @@ type CheckoutState = {
   connectedAccountId?: string | null;
 } | null;
 
+type CheckoutFlow = "NONE" | "REDIRECT" | "STRIPE_PAYMENT_INTENT";
+
 export function toOrderResponse(
   order: OrderResponseSource,
   checkoutState?: CheckoutState,
@@ -103,6 +105,11 @@ export function toOrderResponse(
       (Boolean(order.checkoutSessionId) || Boolean(paymentIntentId)) &&
       !["paid", "success"].includes(paymentStatus ?? "") &&
       !["expired", "abandoned", "failed"].includes(checkoutStatus ?? ""));
+  const checkoutFlow: CheckoutFlow = clientSecret
+    ? "STRIPE_PAYMENT_INTENT"
+    : checkoutUrl
+      ? "REDIRECT"
+      : "NONE";
 
   return {
     id: order.id,
@@ -127,6 +134,7 @@ export function toOrderResponse(
     clientSecret,
     connectedAccountId,
     checkoutUrl,
+    checkoutFlow,
     paymentStatus,
     checkoutStatus,
     isAwaitingPaymentConfirmation,

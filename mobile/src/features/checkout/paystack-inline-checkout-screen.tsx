@@ -6,14 +6,10 @@ import type { WebViewNavigation } from "react-native-webview/lib/WebViewTypes";
 
 import { ActionButton, Screen } from "@/components/ui";
 import { palette } from "@/styles/theme";
-
-function matchesCheckoutPath(urlValue: string, pathname: "/checkout/success" | "/checkout/cancel") {
-  try {
-    return new URL(urlValue).pathname === pathname;
-  } catch {
-    return urlValue.includes(pathname);
-  }
-}
+import {
+  extractCheckoutReturnParams,
+  matchesCheckoutPath,
+} from "./paystack-inline-return";
 
 export function PaystackInlineCheckoutScreen() {
   const router = useRouter();
@@ -33,10 +29,26 @@ export function PaystackInlineCheckoutScreen() {
 
   const canRenderCheckout = useMemo(() => Boolean(checkoutUrl), [checkoutUrl]);
 
-  function navigateToCheckoutResult(mode: "success" | "cancel") {
+  function navigateToCheckoutResult(
+    mode: "success" | "cancel",
+    params?: {
+      orderId?: string;
+      reference?: string;
+      session_id?: string;
+    },
+  ) {
     router.replace({
       pathname: mode === "success" ? "/checkout/success" : "/checkout/cancel",
-      params: orderId ? { orderId } : undefined,
+      params:
+        params?.orderId || params?.reference || params?.session_id
+          ? {
+              ...(params.orderId ? { orderId: params.orderId } : {}),
+              ...(params.reference ? { reference: params.reference } : {}),
+              ...(params.session_id ? { session_id: params.session_id } : {}),
+            }
+          : orderId
+            ? { orderId }
+            : undefined,
     });
   }
 
@@ -48,22 +60,22 @@ export function PaystackInlineCheckoutScreen() {
     }
 
     if (successReturnUrl && nextUrl.startsWith(successReturnUrl)) {
-      navigateToCheckoutResult("success");
+      navigateToCheckoutResult("success", extractCheckoutReturnParams(nextUrl));
       return;
     }
 
     if (cancelReturnUrl && nextUrl.startsWith(cancelReturnUrl)) {
-      navigateToCheckoutResult("cancel");
+      navigateToCheckoutResult("cancel", extractCheckoutReturnParams(nextUrl));
       return;
     }
 
     if (matchesCheckoutPath(nextUrl, "/checkout/success")) {
-      navigateToCheckoutResult("success");
+      navigateToCheckoutResult("success", extractCheckoutReturnParams(nextUrl));
       return;
     }
 
     if (matchesCheckoutPath(nextUrl, "/checkout/cancel")) {
-      navigateToCheckoutResult("cancel");
+      navigateToCheckoutResult("cancel", extractCheckoutReturnParams(nextUrl));
     }
   }
 

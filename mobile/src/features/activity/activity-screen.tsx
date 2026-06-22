@@ -253,6 +253,10 @@ export function ActivityScreen() {
                         <View style={styles.actionPill}>
                           <Text style={styles.actionPillText}>Open transfer</Text>
                         </View>
+                      ) : notification.type === "ORGANIZER_PAYOUT_READY" ? (
+                        <View style={styles.actionPill}>
+                          <Text style={styles.actionPillText}>Open payout setup</Text>
+                        </View>
                       ) : notification.type === "STAFF_INVITE_RECEIVED" ? (
                         <View style={styles.actionPill}>
                           <Text style={styles.actionPillText}>Open role invite</Text>

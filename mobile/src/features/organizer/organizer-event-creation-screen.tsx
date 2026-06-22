@@ -502,7 +502,14 @@ export function OrganizerEventCreationScreen() {
         },
       } as never);
     } catch (error) {
-      setErrorMessage(getErrorMessage(error, "Event could not be created right now."));
+      if (
+        error instanceof ApiError &&
+        error.code === "ORGANIZER_PAYMENT_ACCOUNT_NOT_READY"
+      ) {
+        setErrorMessage(publishIntentMessage);
+      } else {
+        setErrorMessage(getErrorMessage(error, "Event could not be created right now."));
+      }
     } finally {
       setIsSaving(false);
     }
@@ -759,6 +766,14 @@ export function OrganizerEventCreationScreen() {
             <View style={styles.sectionShell}>
               <Text style={styles.sectionTitle}>Creation needs attention</Text>
               <Text style={styles.warningText}>{errorMessage}</Text>
+              {errorMessage === publishIntentMessage ? (
+                <ActionButton
+                  onPress={() => {
+                    router.push("/organizer/setup" as never);
+                  }}
+                  title="Open organizer setup"
+                />
+              ) : null}
             </View>
           </Card>
         ) : null}

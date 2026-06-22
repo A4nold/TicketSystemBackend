@@ -59,6 +59,10 @@ export function deriveOrganizerSetupStep(input: {
       return "verification" satisfies OrganizerSetupStep;
     }
 
+    if (!profile.emailVerifiedAt) {
+      return "verification" satisfies OrganizerSetupStep;
+    }
+
     return "complete" satisfies OrganizerSetupStep;
   }
 
@@ -67,6 +71,10 @@ export function deriveOrganizerSetupStep(input: {
   }
 
   if (!stripeAccount.isReadyForPaidEvents) {
+    return "verification" satisfies OrganizerSetupStep;
+  }
+
+  if (!profile.emailVerifiedAt) {
     return "verification" satisfies OrganizerSetupStep;
   }
 

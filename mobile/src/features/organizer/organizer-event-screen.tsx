@@ -154,6 +154,25 @@ function getPaidEventSetupMessage(input: {
   return "Paid event publishing is blocked until payout setup is ready.";
 }
 
+function getPaymentReadinessPanelCopy(input: {
+  blockingMessage: string | null;
+  canPublishPaidEvent: boolean;
+  hasPaidTicketTypes: boolean;
+  paidTicketTypeCount: number;
+}) {
+  if (!input.hasPaidTicketTypes) {
+    return "This event has no paid ticket types yet. Free publishing can move ahead, and paid readiness will update as soon as you add paid ticketing.";
+  }
+
+  if (input.canPublishPaidEvent) {
+    return input.paidTicketTypeCount === 1
+      ? "This event has 1 paid ticket type and is currently clear for paid publishing."
+      : `This event has ${input.paidTicketTypeCount} paid ticket types and is currently clear for paid publishing.`;
+  }
+
+  return input.blockingMessage ?? "Paid publishing is blocked until payout readiness is complete.";
+}
+
 function Field({
   compact = false,
   error,
@@ -462,13 +481,18 @@ export function OrganizerEventScreen() {
   });
   const selectedPaymentProvider =
     organizerProfileQuery.data?.selectedPaymentProvider ?? null;
+  const backendPaymentReadiness = eventDetailQuery.data?.paymentReadiness ?? null;
   const isPaidEventSetupBlocked =
     organizerSetupStep !== "complete" &&
     organizerSetupStep !== "intro";
   const shouldShowPaymentReadinessWarning =
-    Boolean(eventForm?.status === "PUBLISHED" || selectedSummary?.status === "PUBLISHED") &&
-    eventHasPaidTicketTypes &&
-    isPaidEventSetupBlocked;
+    backendPaymentReadiness
+      ? ((backendPaymentReadiness.hasPaidTicketTypes &&
+          !backendPaymentReadiness.canPublishPaidEvent) ||
+          (ticketTypeRequiresStripeReadiness(ticketTypeForm) && isPaidEventSetupBlocked))
+      : Boolean(eventForm?.status === "PUBLISHED" || selectedSummary?.status === "PUBLISHED") &&
+        eventHasPaidTicketTypes &&
+        isPaidEventSetupBlocked;
   const stickyAction = useMemo(() => {
     if (expandedSections.event && eventIsDirty) {
       return {
@@ -1279,18 +1303,70 @@ export function OrganizerEventScreen() {
           </Card>
         ) : null}
 
+        {backendPaymentReadiness ? (
+          <Card
+            tone={
+              !backendPaymentReadiness.hasPaidTicketTypes
+                ? "accent"
+                : backendPaymentReadiness.canPublishPaidEvent
+                  ? "success"
+                  : "warning"
+            }
+            padded={false}
+          >
+            <View style={styles.sectionShell}>
+              <Text style={styles.sectionTitle}>Publish readiness</Text>
+              <View style={styles.readinessMetricRow}>
+                <View style={styles.readinessMetricCard}>
+                  <Text style={styles.readinessMetricLabel}>Paid ticket types</Text>
+                  <Text style={styles.readinessMetricValue}>
+                    {backendPaymentReadiness.paidTicketTypeCount}
+                  </Text>
+                </View>
+                <View style={styles.readinessMetricCard}>
+                  <Text style={styles.readinessMetricLabel}>Paid publishing</Text>
+                  <Text style={styles.readinessMetricValue}>
+                    {!backendPaymentReadiness.hasPaidTicketTypes
+                      ? "Free-ready"
+                      : backendPaymentReadiness.canPublishPaidEvent
+                        ? "Ready"
+                        : "Blocked"}
+                  </Text>
+                </View>
+              </View>
+              <Text style={styles.copy}>
+                {getPaymentReadinessPanelCopy(backendPaymentReadiness)}
+              </Text>
+              {!backendPaymentReadiness.canPublishPaidEvent ? (
+                <ActionButton
+                  loading={isOpeningStripe}
+                  onPress={() => void handleStripeReadinessAction()}
+                  title={
+                    organizerSetupStep === "payments" || organizerSetupStep === "verification"
+                      ? selectedPaymentProvider === "STRIPE" &&
+                        stripeAccountQuery.data?.connectedAccountId
+                        ? "Resume payout onboarding"
+                        : "Continue payout setup"
+                      : "Open organizer setup"
+                  }
+                />
+              ) : null}
+            </View>
+          </Card>
+        ) : null}
+
         {shouldShowPaymentReadinessWarning ? (
           <Card tone="warning">
             <Text style={styles.sectionTitle}>Paid event setup still needs attention</Text>
             <Text style={styles.copy}>
-              {getPaidEventSetupMessage({
-                provider: selectedPaymentProvider,
-                setupStep: organizerSetupStep,
-              })}
+              {backendPaymentReadiness?.blockingMessage ??
+                getPaidEventSetupMessage({
+                  provider: selectedPaymentProvider,
+                  setupStep: organizerSetupStep,
+                })}
             </Text>
             <Text style={styles.copy}>
-              Free tickets can still be managed, but paid event publishing stays blocked until this
-              setup step is complete.
+              Free tickets can still be managed while you finish the blocked publish step.
             </Text>
             <ActionButton
               loading={isOpeningStripe}
@@ -2373,6 +2449,31 @@ const styles = StyleSheet.create({
     color: palette.white,
     fontSize: 20,
     fontWeight: "700",
+  },
+  readinessMetricCard: {
+    backgroundColor: palette.backgroundMuted,
+    borderColor: palette.divider,
+    borderRadius: 16,
+    borderWidth: 1,
+    flex: 1,
+    gap: 4,
+    padding: 12,
+  },
+  readinessMetricLabel: {
+    color: palette.muted,
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+  },
+  readinessMetricRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  readinessMetricValue: {
+    color: palette.ink,
+    fontSize: 18,
+    fontWeight: "800",
   },
   mediaActionRow: {
     gap: 10,

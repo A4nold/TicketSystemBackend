@@ -70,7 +70,7 @@ export class OrganizerPaystackPaymentsController {
 
   @Post("account")
   @ApiOperation({
-    summary: "Create organizer Paystack payout account draft",
+    summary: "Create organizer Paystack payout account",
   })
   @ApiOkResponse({
     type: PaystackOrganizerAccountResponseDto,
@@ -84,7 +84,7 @@ export class OrganizerPaystackPaymentsController {
 
   @Patch("account")
   @ApiOperation({
-    summary: "Update organizer Paystack payout account draft",
+    summary: "Update organizer Paystack payout account",
   })
   @ApiOkResponse({
     type: PaystackOrganizerAccountResponseDto,

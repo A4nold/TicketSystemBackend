@@ -121,6 +121,11 @@ export class OrderResponseDto {
   @ApiProperty({ nullable: true })
   checkoutUrl!: string | null;
 
+  @ApiProperty({
+    enum: ["NONE", "REDIRECT", "STRIPE_PAYMENT_INTENT"],
+  })
+  checkoutFlow!: "NONE" | "REDIRECT" | "STRIPE_PAYMENT_INTENT";
+
   @ApiProperty({ nullable: true })
   paymentStatus!: string | null;
 

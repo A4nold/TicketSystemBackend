@@ -13,6 +13,7 @@ export type OrganizerProfile = {
   createdAt: string;
   defaultPayoutCurrency: string | null;
   displayName: string | null;
+  emailVerifiedAt: string | null;
   id: string;
   onboardingStatus: OrganizerOnboardingStatus;
   providerSelectedAt: string | null;

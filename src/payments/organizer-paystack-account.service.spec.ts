@@ -14,12 +14,18 @@ describe("OrganizerPaystackAccountService", () => {
     paymentAccount: {
       upsert: vi.fn(),
     },
+    user: {
+      findUnique: vi.fn(),
+    },
   };
   const organizerPaymentsQueryService = {
     getOrganizerPaystackReadiness: vi.fn(),
   };
   const paymentAccountRepository = {
     findPaystackAccountByOrganizerId: vi.fn(),
+  };
+  const notificationsService = {
+    notifyOrganizerPayoutReady: vi.fn(),
   };
 
   let service: OrganizerPaystackAccountService;
@@ -32,6 +38,7 @@ describe("OrganizerPaystackAccountService", () => {
       prisma as never,
       organizerPaymentsQueryService as never,
       paymentAccountRepository as never,
+      notificationsService as never,
     );
   });
 
@@ -94,11 +101,15 @@ describe("OrganizerPaystackAccountService", () => {
     });
     prisma.organizerPaymentProfile.findUnique.mockResolvedValue({
       firstReadyAt: null,
+      isReadyForPaidEvents: false,
+    });
+    prisma.user.findUnique.mockResolvedValue({
+      email: "organizer@example.com",
     });
     paymentAccountRepository.findPaystackAccountByOrganizerId.mockResolvedValue(null);
     organizerPaymentsQueryService.getOrganizerPaystackReadiness.mockResolvedValue({
       organizerId: "org_123",
-      subaccountCode: "ACCT_sub_123",
+      payoutAccountCode: "ACCT_sub_123",
     });
 
     const result = await service.createAccount(
@@ -130,9 +141,14 @@ describe("OrganizerPaystackAccountService", () => {
     );
     expect(prisma.paymentAccount.upsert).toHaveBeenCalled();
     expect(prisma.organizerPaymentProfile.upsert).toHaveBeenCalled();
+    expect(notificationsService.notifyOrganizerPayoutReady).toHaveBeenCalledWith({
+      organizerEmail: "organizer@example.com",
+      provider: "PAYSTACK",
+      userId: "org_123",
+    });
     expect(result).toEqual({
       organizerId: "org_123",
-      subaccountCode: "ACCT_sub_123",
+      payoutAccountCode: "ACCT_sub_123",
     });
   });
 
@@ -161,6 +177,10 @@ describe("OrganizerPaystackAccountService", () => {
     });
     prisma.organizerPaymentProfile.findUnique.mockResolvedValue({
       firstReadyAt: null,
+      isReadyForPaidEvents: false,
+    });
+    prisma.user.findUnique.mockResolvedValue({
+      email: "organizer@example.com",
     });
     paymentAccountRepository.findPaystackAccountByOrganizerId.mockResolvedValue({
       externalAccountCode: "ACCT_sub_123",
@@ -175,7 +195,7 @@ describe("OrganizerPaystackAccountService", () => {
     organizerPaymentsQueryService.getOrganizerPaystackReadiness.mockResolvedValue({
       organizerId: "org_123",
       isReadyForPaidEvents: true,
-      subaccountCode: "ACCT_sub_123",
+      payoutAccountCode: "ACCT_sub_123",
     });
 
     const result = await service.refreshAccountStatusForOrganizer("org_123");
@@ -204,7 +224,155 @@ describe("OrganizerPaystackAccountService", () => {
     expect(result).toEqual({
       organizerId: "org_123",
       isReadyForPaidEvents: true,
-      subaccountCode: "ACCT_sub_123",
+      payoutAccountCode: "ACCT_sub_123",
     });
+    expect(notificationsService.notifyOrganizerPayoutReady).toHaveBeenCalledWith({
+      organizerEmail: "organizer@example.com",
+      provider: "PAYSTACK",
+      userId: "org_123",
+    });
+  });
+
+  it("updates an existing connected paystack payout account", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        json: () =>
+          Promise.resolve({
+            data: {
+              account_name: "Campus Night Limited",
+              account_number: "0123456789",
+              bank_id: 12,
+            },
+          }),
+        ok: true,
+      })
+      .mockResolvedValueOnce({
+        json: () =>
+          Promise.resolve({
+            data: {
+              active: true,
+              business_name: "Campus Night Reloaded",
+              id: 321,
+              is_verified: true,
+              settlement_schedule: "AUTO",
+              subaccount_code: "ACCT_sub_123",
+            },
+          }),
+        ok: true,
+      });
+    vi.stubGlobal("fetch", fetchMock);
+
+    prisma.organizerProfile.findUnique.mockResolvedValue({
+      country: "NG",
+      defaultPayoutCurrency: "NGN",
+    });
+    prisma.organizerPaymentProfile.findUnique.mockResolvedValue({
+      firstReadyAt: null,
+      isReadyForPaidEvents: false,
+    });
+    prisma.user.findUnique.mockResolvedValue({
+      email: "organizer@example.com",
+    });
+    paymentAccountRepository.findPaystackAccountByOrganizerId.mockResolvedValue({
+      externalAccountCode: "ACCT_sub_123",
+    });
+    organizerPaymentsQueryService.getOrganizerPaystackReadiness.mockResolvedValue({
+      organizerId: "org_123",
+      isReadyForPaidEvents: true,
+      payoutAccountCode: "ACCT_sub_123",
+    });
+
+    const result = await service.updateAccount(
+      {
+        accountType: "ORGANIZER",
+        email: "organizer@example.com",
+        id: "org_123",
+      } as never,
+      {
+        accountHolderName: "Campus Night Limited",
+        accountNumber: "0123456789",
+        bankCode: "058",
+        businessName: "Campus Night Reloaded",
+      },
+    );
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "https://api.paystack.co/bank/resolve?account_number=0123456789&bank_code=058",
+      expect.objectContaining({
+        method: "GET",
+      }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "https://api.paystack.co/subaccount/ACCT_sub_123",
+      expect.objectContaining({
+        method: "PUT",
+      }),
+    );
+    const requestBody = JSON.parse(fetchMock.mock.calls[1]![1].body);
+    expect(requestBody).toEqual(
+      expect.objectContaining({
+        account_number: "0123456789",
+        business_name: "Campus Night Reloaded",
+        primary_contact_email: "organizer@example.com",
+        primary_contact_name: "Campus Night Limited",
+        settlement_bank: "058",
+      }),
+    );
+    expect(result).toEqual({
+      organizerId: "org_123",
+      isReadyForPaidEvents: true,
+      payoutAccountCode: "ACCT_sub_123",
+    });
+  });
+
+  it("does not notify again when the payout account was already ready", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      json: () =>
+        Promise.resolve({
+          data: {
+            account_number: "0123456789",
+            active: true,
+            bank: 12,
+            business_name: "Campus Night Limited",
+            id: 321,
+            is_verified: true,
+            settlement_schedule: "AUTO",
+            subaccount_code: "ACCT_sub_123",
+          },
+        }),
+      ok: true,
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    prisma.organizerProfile.findUnique.mockResolvedValue({
+      country: "NG",
+      defaultPayoutCurrency: "NGN",
+    });
+    prisma.organizerPaymentProfile.findUnique.mockResolvedValue({
+      firstReadyAt: new Date("2026-06-01T10:00:00.000Z"),
+      isReadyForPaidEvents: true,
+    });
+    paymentAccountRepository.findPaystackAccountByOrganizerId.mockResolvedValue({
+      externalAccountCode: "ACCT_sub_123",
+      metadata: {
+        paystack: {
+          accountHolderName: "Campus Night Limited",
+          bankCode: "058",
+          businessName: "Campus Night Limited",
+        },
+      },
+    });
+    organizerPaymentsQueryService.getOrganizerPaystackReadiness.mockResolvedValue({
+      organizerId: "org_123",
+      isReadyForPaidEvents: true,
+      payoutAccountCode: "ACCT_sub_123",
+    });
+
+    await service.refreshAccountStatusForOrganizer("org_123");
+
+    expect(notificationsService.notifyOrganizerPayoutReady).not.toHaveBeenCalled();
   });
 });

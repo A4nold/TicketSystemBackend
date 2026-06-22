@@ -28,6 +28,10 @@ export type PasswordResetResponse = {
   message: string;
 };
 
+export type EmailVerificationResponse = {
+  message: string;
+};
+
 export async function registerAttendee(payload: RegisterPayload) {
   return apiFetch<AuthResponse>("/api/auth/register", {
     body: JSON.stringify(payload),
@@ -82,6 +86,15 @@ export async function deleteCurrentAccount(accessToken: string) {
       Authorization: `Bearer ${accessToken}`,
     },
     method: "DELETE",
+  });
+}
+
+export async function requestEmailVerification(accessToken: string) {
+  return apiFetch<EmailVerificationResponse>("/api/auth/verify-email/request", {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+    method: "POST",
   });
 }
 

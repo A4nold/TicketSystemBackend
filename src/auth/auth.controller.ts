@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Post, Res, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Post, Query, Res, UseGuards } from "@nestjs/common";
 import {
   ApiBearerAuth,
   ApiBadRequestResponse,
@@ -11,6 +11,10 @@ import {
 
 import { CurrentUser } from "./decorators/current-user.decorator";
 import { AuthResponseDto, AuthUserResponseDto } from "./dto/auth-response.dto";
+import {
+  EmailVerificationResponseDto,
+  VerifyEmailConfirmDto,
+} from "./dto/email-verification.dto";
 import { LoginDto } from "./dto/login.dto";
 import {
   ForgotPasswordDto,
@@ -98,6 +102,58 @@ export class AuthController {
   })
   forgotPassword(@Body() payload: ForgotPasswordDto) {
     return this.authService.requestPasswordReset(payload);
+  }
+
+  @Post("verify-email/request")
+  @ApiBearerAuth("bearer")
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({
+    summary: "Send or resend the current user's email verification link",
+  })
+  @ApiOkResponse({
+    description: "Verification email request accepted",
+    type: EmailVerificationResponseDto,
+  })
+  requestEmailVerification(@CurrentUser() user: AuthenticatedUser) {
+    return this.authService.requestEmailVerification(user.id);
+  }
+
+  @Post("verify-email/confirm")
+  @ApiOperation({
+    summary: "Confirm email ownership using a verification token",
+  })
+  @ApiOkResponse({
+    description: "Email verified successfully",
+    type: EmailVerificationResponseDto,
+  })
+  confirmEmailVerification(@Body() payload: VerifyEmailConfirmDto) {
+    return this.authService.confirmEmailVerification(payload.token);
+  }
+
+  @Get("verify-email/confirm")
+  @ApiOperation({
+    summary: "Confirm email ownership from a browser-based verification link",
+  })
+  async confirmEmailVerificationFromLink(
+    @Query("token") token: string,
+    @Res() response: Response,
+  ) {
+    try {
+      const result = await this.authService.confirmEmailVerification(token);
+      response
+        .status(200)
+        .type("html")
+        .send(
+          `<html><body style="font-family: sans-serif; padding: 32px;"><h1>Email verified</h1><p>${result.message}</p><p>You can return to Maya and refresh your organizer setup.</p></body></html>`,
+        );
+    } catch (error) {
+      response
+        .status(400)
+        .type("html")
+        .send(
+          `<html><body style="font-family: sans-serif; padding: 32px;"><h1>Verification failed</h1><p>${error instanceof Error ? error.message : "This verification link is invalid or expired."}</p></body></html>`,
+        );
+    }
   }
 
   @Post("reset-password")

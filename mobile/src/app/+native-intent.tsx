@@ -57,7 +57,13 @@ export function redirectSystemPath({ path }: RedirectInput) {
     cleanedPathname === "///"
   ) {
     // If payment return params exist on a root deep link, route to checkout success.
-    if (queryPart.includes("orderId=") || queryPart.includes("session_id=")) {
+    if (
+      queryPart.includes("orderId=") ||
+      queryPart.includes("payment_intent=") ||
+      queryPart.includes("session_id=") ||
+      queryPart.includes("reference=") ||
+      queryPart.includes("trxref=")
+    ) {
       const target = `/checkout/success?${queryPart}`;
       if (__DEV__) {
         console.info("[native-intent] root-with-payment-query", {

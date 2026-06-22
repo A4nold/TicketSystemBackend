@@ -76,7 +76,7 @@ export class OrganizerPaymentsQueryService {
 
     return {
       organizerId,
-      subaccountCode: paystackAccount?.externalAccountCode ?? null,
+      payoutAccountCode: paystackAccount?.externalAccountCode ?? null,
       status: paystackAccount?.status ?? null,
       onboardingStatus: paystackAccount?.onboardingStatus ?? null,
       verificationStatus: paystackAccount?.verificationStatus ?? null,

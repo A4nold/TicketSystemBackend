@@ -29,7 +29,7 @@ export class PaystackOrganizerAccountResponseDto {
   organizerId!: string;
 
   @ApiPropertyOptional({ nullable: true })
-  subaccountCode!: string | null;
+  payoutAccountCode!: string | null;
 
   @ApiPropertyOptional({ nullable: true })
   status!: string | null;

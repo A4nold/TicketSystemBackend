@@ -23,7 +23,7 @@ export type OrganizerStripeAccountReadiness = {
 
 export type OrganizerPaystackAccountReadiness = {
   organizerId: string;
-  subaccountCode: string | null;
+  payoutAccountCode: string | null;
   status: string | null;
   onboardingStatus: string | null;
   verificationStatus: string | null;

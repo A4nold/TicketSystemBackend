@@ -410,14 +410,14 @@ export function CheckoutStartScreen() {
       );
       setPendingOrderId(order.id);
 
-      if (isStripeCheckout && order.clientSecret) {
+      if (order.checkoutFlow === "STRIPE_PAYMENT_INTENT") {
         setIsAwaitingPaymentReturn(true);
         await presentStripeCheckout(order);
         setIsSubmitting(false);
         return;
       }
 
-      if (!order.checkoutUrl) {
+      if (order.checkoutFlow !== "REDIRECT" || !order.checkoutUrl) {
         if (order.status === "PAID" || order.isAwaitingPaymentConfirmation) {
           router.replace({
             pathname: "/checkout/success",

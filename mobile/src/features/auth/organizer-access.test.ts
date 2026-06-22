@@ -22,6 +22,7 @@ function buildUser(overrides: Partial<AuthUser> = {}): AuthUser {
     accountType: overrides.accountType ?? "ORGANIZER",
     appRoles: overrides.appRoles ?? ["organizer"],
     email: overrides.email ?? "owner@example.com",
+    emailVerifiedAt: overrides.emailVerifiedAt ?? null,
     firstName: overrides.firstName ?? "Ada",
     id: overrides.id ?? "user-1",
     lastName: overrides.lastName ?? "Lovelace",

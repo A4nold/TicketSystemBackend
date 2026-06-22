@@ -73,6 +73,16 @@ export type OrganizerEventResponse = {
     id: string;
     lastName: string | null;
   };
+  paymentReadiness: {
+    blockingCode: string | null;
+    blockingMessage: string | null;
+    canPublishPaidEvent: boolean;
+    hasPaidTicketTypes: boolean;
+    isReadyForPaidEvents: boolean;
+    organizerOnboardingStatus: string | null;
+    paidTicketTypeCount: number;
+    selectedProvider: "STRIPE" | "PAYSTACK" | "MANUAL" | null;
+  };
   metrics: {
     resaleListings: number;
     scanAttempts: number;
@@ -119,6 +129,16 @@ export type OrganizerEventSummary = {
     firstName: string | null;
     id: string;
     lastName: string | null;
+  };
+  paymentReadiness: {
+    blockingCode: string | null;
+    blockingMessage: string | null;
+    canPublishPaidEvent: boolean;
+    hasPaidTicketTypes: boolean;
+    isReadyForPaidEvents: boolean;
+    organizerOnboardingStatus: string | null;
+    paidTicketTypeCount: number;
+    selectedProvider: "STRIPE" | "PAYSTACK" | "MANUAL" | null;
   };
   resaleWindow: {
     endsAt: string | null;

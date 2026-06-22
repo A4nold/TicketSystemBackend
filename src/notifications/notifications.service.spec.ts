@@ -204,4 +204,50 @@ describe("NotificationsService", () => {
     });
     expect(prisma.$transaction).toHaveBeenCalled();
   });
+
+  it("creates organizer payout ready notifications and sends the email", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn(),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    process.env.RESEND_API_KEY = "re_test_key";
+
+    const prisma = {
+      pushDevice: {
+        findMany: vi.fn().mockResolvedValue([]),
+      },
+      userNotification: {
+        create: vi.fn().mockResolvedValue({
+          id: "notification_1",
+        }),
+      },
+    };
+
+    const service = new NotificationsService(prisma as never);
+
+    await service.notifyOrganizerPayoutReady({
+      organizerEmail: "organizer@example.com",
+      provider: "PAYSTACK",
+      userId: "user_1",
+    });
+
+    expect(prisma.userNotification.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          title: "Paystack payouts ready",
+          type: "ORGANIZER_PAYOUT_READY",
+          userId: "user_1",
+        }),
+      }),
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://api.resend.com/emails",
+      expect.objectContaining({
+        method: "POST",
+      }),
+    );
+
+    delete process.env.RESEND_API_KEY;
+  });
 });

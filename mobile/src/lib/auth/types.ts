@@ -13,6 +13,7 @@ export type AuthUser = {
   accountType: AccountType;
   appRoles: AppSurface[];
   email: string;
+  emailVerifiedAt: string | null;
   firstName: string | null;
   id: string;
   lastName: string | null;

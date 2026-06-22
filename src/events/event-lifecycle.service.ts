@@ -107,7 +107,16 @@ export class EventLifecycleService {
 
     await this.trySweepPostEventNotifications(event.id);
 
-    return toEventDetailResponse(event);
+    return toEventDetailResponse(
+      event,
+      await this.eventPaymentReadinessService.getEventPaymentReadinessSummary({
+        organizerId: event.organizer.id,
+        ticketTypes: event.ticketTypes.map((ticketType) => ({
+          price: ticketType.price,
+          pricingMode: ticketType.pricingMode ?? "FIXED",
+        })),
+      }),
+    );
   }
 
   async updateEvent(eventId: string, payload: UpdateEventDto) {
@@ -252,7 +261,16 @@ export class EventLifecycleService {
       await this.trySweepPostEventNotifications(event.id);
     }
 
-    return toEventDetailResponse(event);
+    return toEventDetailResponse(
+      event,
+      await this.eventPaymentReadinessService.getEventPaymentReadinessSummary({
+        organizerId: event.organizer.id,
+        ticketTypes: event.ticketTypes.map((ticketType) => ({
+          price: ticketType.price,
+          pricingMode: ticketType.pricingMode ?? "FIXED",
+        })),
+      }),
+    );
   }
 
   private assertValidTimezone(timezone: string) {

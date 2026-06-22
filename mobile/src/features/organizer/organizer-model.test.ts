@@ -30,6 +30,16 @@ function buildEvent(overrides: Partial<OrganizerEventResponse> = {}): OrganizerE
       scanAttempts: 0,
       tickets: 140,
     },
+    paymentReadiness: {
+      blockingCode: null,
+      blockingMessage: null,
+      canPublishPaidEvent: true,
+      hasPaidTicketTypes: false,
+      isReadyForPaidEvents: false,
+      organizerOnboardingStatus: null,
+      paidTicketTypeCount: 0,
+      selectedProvider: null,
+    },
     organizer: {
       email: "owner@example.com",
       firstName: "Ada",

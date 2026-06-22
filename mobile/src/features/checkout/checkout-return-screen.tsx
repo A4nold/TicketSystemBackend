@@ -6,21 +6,69 @@ import { useAuth } from "@/components/providers/auth-provider";
 import { SupportCard } from "@/components/support/support-card";
 import { ActionButton, Card, Screen } from "@/components/ui";
 import { formatDateTime, getCurrencyLocale } from "@/lib/formatters";
-import { getOrderById } from "@/lib/orders/orders-client";
+import {
+  getOrderByCheckoutSessionId,
+  getOrderById,
+  getOrderByPaymentIntentId,
+} from "@/lib/orders/orders-client";
 import { palette } from "@/styles/theme";
+import { getCheckoutReturnFailureHeading } from "./checkout-return-heading";
+import { readCheckoutReturnIds } from "./checkout-return-params";
+import { getCheckoutReturnRefreshLabel } from "./checkout-return-refresh";
+import { getCheckoutRecoverySummary } from "./checkout-return-recovery";
+import { getCheckoutReturnScreenChrome } from "./checkout-return-screen-chrome";
+import {
+  getCheckoutReturnCheckoutStatusLabel,
+  getCheckoutReturnPaymentStatusLabel,
+} from "./checkout-return-status";
+import { getCheckoutReturnFailureCopy } from "./checkout-return-state";
+import { getCheckoutReturnSupportBody } from "./checkout-return-support-body";
+import { getCheckoutReturnSupportSubject } from "./checkout-return-support";
 
 export function CheckoutReturnScreen({ mode }: { mode: "cancel" | "success" }) {
   const params = useLocalSearchParams<{
+    reference?: string;
     orderId?: string;
+    payment_intent?: string;
     session_id?: string;
+    trxref?: string;
   }>();
   const { session } = useAuth();
-  const orderId = typeof params.orderId === "string" ? params.orderId : undefined;
+  const { checkoutSessionId, orderId, paymentIntentId } = readCheckoutReturnIds(params);
 
   const orderQuery = useQuery({
-    enabled: Boolean(session?.accessToken && orderId),
-    queryFn: () => getOrderById(orderId!, session!.accessToken),
-    queryKey: ["mobile-checkout-return-order", orderId, session?.accessToken, mode],
+    enabled: Boolean(session?.accessToken && (orderId || checkoutSessionId || paymentIntentId)),
+    queryFn: () =>
+      orderId
+        ? getOrderById(orderId, session!.accessToken)
+        : checkoutSessionId
+          ? getOrderByCheckoutSessionId(checkoutSessionId, session!.accessToken)
+          : getOrderByPaymentIntentId(paymentIntentId!, session!.accessToken),
+    queryKey: [
+      "mobile-checkout-return-order",
+      orderId,
+      checkoutSessionId,
+      paymentIntentId,
+      session?.accessToken,
+      mode,
+    ],
+    refetchInterval: (query) => {
+      const order = query.state.data;
+
+      if (!order) {
+        return mode === "success" ? 3_000 : false;
+      }
+
+      if (order.status === "PAID" || order.status === "CANCELLED") {
+        return false;
+      }
+
+      return order.isAwaitingPaymentConfirmation || order.status === "PENDING"
+        ? 3_000
+        : false;
+    },
+    refetchOnMount: "always",
+    refetchOnReconnect: true,
     retry: 1,
   });
 
@@ -28,6 +76,23 @@ export function CheckoutReturnScreen({ mode }: { mode: "cancel" | "success" }) {
   const isSuccess = order?.status === "PAID";
   const isPending = order?.status === "PENDING" || order?.isAwaitingPaymentConfirmation === true;
   const isCancelled = order?.status === "CANCELLED";
+  const recoverySummary = getCheckoutRecoverySummary({
+    checkoutSessionId: checkoutSessionId ?? undefined,
+    paymentIntentId: paymentIntentId ?? undefined,
+  });
+  const failureHeading = getCheckoutReturnFailureHeading({
+    hasRecoveryIdentifier: Boolean(recoverySummary),
+    isLookupError: orderQuery.isError,
+    mode,
+    status: order?.status ?? null,
+  });
+  const screenChrome = getCheckoutReturnScreenChrome({
+    hasRecoveryIdentifier: Boolean(recoverySummary),
+    isLookupError: orderQuery.isError,
+    mode,
+    signedIn: Boolean(session),
+    status: order?.status ?? null,
+  });
   const formatCurrency = (value: string, currency: string) =>
     new Intl.NumberFormat(getCurrencyLocale(currency), {
       currency,
@@ -38,14 +103,7 @@ export function CheckoutReturnScreen({ mode }: { mode: "cancel" | "success" }) {
     : null;
 
   return (
-    <Screen
-      title={mode === "success" ? "Checking payment" : "Checkout not completed"}
-      subtitle={
-        mode === "success"
-          ? "We are confirming the latest backend order state for this payment attempt."
-          : "We are checking whether this checkout was cancelled or still needs confirmation."
-      }
-    >
+    <Screen title={screenChrome.title} subtitle={screenChrome.subtitle}>
       <ScrollView contentContainerStyle={styles.content}>
         {orderQuery.isLoading ? (
           <Card>
@@ -68,8 +126,19 @@ export function CheckoutReturnScreen({ mode }: { mode: "cancel" | "success" }) {
               </Link>
             </Card>
             <SupportCard
-              body="If you cannot reconnect this checkout result after signing in again, contact support with any order or payment reference you have."
-              subject="TicketSystem checkout return sign-in help"
+              body={getCheckoutReturnSupportBody({
+                mode,
+                orderId,
+                recoveryLabel: recoverySummary?.label ?? null,
+                recoveryValue: recoverySummary?.value ?? null,
+                signedOut: true,
+              })}
+              subject={getCheckoutReturnSupportSubject({
+                orderId,
+                recoveryLabel: recoverySummary?.label ?? null,
+                recoveryValue: recoverySummary?.value ?? null,
+                signedOut: true,
+              })}
               title="Still not seeing this purchase in the app?"
             />
           </>
@@ -109,7 +178,9 @@ export function CheckoutReturnScreen({ mode }: { mode: "cancel" | "success" }) {
               </View>
               <View style={styles.summaryRow}>
                 <Text style={styles.summaryLabel}>Payment</Text>
-                <Text style={styles.summaryValue}>{order.paymentStatus ?? "paid"}</Text>
+                <Text style={styles.summaryValue}>
+                  {getCheckoutReturnPaymentStatusLabel(order.paymentStatus)}
+                </Text>
               </View>
               <View style={styles.divider} />
               <View style={styles.stack}>
@@ -138,8 +209,12 @@ export function CheckoutReturnScreen({ mode }: { mode: "cancel" | "success" }) {
                   Continue to wallet
                 </Link>
                 <ActionButton
+                  loading={orderQuery.isFetching}
                   onPress={() => void orderQuery.refetch()}
-                  title="Refresh order state"
+                  title={getCheckoutReturnRefreshLabel({
+                    isFetching: orderQuery.isFetching,
+                    kind: "order",
+                  })}
                   variant="secondary"
                 />
               </View>
@@ -162,10 +237,22 @@ export function CheckoutReturnScreen({ mode }: { mode: "cancel" | "success" }) {
                 </View>
                 <View style={styles.summaryRow}>
                   <Text style={styles.summaryLabel}>Checkout state</Text>
-                  <Text style={styles.summaryValue}>{order.checkoutStatus ?? "unknown"}</Text>
+                  <Text style={styles.summaryValue}>
+                    {getCheckoutReturnCheckoutStatusLabel(order.checkoutStatus)}
+                  </Text>
                 </View>
                 <View style={styles.ctaStack}>
-                  <ActionButton onPress={() => void orderQuery.refetch()} title="Refresh payment status" />
+                  <Text style={styles.helperCopy}>
+                    Maya is rechecking this order every few seconds while this screen stays open.
+                  </Text>
+                  <ActionButton
+                    loading={orderQuery.isFetching}
+                    onPress={() => void orderQuery.refetch()}
+                    title={getCheckoutReturnRefreshLabel({
+                      isFetching: orderQuery.isFetching,
+                      kind: "payment",
+                    })}
+                  />
                   <Link href="/(tabs)/wallet" style={styles.secondaryLink}>
                     Back to wallet
                   </Link>
@@ -173,8 +260,11 @@ export function CheckoutReturnScreen({ mode }: { mode: "cancel" | "success" }) {
               </View>
             </Card>
             <SupportCard
-              body={`If payment remains pending and the wallet still does not update, contact support with order ${order.id} before retrying multiple purchases.`}
-              subject={`TicketSystem payment confirmation help for ${order.id}`}
+              body={getCheckoutReturnSupportBody({
+                mode,
+                orderId: order.id,
+              })}
+              subject={getCheckoutReturnSupportSubject({ orderId: order.id })}
               title="Need help with this order?"
             />
           </>
@@ -184,12 +274,32 @@ export function CheckoutReturnScreen({ mode }: { mode: "cancel" | "success" }) {
           <>
             <Card padded={false}>
               <View style={styles.cancelShell}>
-                <Text style={styles.heroEyebrow}>Checkout not completed</Text>
-                <Text style={styles.sectionTitle}>No charge was confirmed in the app.</Text>
+                <Text style={styles.heroEyebrow}>{failureHeading.eyebrow}</Text>
+                <Text style={styles.sectionTitle}>{failureHeading.title}</Text>
                 <Text style={styles.copy}>
-                  You can reopen discovery to choose a different event or return to wallet without losing your current account session.
+                  {getCheckoutReturnFailureCopy({
+                    hasRecoveryIdentifier: Boolean(recoverySummary),
+                    isLookupError: orderQuery.isError,
+                    mode,
+                    status: order?.status ?? null,
+                  })}
                 </Text>
+                {recoverySummary && !order ? (
+                  <Text style={styles.helperCopy}>
+                    {recoverySummary.label}: {recoverySummary.value}
+                  </Text>
+                ) : null}
                 <View style={styles.ctaStack}>
+                  {recoverySummary ? (
+                    <ActionButton
+                      loading={orderQuery.isFetching}
+                      onPress={() => void orderQuery.refetch()}
+                      title={getCheckoutReturnRefreshLabel({
+                        isFetching: orderQuery.isFetching,
+                        kind: "payment",
+                      })}
+                    />
+                  ) : null}
                   <Link href="/(public)" style={styles.primaryLink}>
                     Back to discovery
                   </Link>
@@ -200,8 +310,17 @@ export function CheckoutReturnScreen({ mode }: { mode: "cancel" | "success" }) {
               </View>
             </Card>
             <SupportCard
-              body="If you saw a bank or card charge but this screen did not confirm payment, contact support before trying the same purchase again."
-              subject="TicketSystem checkout return follow-up"
+              body={getCheckoutReturnSupportBody({
+                mode,
+                orderId,
+                recoveryLabel: recoverySummary?.label ?? null,
+                recoveryValue: recoverySummary?.value ?? null,
+              })}
+              subject={getCheckoutReturnSupportSubject({
+                orderId,
+                recoveryLabel: recoverySummary?.label ?? null,
+                recoveryValue: recoverySummary?.value ?? null,
+              })}
               title="Charge seen, but nothing in your wallet?"
             />
           </>
@@ -265,6 +384,11 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: "800",
     lineHeight: 33,
+  },
+  helperCopy: {
+    color: palette.muted,
+    fontSize: 13,
+    lineHeight: 20,
   },
   lineItem: {
     alignItems: "center",

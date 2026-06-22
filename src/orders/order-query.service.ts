@@ -55,6 +55,70 @@ export class OrderQueryService {
     return toOrderResponse(refreshedOrder ?? order, checkoutState);
   }
 
+  async getOrderByCheckoutSessionId(checkoutSessionId: string, user: AuthenticatedUser) {
+    const order = await this.prisma.order.findFirst({
+      where: {
+        checkoutSessionId,
+        userId: user.id,
+      },
+      include: this.orderInclude(),
+    });
+
+    if (!order) {
+      throw new NotFoundException(
+        `Order with checkout session "${checkoutSessionId}" was not found.`,
+      );
+    }
+
+    const checkoutState = await this.reconcileOrderCheckoutState(order);
+
+    const refreshedOrder = checkoutState
+      ? await this.prisma.order.findFirst({
+          where: {
+            id: order.id,
+            userId: user.id,
+          },
+          include: this.orderInclude(),
+        })
+      : order;
+
+    return toOrderResponse(refreshedOrder ?? order, checkoutState);
+  }
+
+  async getOrderByPaymentIntentId(paymentIntentId: string, user: AuthenticatedUser) {
+    const order = await this.prisma.order.findFirst({
+      where: {
+        userId: user.id,
+        paymentTransactions: {
+          some: {
+            providerPaymentIntentId: paymentIntentId,
+          },
+        },
+      },
+      include: this.orderInclude(),
+    });
+
+    if (!order) {
+      throw new NotFoundException(
+        `Order with payment intent "${paymentIntentId}" was not found.`,
+      );
+    }
+
+    const checkoutState = await this.reconcileOrderCheckoutState(order);
+
+    const refreshedOrder = checkoutState
+      ? await this.prisma.order.findFirst({
+          where: {
+            id: order.id,
+            userId: user.id,
+          },
+          include: this.orderInclude(),
+        })
+      : order;
+
+    return toOrderResponse(refreshedOrder ?? order, checkoutState);
+  }
+
   private orderInclude() {
     return {
       event: true,

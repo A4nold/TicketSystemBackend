@@ -23,6 +23,9 @@ export class AuthUserResponseDto {
   @ApiProperty()
   email!: string;
 
+  @ApiProperty({ nullable: true })
+  emailVerifiedAt!: string | null;
+
   @ApiProperty()
   status!: string;
 

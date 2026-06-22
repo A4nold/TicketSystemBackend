@@ -125,6 +125,35 @@ export class EventMetricsDto {
   resaleListings!: number;
 }
 
+export class EventPaymentReadinessDto {
+  @ApiProperty({
+    enum: ["STRIPE", "PAYSTACK", "MANUAL"],
+    nullable: true,
+  })
+  selectedProvider!: string | null;
+
+  @ApiProperty({ nullable: true })
+  organizerOnboardingStatus!: string | null;
+
+  @ApiProperty()
+  hasPaidTicketTypes!: boolean;
+
+  @ApiProperty()
+  paidTicketTypeCount!: number;
+
+  @ApiProperty()
+  isReadyForPaidEvents!: boolean;
+
+  @ApiProperty()
+  canPublishPaidEvent!: boolean;
+
+  @ApiProperty({ nullable: true })
+  blockingCode!: string | null;
+
+  @ApiProperty({ nullable: true })
+  blockingMessage!: string | null;
+}
+
 export class EventSummaryResponseDto {
   @ApiProperty()
   id!: string;
@@ -185,6 +214,9 @@ export class EventSummaryResponseDto {
 
   @ApiProperty()
   issuedTicketsCount!: number;
+
+  @ApiProperty({ type: EventPaymentReadinessDto })
+  paymentReadiness!: EventPaymentReadinessDto;
 }
 
 export class EventDetailResponseDto extends EventSummaryResponseDto {

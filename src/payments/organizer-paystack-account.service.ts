@@ -12,6 +12,7 @@ import { AuthenticatedUser } from "../auth/types/authenticated-user.type";
 import { isPaystackOrganizerOnboardingEnabled } from "../common/feature-flags";
 import { PrismaService } from "../prisma/prisma.service";
 import { OrganizerPaymentsQueryService } from "./organizer-payments-query.service";
+import { NotificationsService } from "../notifications/notifications.service";
 import {
   ResolvePaystackBankAccountDto,
   UpsertPaystackOrganizerAccountDto,
@@ -57,6 +58,7 @@ export class OrganizerPaystackAccountService {
     private readonly prisma: PrismaService,
     private readonly organizerPaymentsQueryService: OrganizerPaymentsQueryService,
     private readonly paymentAccountRepository: PaymentAccountRepository,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async getAccountStatus(user: AuthenticatedUser) {
@@ -147,14 +149,15 @@ export class OrganizerPaystackAccountService {
       );
     }
 
-    if (existingAccount.externalAccountCode) {
-      throw new BadRequestException(
-        "Updating live Paystack payout accounts will be handled in a follow-up wave. This account is already connected.",
-      );
-    }
-
     const resolvedAccount = await this.resolvePaystackBankAccount(payload);
-    const subaccount = await this.createPaystackSubaccount(user, payload, resolvedAccount);
+    const subaccount = existingAccount.externalAccountCode
+      ? await this.updatePaystackSubaccount(
+          existingAccount.externalAccountCode,
+          user,
+          payload,
+          resolvedAccount,
+        )
+      : await this.createPaystackSubaccount(user, payload, resolvedAccount);
     await this.syncPaystackSubaccountForOrganizer(user.id, payload, resolvedAccount, subaccount);
     return this.organizerPaymentsQueryService.getOrganizerPaystackReadiness(user.id);
   }
@@ -261,6 +264,13 @@ export class OrganizerPaystackAccountService {
   ) {
     const { normalizedCountry, normalizedCurrency } =
       await this.validateOrganizerPayoutRegion(organizerId);
+    const previousPaymentProfile = await this.prisma.organizerPaymentProfile.findUnique({
+      where: { organizerId },
+      select: {
+        firstReadyAt: true,
+        isReadyForPaidEvents: true,
+      },
+    });
     const now = new Date();
     const subaccountCode = input.subaccount.subaccount_code?.trim();
     const externalAccountId = String(input.subaccount.id ?? subaccountCode ?? organizerId);
@@ -312,7 +322,7 @@ export class OrganizerPaystackAccountService {
         onboardingCompletedAt: now,
         requirementsSummary: isReadyForPaidEvents
           ? "Paystack organizer payouts are ready for paid events."
-          : "Paystack subaccount created. Verification or activation still needs attention before paid events go live.",
+          : "Paystack payout account created. Verification or activation still needs attention before paid events go live.",
         lastSyncedAt: now,
         metadata: accountMetadata,
       },
@@ -330,10 +340,10 @@ export class OrganizerPaystackAccountService {
         onboardingCompletedAt: now,
         requirementsSummary: isReadyForPaidEvents
           ? "Paystack organizer payouts are ready for paid events."
-          : "Paystack subaccount created. Verification or activation still needs attention before paid events go live.",
+          : "Paystack payout account created. Verification or activation still needs attention before paid events go live.",
         disabledReason: isReadyForPaidEvents
           ? null
-          : "Paystack subaccount is not fully verified or active yet.",
+          : "Paystack payout account is not fully verified or active yet.",
         lastSyncedAt: now,
         metadata: accountMetadata,
       },
@@ -366,6 +376,25 @@ export class OrganizerPaystackAccountService {
           : {}),
       },
     });
+
+    if (
+      isReadyForPaidEvents &&
+      !previousPaymentProfile?.isReadyForPaidEvents &&
+      !previousPaymentProfile?.firstReadyAt
+    ) {
+      const organizer = await this.prisma.user.findUnique({
+        where: { id: organizerId },
+        select: { email: true },
+      });
+
+      if (organizer?.email) {
+        await this.notificationsService.notifyOrganizerPayoutReady({
+          organizerEmail: organizer.email,
+          provider: "PAYSTACK",
+          userId: organizerId,
+        });
+      }
+    }
 
     this.logger.log(
       `payments.paystack.account_synced organizerId=${organizerId} subaccountCode=${subaccountCode ?? "missing"} active=${isActive} verified=${isVerified} ready=${isReadyForPaidEvents}`,
@@ -425,7 +454,39 @@ export class OrganizerPaystackAccountService {
     });
 
     if (!response.data?.subaccount_code) {
-      throw new BadRequestException("Paystack did not return a valid organizer subaccount.");
+      throw new BadRequestException("Paystack did not return a valid organizer payout account.");
+    }
+
+    return response.data;
+  }
+
+  private async updatePaystackSubaccount(
+    subaccountCode: string,
+    user: AuthenticatedUser,
+    payload: UpsertPaystackOrganizerAccountDto,
+    resolvedAccount: {
+      accountName: string;
+      accountNumber: string;
+    },
+  ) {
+    const response = await this.paystackFetch<PaystackCreateSubaccountResponse>(
+      `/subaccount/${encodeURIComponent(subaccountCode)}`,
+      {
+        body: JSON.stringify({
+          account_number: resolvedAccount.accountNumber,
+          business_name: payload.businessName.trim(),
+          percentage_charge: 0,
+          primary_contact_email: user.email,
+          primary_contact_name:
+            payload.accountHolderName?.trim() || resolvedAccount.accountName,
+          settlement_bank: payload.bankCode.trim(),
+        }),
+        method: "PUT",
+      },
+    );
+
+    if (!response.data?.subaccount_code) {
+      throw new BadRequestException("Paystack did not return a valid organizer payout account.");
     }
 
     return response.data;
@@ -440,7 +501,7 @@ export class OrganizerPaystackAccountService {
     );
 
     if (!response.data?.subaccount_code) {
-      throw new BadRequestException("Paystack did not return a valid organizer subaccount.");
+      throw new BadRequestException("Paystack did not return a valid organizer payout account.");
     }
 
     return response.data;

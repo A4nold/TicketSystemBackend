@@ -19,6 +19,9 @@ export class OrganizerProfileResponseDto {
   @ApiProperty({ nullable: true })
   defaultPayoutCurrency!: string | null;
 
+  @ApiProperty({ nullable: true })
+  emailVerifiedAt!: Date | null;
+
   @ApiProperty({
     enum: ["STRIPE", "PAYSTACK", "MANUAL"],
     nullable: true,

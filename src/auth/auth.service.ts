@@ -61,6 +61,8 @@ export class AuthService {
       select: this.authUserSelect(),
     });
 
+    await this.issueEmailVerificationToken(user.id, user.email);
+
     return this.issueToken(user);
   }
 
@@ -247,6 +249,106 @@ export class AuthService {
     };
   }
 
+  async requestEmailVerification(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        email: true,
+        emailVerifiedAt: true,
+        status: true,
+      },
+    });
+
+    if (!user || user.status !== "ACTIVE") {
+      throw new UnauthorizedException("This account is not active.");
+    }
+
+    if (user.emailVerifiedAt) {
+      return {
+        message: "Your email is already verified.",
+      };
+    }
+
+    await this.issueEmailVerificationToken(user.id, user.email);
+
+    return {
+      message: "Verification email sent.",
+    };
+  }
+
+  async confirmEmailVerification(token: string) {
+    const normalizedToken = token.trim();
+
+    if (!normalizedToken) {
+      throw new BadRequestException("This verification link is invalid or has expired.");
+    }
+
+    const tokenHash = this.hashVerificationToken(normalizedToken);
+    const emailVerificationToken = await (this.prisma as any).emailVerificationToken.findUnique({
+      where: {
+        tokenHash,
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            status: true,
+            emailVerifiedAt: true,
+          },
+        },
+      },
+    });
+
+    if (
+      !emailVerificationToken ||
+      emailVerificationToken.usedAt ||
+      emailVerificationToken.expiresAt.getTime() < Date.now() ||
+      emailVerificationToken.user.status !== "ACTIVE"
+    ) {
+      throw new BadRequestException("This verification link is invalid or has expired.");
+    }
+
+    if (emailVerificationToken.user.emailVerifiedAt) {
+      return {
+        message: "Your email is already verified.",
+      };
+    }
+
+    const verifiedAt = new Date();
+
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: emailVerificationToken.user.id },
+        data: {
+          emailVerifiedAt: verifiedAt,
+        },
+      }),
+      (this.prisma as any).emailVerificationToken.update({
+        where: { id: emailVerificationToken.id },
+        data: {
+          usedAt: verifiedAt,
+        },
+      }),
+      (this.prisma as any).emailVerificationToken.updateMany({
+        where: {
+          userId: emailVerificationToken.user.id,
+          usedAt: null,
+          id: {
+            not: emailVerificationToken.id,
+          },
+        },
+        data: {
+          usedAt: verifiedAt,
+        },
+      }),
+    ]);
+
+    return {
+      message: "Your email has been verified successfully.",
+    };
+  }
+
   async resetPassword(payload: ResetPasswordDto) {
     const tokenHash = this.hashResetToken(payload.token);
     const resetToken = await this.prisma.passwordResetToken.findUnique({
@@ -325,6 +427,7 @@ export class AuthService {
     return {
       id: authUser.id,
       email: authUser.email,
+      emailVerifiedAt: authUser.emailVerifiedAt,
       accountType: authUser.accountType,
       status: authUser.status,
       profile: {
@@ -379,8 +482,55 @@ export class AuthService {
     return `${baseUrl}/reset-password?token=${encodeURIComponent(token)}`;
   }
 
+  private buildEmailVerificationUrl(token: string) {
+    const backendPublicUrl =
+      process.env.BACKEND_PUBLIC_URL?.trim() ||
+      process.env.PUBLIC_API_URL?.trim() ||
+      "http://localhost:3000";
+    const normalizedBaseUrl = backendPublicUrl.replace(/\/$/, "");
+    const apiBaseUrl = normalizedBaseUrl.endsWith("/api")
+      ? normalizedBaseUrl
+      : `${normalizedBaseUrl}/api`;
+
+    return `${apiBaseUrl}/auth/verify-email/confirm?token=${encodeURIComponent(token)}`;
+  }
+
   private hashResetToken(token: string) {
     return createHash("sha256").update(token).digest("hex");
+  }
+
+  private hashVerificationToken(token: string) {
+    return createHash("sha256").update(token).digest("hex");
+  }
+
+  private async issueEmailVerificationToken(userId: string, email: string) {
+    const rawToken = randomBytes(32).toString("hex");
+    const tokenHash = this.hashVerificationToken(rawToken);
+    const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24);
+
+    await (this.prisma as any).emailVerificationToken.updateMany({
+      where: {
+        userId,
+        usedAt: null,
+      },
+      data: {
+        usedAt: new Date(),
+      },
+    });
+
+    await (this.prisma as any).emailVerificationToken.create({
+      data: {
+        userId,
+        tokenHash,
+        expiresAt,
+      },
+    });
+
+    await this.sendEmailVerificationEmail({
+      email,
+      expiresAt,
+      verificationUrl: this.buildEmailVerificationUrl(rawToken),
+    });
   }
 
   private async sendPasswordResetEmail(input: {
@@ -438,10 +588,66 @@ export class AuthService {
     return { delivered: true, provider: "resend" as const };
   }
 
+  private async sendEmailVerificationEmail(input: {
+    email: string;
+    expiresAt: Date;
+    verificationUrl: string;
+  }) {
+    const resendApiKey = process.env.RESEND_API_KEY;
+    const fromEmail =
+      process.env.NOTIFICATIONS_FROM_EMAIL ?? "Ticket System <no-reply@ticketsystem.local>";
+    const subject = "Verify your Maya email";
+    const text = [
+      "Welcome to Maya.",
+      `Verify your email: ${input.verificationUrl}`,
+      `This link expires at: ${input.expiresAt.toISOString()}`,
+      "If you did not create this account, you can ignore this email.",
+    ].join("\n");
+    const html = [
+      "<p>Welcome to Maya.</p>",
+      `<p><a href="${input.verificationUrl}">Verify your email</a></p>`,
+      `<p>This link expires at <strong>${input.expiresAt.toISOString()}</strong>.</p>`,
+      "<p>If you did not create this account, you can ignore this email.</p>",
+    ].join("");
+
+    if (!resendApiKey) {
+      this.logger.log(
+        `Email verification preview -> to=${input.email} subject="${subject}" verificationUrl=${input.verificationUrl}`,
+      );
+      return { delivered: false, provider: "log-only" as const };
+    }
+
+    const response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${resendApiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from: fromEmail,
+        to: [input.email],
+        subject,
+        text,
+        html,
+      }),
+    });
+
+    if (!response.ok) {
+      const body = await response.text();
+      this.logger.error(
+        `Email verification failed: status=${response.status} body=${body}`,
+      );
+      return { delivered: false, provider: "resend" as const };
+    }
+
+    return { delivered: true, provider: "resend" as const };
+  }
+
   private authUserSelect() {
     return {
       id: true as const,
       email: true as const,
+      emailVerifiedAt: true as const,
       accountType: true as const,
       status: true as const,
       profile: {
@@ -467,6 +673,7 @@ export class AuthService {
   private toAuthUser(user: {
     id: string;
     email: string;
+    emailVerifiedAt?: Date | null;
     accountType: "ATTENDEE" | "ORGANIZER";
     status: string;
     profile?: {
@@ -495,6 +702,7 @@ export class AuthService {
     return {
       id: user.id,
       email: user.email,
+      emailVerifiedAt: user.emailVerifiedAt?.toISOString() ?? null,
       accountType: user.accountType,
       status: user.status,
       firstName: user.profile?.firstName ?? null,

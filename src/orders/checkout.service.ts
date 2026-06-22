@@ -421,7 +421,7 @@ export class CheckoutService {
 
         if (
           !organizerReadiness.isReadyForPaidEvents ||
-          !organizerReadiness.subaccountCode
+          !organizerReadiness.payoutAccountCode
         ) {
           throw new BadRequestException({
             code: "ORGANIZER_PAYMENT_ACCOUNT_NOT_READY",
@@ -441,7 +441,7 @@ export class CheckoutService {
             status: "PENDING",
             providerReference: `pending:${order.id}`,
             providerCheckoutId: order.checkoutSessionId,
-            connectedAccountId: organizerReadiness.subaccountCode,
+            connectedAccountId: organizerReadiness.payoutAccountCode,
             amount: totals.total,
             currency: totals.currency,
             grossAmount: totals.total,
@@ -452,14 +452,14 @@ export class CheckoutService {
               eventSlug: event.slug,
               orderId: order.id,
               provider: "PAYSTACK",
-              subaccountCode: organizerReadiness.subaccountCode,
+              payoutAccountCode: organizerReadiness.payoutAccountCode,
               userId: user.id,
             },
           },
         });
 
         paymentTransactionId = createdPaymentTransaction.id;
-        connectedAccountId = organizerReadiness.subaccountCode;
+        connectedAccountId = organizerReadiness.payoutAccountCode;
 
         await this.prisma.platformFee.create({
           data: {
@@ -489,7 +489,7 @@ export class CheckoutService {
           id: order.id,
           currency: order.currency,
           paymentTransactionId: createdPaymentTransaction.id,
-          paystackSubaccountCode: organizerReadiness.subaccountCode,
+          paystackSubaccountCode: organizerReadiness.payoutAccountCode,
           totalAmount: order.totalAmount,
           userEmail: user.email,
           userId: order.userId,

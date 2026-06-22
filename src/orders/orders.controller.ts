@@ -53,6 +53,54 @@ export class OrdersController {
     return this.orderQueryService.listMyOrders(user);
   }
 
+  @Get("lookup/checkout-session/:checkoutSessionId")
+  @ApiOperation({
+    summary: "Get an order by checkout session id",
+    description:
+      "Returns a single order when the provider checkout session or reference belongs to the authenticated user.",
+  })
+  @ApiParam({
+    name: "checkoutSessionId",
+    description: "Provider checkout session id or reference",
+  })
+  @ApiOkResponse({
+    description: "Order response",
+    type: OrderResponseDto,
+  })
+  @ApiNotFoundResponse({
+    description: "Order was not found",
+  })
+  getOrderByCheckoutSessionId(
+    @Param("checkoutSessionId") checkoutSessionId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.orderQueryService.getOrderByCheckoutSessionId(checkoutSessionId, user);
+  }
+
+  @Get("lookup/payment-intent/:paymentIntentId")
+  @ApiOperation({
+    summary: "Get an order by payment intent id",
+    description:
+      "Returns a single order when the Stripe payment intent belongs to the authenticated user.",
+  })
+  @ApiParam({
+    name: "paymentIntentId",
+    description: "Stripe payment intent identifier",
+  })
+  @ApiOkResponse({
+    description: "Order response",
+    type: OrderResponseDto,
+  })
+  @ApiNotFoundResponse({
+    description: "Order was not found",
+  })
+  getOrderByPaymentIntentId(
+    @Param("paymentIntentId") paymentIntentId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.orderQueryService.getOrderByPaymentIntentId(paymentIntentId, user);
+  }
+
   @Get(":orderId")
   @ApiOperation({
     summary: "Get an order by id",

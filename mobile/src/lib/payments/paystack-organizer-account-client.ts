@@ -2,7 +2,7 @@ import { apiFetch } from "@/lib/api/client";
 
 export type PaystackOrganizerAccountStatus = {
   organizerId: string;
-  subaccountCode: string | null;
+  payoutAccountCode: string | null;
   status: string | null;
   onboardingStatus: string | null;
   verificationStatus: string | null;

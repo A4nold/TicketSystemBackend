@@ -86,6 +86,17 @@ export type EventDetailSource = EventSummarySource & {
   };
 };
 
+export type EventPaymentReadinessSummary = {
+  blockingCode: string | null;
+  blockingMessage: string | null;
+  canPublishPaidEvent: boolean;
+  hasPaidTicketTypes: boolean;
+  isReadyForPaidEvents: boolean;
+  organizerOnboardingStatus: string | null;
+  paidTicketTypeCount: number;
+  selectedProvider: string | null;
+};
+
 export function toTicketTypeResponse(ticketType: EventTicketTypeShape) {
   return {
     id: ticketType.id,
@@ -120,7 +131,10 @@ export function toStaffMembershipResponse(membership: EventStaffMembershipShape)
   };
 }
 
-export function toEventSummaryResponse(event: EventSummarySource) {
+export function toEventSummaryResponse(
+  event: EventSummarySource,
+  paymentReadiness?: EventPaymentReadinessSummary,
+) {
   const timezone = coerceTimezone(event.timezone, "Europe/Dublin");
 
   return {
@@ -155,12 +169,25 @@ export function toEventSummaryResponse(event: EventSummarySource) {
     },
     ticketTypes: event.ticketTypes.map((ticketType) => toTicketTypeResponse(ticketType)),
     issuedTicketsCount: event._count.tickets,
+    paymentReadiness: paymentReadiness ?? {
+      blockingCode: null,
+      blockingMessage: null,
+      canPublishPaidEvent: true,
+      hasPaidTicketTypes: false,
+      isReadyForPaidEvents: false,
+      organizerOnboardingStatus: null,
+      paidTicketTypeCount: 0,
+      selectedProvider: null,
+    },
   };
 }
 
-export function toEventDetailResponse(event: EventDetailSource) {
+export function toEventDetailResponse(
+  event: EventDetailSource,
+  paymentReadiness?: EventPaymentReadinessSummary,
+) {
   return {
-    ...toEventSummaryResponse(event),
+    ...toEventSummaryResponse(event, paymentReadiness),
     salesWindow: {
       startsAt: event.salesStartAt,
       endsAt: event.salesEndAt,

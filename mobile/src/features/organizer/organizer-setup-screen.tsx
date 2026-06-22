@@ -1,4 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -20,13 +21,13 @@ import {
   hasCompletedOrganizerLocation,
   type OrganizerSetupStep,
 } from "@/features/organizer/organizer-setup-flow";
+import { requestEmailVerification } from "@/lib/auth/auth-client";
 import {
   getOrganizerProfile,
   upsertOrganizerProfile,
   type OrganizerProfile,
 } from "@/lib/organizer/organizer-profile-client";
 import {
-  getPaymentProviderCapabilityMatrix,
   getPaymentProviderAvailability,
   selectPaymentProvider,
   type PaymentProviderCode,
@@ -50,6 +51,11 @@ import {
   openStripeConnectOnboardingSession,
 } from "@/lib/payments/stripe-connect-onboarding";
 import { palette } from "@/styles/theme";
+import {
+  derivePayoutCurrencyFromCountry,
+  getOrganizerPayoutCountryOption,
+  ORGANIZER_PAYOUT_COUNTRY_OPTIONS,
+} from "./organizer-payout-country";
 
 function getStripeActionLabel(input: {
   connectedAccountId: string | null;
@@ -109,6 +115,23 @@ function StepPill({
   );
 }
 
+function SetupLead({
+  icon,
+  text,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  text: string;
+}) {
+  return (
+    <View style={styles.setupLeadRow}>
+      <View style={styles.setupLeadIconWrap}>
+        <Ionicons color={palette.accentDeep} name={icon} size={16} />
+      </View>
+      <Text style={styles.setupLeadText}>{text}</Text>
+    </View>
+  );
+}
+
 function formatRequirementList(items: string[]) {
   return items.map((item) => `• ${item}`).join("\n");
 }
@@ -129,7 +152,11 @@ function getReachableSetupSteps(input: {
   profile:
     | Pick<
         OrganizerProfile,
-        "country" | "defaultPayoutCurrency" | "displayName" | "selectedPaymentProvider"
+        | "country"
+        | "defaultPayoutCurrency"
+        | "displayName"
+        | "emailVerifiedAt"
+        | "selectedPaymentProvider"
       >
     | null
     | undefined;
@@ -164,6 +191,7 @@ function getReachableSetupSteps(input: {
 
   if (input.profile?.selectedPaymentProvider) {
     reachable.add("payments");
+    reachable.add("verification");
   }
 
   if (input.profile?.selectedPaymentProvider === "PAYSTACK" && input.paystackAccount?.detailsSubmitted) {
@@ -174,7 +202,12 @@ function getReachableSetupSteps(input: {
     reachable.add("verification");
   }
 
-  if (input.stripeAccount?.isReadyForPaidEvents) {
+  if (
+    input.profile?.emailVerifiedAt &&
+    ((input.profile?.selectedPaymentProvider === "PAYSTACK" &&
+      input.paystackAccount?.isReadyForPaidEvents) ||
+      input.stripeAccount?.isReadyForPaidEvents)
+  ) {
     reachable.add("complete");
   }
 
@@ -184,11 +217,13 @@ function getReachableSetupSteps(input: {
 export function OrganizerSetupScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { session } = useAuth();
+  const { refreshSession, session } = useAuth();
   const [currentStep, setCurrentStep] = useState<OrganizerSetupStep | null>(null);
   const [displayName, setDisplayName] = useState("");
   const [businessName, setBusinessName] = useState("");
   const [country, setCountry] = useState("");
+  const [isCountryDropdownOpen, setIsCountryDropdownOpen] = useState(false);
+  const [countrySearch, setCountrySearch] = useState("");
   const [defaultPayoutCurrency, setDefaultPayoutCurrency] = useState("");
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [isSavingProvider, setIsSavingProvider] = useState(false);
@@ -241,12 +276,6 @@ export function OrganizerSetupScreen() {
     queryFn: () => getPaymentProviderAvailability(session!.accessToken),
     queryKey: ["organizer-payment-providers", session?.accessToken],
   });
-  const providerCapabilityMatrixQuery = useQuery({
-    enabled: Boolean(session?.accessToken),
-    queryFn: () => getPaymentProviderCapabilityMatrix(session!.accessToken),
-    queryKey: ["organizer-payment-provider-capabilities", session?.accessToken],
-  });
-
   const derivedStep = useMemo(
     () =>
       deriveOrganizerSetupStep({
@@ -265,6 +294,43 @@ export function OrganizerSetupScreen() {
       }),
     [organizerProfileQuery.data, paystackAccountQuery.data, stripeAccountQuery.data],
   );
+  const availableProviders = useMemo(
+    () =>
+      (providerAvailabilityQuery.data?.providers ?? []).filter(
+        (provider) => provider.status === "AVAILABLE",
+      ),
+    [providerAvailabilityQuery.data],
+  );
+  const featuredProvider = useMemo(() => {
+    if (availableProviders.length === 0) {
+      return null;
+    }
+
+    return (
+      availableProviders.find((provider) => provider.recommended) ??
+      availableProviders.find(
+        (provider) =>
+          organizerProfileQuery.data?.selectedPaymentProvider === provider.provider,
+      ) ??
+      availableProviders[0] ??
+      null
+    );
+  }, [availableProviders, organizerProfileQuery.data?.selectedPaymentProvider]);
+  const selectedCountryOption = useMemo(
+    () => getOrganizerPayoutCountryOption(country),
+    [country],
+  );
+  const filteredCountryOptions = useMemo(() => {
+    const query = countrySearch.trim().toLowerCase();
+
+    if (!query) {
+      return ORGANIZER_PAYOUT_COUNTRY_OPTIONS;
+    }
+
+    return ORGANIZER_PAYOUT_COUNTRY_OPTIONS.filter((option) =>
+      `${option.label} ${option.code} ${option.currency}`.toLowerCase().includes(query),
+    );
+  }, [countrySearch]);
 
   useEffect(() => {
     if (!organizerProfileQuery.data) {
@@ -275,6 +341,8 @@ export function OrganizerSetupScreen() {
     setBusinessName(organizerProfileQuery.data.businessName ?? "");
     setCountry(organizerProfileQuery.data.country ?? "");
     setDefaultPayoutCurrency(organizerProfileQuery.data.defaultPayoutCurrency ?? "");
+    setIsCountryDropdownOpen(false);
+    setCountrySearch("");
   }, [organizerProfileQuery.data]);
 
   useEffect(() => {
@@ -367,6 +435,7 @@ export function OrganizerSetupScreen() {
     await Promise.all([
       organizerProfileQuery.refetch(),
       stripeAccountQuery.refetch(),
+      refreshSession(),
       queryClient.invalidateQueries({ queryKey: ["organizer-profile", session?.accessToken] }),
       queryClient.invalidateQueries({
         queryKey: ["organizer-payment-providers", session?.accessToken],
@@ -426,15 +495,16 @@ export function OrganizerSetupScreen() {
     }
 
     const normalizedCountry = country.trim().toUpperCase();
-    const normalizedCurrency = defaultPayoutCurrency.trim().toUpperCase();
+    const selectedCountry = getOrganizerPayoutCountryOption(normalizedCountry);
+    const normalizedCurrency = selectedCountry?.currency ?? "";
 
-    if (normalizedCountry.length !== 2) {
-      setScreenError("Use a two-letter country code like IE or NG.");
+    if (!selectedCountry) {
+      setScreenError("Choose the country where your organizer operates before continuing.");
       return;
     }
 
     if (normalizedCurrency.length !== 3) {
-      setScreenError("Use a three-letter currency like EUR or NGN.");
+      setScreenError("Maya could not determine the payout currency for that country yet.");
       return;
     }
 
@@ -448,13 +518,34 @@ export function OrganizerSetupScreen() {
         defaultPayoutCurrency: normalizedCurrency,
       });
       await refreshSetupQueries();
-      setCurrentStep("provider");
+      setIsCountryDropdownOpen(false);
+      setCountrySearch("");
+      setCurrentStep("payments");
     } catch (error) {
       setScreenError(
         error instanceof Error ? error.message : "Organizer location couldn't be saved.",
       );
     } finally {
       setIsSavingProfile(false);
+    }
+  }
+
+  async function handleRequestEmailVerification() {
+    if (!session?.accessToken) {
+      return;
+    }
+
+    setScreenError(null);
+    setScreenMessage(null);
+
+    try {
+      const response = await requestEmailVerification(session.accessToken);
+      setScreenMessage(response.message);
+      await refreshSetupQueries();
+    } catch (error) {
+      setScreenError(
+        error instanceof Error ? error.message : "Verification email couldn't be sent right now.",
+      );
     }
   }
 
@@ -627,8 +718,6 @@ export function OrganizerSetupScreen() {
   }
 
   const step = currentStep ?? derivedStep;
-  const paystackAccountLocked = Boolean(paystackAccountQuery.data?.subaccountCode);
-
   return (
     <Screen
       title="Organizer setup"
@@ -725,11 +814,15 @@ export function OrganizerSetupScreen() {
         {!organizerProfileQuery.isLoading && !stripeAccountQuery.isLoading && step === "intro" ? (
           <Card padded={false}>
             <View style={styles.sectionShell}>
-              <Text style={styles.sectionTitle}>Welcome to organizer setup</Text>
-              <Text style={styles.copy}>
-                Before you publish paid events, we need a few business details and your payout
-                connection. Free-event browsing and attendee tools stay available throughout.
-              </Text>
+              <View style={styles.sectionTitleRow}>
+                <Ionicons color={palette.accentDeep} name="sparkles-outline" size={18} />
+                <Text style={styles.sectionTitle}>Welcome to organizer setup</Text>
+              </View>
+              <View style={styles.setupLeadList}>
+                <SetupLead icon="person-circle-outline" text="Add your organizer name." />
+                <SetupLead icon="location-outline" text="Pick where you operate." />
+                <SetupLead icon="card-outline" text="Connect payouts for paid events." />
+              </View>
               <ActionButton
                 onPress={() => {
                   setCurrentStep(
@@ -737,7 +830,7 @@ export function OrganizerSetupScreen() {
                       ? hasCompletedOrganizerLocation(organizerProfileQuery.data)
                         ? organizerProfileQuery.data?.selectedPaymentProvider
                           ? derivedStep
-                          : "provider"
+                          : "payments"
                         : "location"
                       : "identity",
                   );
@@ -751,11 +844,11 @@ export function OrganizerSetupScreen() {
         {!organizerProfileQuery.isLoading && step === "identity" ? (
           <Card padded={false}>
             <View style={styles.sectionShell}>
-              <Text style={styles.sectionTitle}>Organizer identity</Text>
-              <Text style={styles.copy}>
-                Add the public name attendees will recognize. Business name can be your legal or
-                trading name.
-              </Text>
+              <View style={styles.sectionTitleRow}>
+                <Ionicons color={palette.accentDeep} name="person-circle-outline" size={18} />
+                <Text style={styles.sectionTitle}>Organizer identity</Text>
+              </View>
+              <Text style={styles.copy}>Use the name attendees know best.</Text>
 
               <View style={styles.fieldGroup}>
                 <Text style={styles.label}>Display name</Text>
@@ -793,36 +886,124 @@ export function OrganizerSetupScreen() {
         {!organizerProfileQuery.isLoading && step === "location" ? (
           <Card padded={false}>
             <View style={styles.sectionShell}>
-              <Text style={styles.sectionTitle}>Where you operate</Text>
-              <Text style={styles.copy}>
-                This helps Maya prepare the right payout setup for your organizer account.
-              </Text>
+              <View style={styles.sectionTitleRow}>
+                <Ionicons color={palette.accentDeep} name="location-outline" size={18} />
+                <Text style={styles.sectionTitle}>Where you operate</Text>
+              </View>
+              <Text style={styles.copy}>We’ll set your payout region from this.</Text>
 
               <View style={styles.fieldGroup}>
-                <Text style={styles.label}>Country code</Text>
-                <TextInput
-                  autoCapitalize="characters"
-                  maxLength={2}
-                  onChangeText={setCountry}
-                  placeholder="IE"
-                  placeholderTextColor={palette.muted}
-                  style={styles.input}
-                  value={country}
-                />
+                <Text style={styles.label}>Country</Text>
+                <View style={styles.dropdownWrap}>
+                  <Pressable
+                    onPress={() =>
+                      setIsCountryDropdownOpen((current) => {
+                        if (current) {
+                          setCountrySearch("");
+                        }
+
+                        return !current;
+                      })
+                    }
+                    style={[
+                      styles.dropdownTrigger,
+                      isCountryDropdownOpen ? styles.dropdownTriggerOpen : null,
+                    ]}
+                  >
+                    <View style={styles.dropdownTriggerCopy}>
+                      <Text
+                        style={[
+                          styles.dropdownTriggerTitle,
+                          !selectedCountryOption ? styles.dropdownPlaceholder : null,
+                        ]}
+                      >
+                        {selectedCountryOption?.label ?? "Select a country"}
+                      </Text>
+                      <Text style={styles.dropdownTriggerMeta}>
+                        {selectedCountryOption
+                          ? `${selectedCountryOption.code} • ${selectedCountryOption.currency}`
+                          : "This sets your payout region and default currency."}
+                      </Text>
+                    </View>
+                    <Text style={styles.dropdownChevron}>
+                      {isCountryDropdownOpen ? "▲" : "▼"}
+                    </Text>
+                  </Pressable>
+
+                  {isCountryDropdownOpen ? (
+                    <View style={styles.dropdownMenu}>
+                      <TextInput
+                        autoCapitalize="words"
+                        autoCorrect={false}
+                        onChangeText={setCountrySearch}
+                        placeholder="Search countries"
+                        placeholderTextColor={palette.muted}
+                        style={styles.dropdownSearchInput}
+                        value={countrySearch}
+                      />
+                      {filteredCountryOptions.length === 0 ? (
+                        <View style={styles.dropdownEmptyState}>
+                          <Text style={styles.dropdownEmptyStateText}>
+                            No countries match that search yet.
+                          </Text>
+                        </View>
+                      ) : null}
+                      {filteredCountryOptions.map((option) => {
+                        const isSelected = country.trim().toUpperCase() === option.code;
+
+                        return (
+                          <Pressable
+                            key={option.code}
+                            onPress={() => {
+                              setCountry(option.code);
+                              setDefaultPayoutCurrency(
+                                derivePayoutCurrencyFromCountry(option.code),
+                              );
+                              setIsCountryDropdownOpen(false);
+                              setCountrySearch("");
+                            }}
+                            style={[
+                              styles.dropdownOption,
+                              isSelected ? styles.dropdownOptionSelected : null,
+                            ]}
+                          >
+                            <View style={styles.dropdownOptionCopy}>
+                              <Text
+                                style={[
+                                  styles.dropdownOptionTitle,
+                                  isSelected ? styles.dropdownOptionTitleSelected : null,
+                                ]}
+                              >
+                                {option.label}
+                              </Text>
+                              <Text style={styles.dropdownOptionMeta}>
+                                {option.code} • {option.currency}
+                              </Text>
+                            </View>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  ) : null}
+                </View>
               </View>
 
               <View style={styles.fieldGroup}>
                 <Text style={styles.label}>Default payout currency</Text>
                 <TextInput
                   autoCapitalize="characters"
+                  editable={false}
                   maxLength={3}
-                  onChangeText={setDefaultPayoutCurrency}
-                  placeholder="EUR"
+                  placeholder="Auto-mapped from country"
                   placeholderTextColor={palette.muted}
-                  style={styles.input}
+                  style={[styles.input, styles.inputDisabled]}
                   value={defaultPayoutCurrency}
                 />
               </View>
+
+              <Text style={styles.copy}>
+                Maya stores the country code and sets the payout currency automatically.
+              </Text>
 
               <ActionButton
                 loading={isSavingProfile}
@@ -845,102 +1026,50 @@ export function OrganizerSetupScreen() {
         {!providerAvailabilityQuery.isLoading && step === "provider" && providerAvailabilityQuery.data ? (
           <Card padded={false}>
             <View style={styles.sectionShell}>
-              <Text style={styles.sectionTitle}>Choose your payout provider</Text>
-              <Text style={styles.copy}>
-                Maya recommends a provider based on your organizer country, payout currency, and
-                current rollout support.
-              </Text>
+              <View style={styles.sectionTitleRow}>
+                <Ionicons color={palette.accentDeep} name="git-compare-outline" size={18} />
+                <Text style={styles.sectionTitle}>Choose your payout provider</Text>
+              </View>
+              <Text style={styles.copy}>Maya recommends the best fit for your region.</Text>
 
-              {providerAvailabilityQuery.data.providers.map((provider) => {
-                const isSelected =
-                  organizerProfileQuery.data?.selectedPaymentProvider === provider.provider;
-                const capabilitySummary = [
-                  provider.supportsCustomerCheckout ? "checkout" : null,
-                  provider.supportsOnboarding ? "onboarding" : null,
-                  provider.supportsPayouts ? "payouts" : null,
-                  provider.supportsRefunds ? "refunds" : null,
-                  provider.supportsDisputes ? "disputes" : null,
-                ]
-                  .filter(Boolean)
-                  .join(" • ");
-
-                return (
-                  <View
-                    key={provider.provider}
-                    style={[
-                      styles.providerCard,
-                      provider.recommended ? styles.providerCardRecommended : null,
-                    ]}
-                  >
-                    <View style={styles.providerHeader}>
-                      <Text style={styles.providerTitle}>{provider.provider}</Text>
-                      <View
-                        style={[
-                          styles.providerStatusPill,
-                          provider.status === "AVAILABLE"
-                            ? styles.providerStatusAvailable
-                            : provider.status === "COMING_SOON"
-                              ? styles.providerStatusSoon
-                              : styles.providerStatusUnavailable,
-                        ]}
-                      >
-                        <Text style={styles.providerStatusText}>
-                          {provider.recommended ? "Recommended" : provider.status.replace("_", " ")}
-                        </Text>
-                      </View>
+              {featuredProvider ? (
+                <View
+                  style={[
+                    styles.providerCard,
+                    styles.providerCardRecommended,
+                  ]}
+                >
+                  <View style={styles.providerHeader}>
+                    <Text style={styles.providerTitle}>{featuredProvider.provider}</Text>
+                    <View style={[styles.providerStatusPill, styles.providerStatusAvailable]}>
+                      <Text style={styles.providerStatusText}>
+                        {featuredProvider.recommended ? "Recommended" : "Supported"}
+                      </Text>
                     </View>
-                    <Text style={styles.value}>{provider.summary}</Text>
-                    {provider.detail ? <Text style={styles.copy}>{provider.detail}</Text> : null}
-                    <Text style={styles.providerMeta}>
-                      Rollout: {provider.rolloutStage} • Supports: {capabilitySummary || "limited"}
-                    </Text>
-                    <Text style={styles.providerMeta}>
-                      Model: {provider.operatingModel}
-                    </Text>
-                    <ActionButton
-                      disabled={provider.status !== "AVAILABLE"}
-                      loading={isSavingProvider}
-                      onPress={() => {
-                        void handleProviderSelection(provider.provider);
-                      }}
-                      title={
-                        isSelected
-                          ? "Selected"
-                          : provider.status === "AVAILABLE"
-                            ? `Use ${provider.provider}`
-                            : provider.status === "COMING_SOON"
-                              ? "Coming soon"
-                              : "Unavailable"
-                      }
-                      variant={isSelected ? "secondary" : "primary"}
-                    />
                   </View>
-                );
-              })}
-
-              {providerCapabilityMatrixQuery.data ? (
-                <View style={styles.providerMatrixShell}>
-                  <Text style={styles.sectionTitle}>Provider capability matrix</Text>
+                  <Text style={styles.value}>{featuredProvider.summary}</Text>
                   <Text style={styles.copy}>
-                    This is Maya’s current rollout position for organizer payouts and operations.
+                    {featuredProvider.detail ?? "This is the active payout path for your region."}
                   </Text>
-                  {providerCapabilityMatrixQuery.data.providers.map((provider) => (
-                    <View key={`matrix-${provider.provider}`} style={styles.providerMatrixCard}>
-                      <Text style={styles.providerTitle}>{provider.provider}</Text>
-                      <Text style={styles.providerMeta}>Stage: {provider.rolloutStage}</Text>
-                      <Text style={styles.providerMeta}>
-                        Checkout: {provider.supportsCustomerCheckout ? "Yes" : "No"} • Onboarding:{" "}
-                        {provider.supportsOnboarding ? "Yes" : "No"} • Payouts:{" "}
-                        {provider.supportsPayouts ? "Yes" : "No"}
-                      </Text>
-                      <Text style={styles.providerMeta}>
-                        Fees: {provider.supportsPlatformFeeAutomation ? "Automated" : "Limited"} •
-                        Refunds: {provider.supportsRefunds ? "Supported" : "Not yet"} • Disputes:{" "}
-                        {provider.supportsDisputes ? "Supported" : "Not yet"}
-                      </Text>
-                      <Text style={styles.copy}>{provider.operatingModel}</Text>
-                    </View>
-                  ))}
+                  <ActionButton
+                    loading={isSavingProvider}
+                    onPress={() => {
+                      if (
+                        organizerProfileQuery.data?.selectedPaymentProvider ===
+                        featuredProvider.provider
+                      ) {
+                        setCurrentStep("payments");
+                        return;
+                      }
+
+                      void handleProviderSelection(featuredProvider.provider);
+                    }}
+                    title={
+                      organizerProfileQuery.data?.selectedPaymentProvider === featuredProvider.provider
+                        ? "Continue to payouts"
+                        : `Use ${featuredProvider.provider}`
+                    }
+                  />
                 </View>
               ) : null}
             </View>
@@ -950,11 +1079,14 @@ export function OrganizerSetupScreen() {
         {!stripeAccountQuery.isLoading && !paystackAccountQuery.isLoading && step === "payments" ? (
           <Card padded={false}>
             <View style={styles.sectionShell}>
-              <Text style={styles.sectionTitle}>Connect payouts</Text>
+              <View style={styles.sectionTitleRow}>
+                <Ionicons color={palette.accentDeep} name="card-outline" size={18} />
+                <Text style={styles.sectionTitle}>Connect payouts</Text>
+              </View>
               <Text style={styles.copy}>
                 {organizerProfileQuery.data?.selectedPaymentProvider === "STRIPE"
-                  ? "Connect or refresh your Stripe payout account."
-                  : "Add your payout details, resolve the account, then save."}
+                  ? "Connect or refresh Stripe."
+                  : "Add payout details, resolve the account, then save."}
               </Text>
 
               {organizerProfileQuery.data?.selectedPaymentProvider === "STRIPE" && stripeAccountQuery.data ? (
@@ -1003,127 +1135,162 @@ export function OrganizerSetupScreen() {
                 </>
               ) : organizerProfileQuery.data?.selectedPaymentProvider === "PAYSTACK" ? (
                 <>
-                  <View style={styles.fieldGroup}>
-                    <Text style={styles.label}>Business name</Text>
-                    <TextInput
-                      autoCapitalize="words"
-                      editable={!paystackAccountLocked}
-                      onChangeText={setPaystackBusinessName}
-                      placeholder="Campus Night Limited"
-                      placeholderTextColor={palette.muted}
-                      style={styles.input}
-                      value={paystackBusinessName}
-                    />
-                  </View>
+                  <Text style={styles.value}>
+                    {paystackAccountQuery.data?.payoutAccountCode
+                      ? "Paystack payout account found."
+                      : "No Paystack payout account connected yet."}
+                  </Text>
 
-                  <View style={styles.fieldGroup}>
-                    <Text style={styles.label}>Account holder name</Text>
-                    <TextInput
-                      autoCapitalize="words"
-                      editable={!paystackAccountLocked}
-                      onChangeText={setPaystackAccountHolderName}
-                      placeholder="Campus Night Limited"
-                      placeholderTextColor={palette.muted}
-                      style={styles.input}
-                      value={paystackAccountHolderName}
-                    />
-                  </View>
-
-                  <View style={styles.fieldGroup}>
-                    <Text style={styles.label}>Find your bank</Text>
-                    <TextInput
-                      autoCapitalize="words"
-                      editable={!paystackAccountLocked}
-                      onChangeText={setPaystackBankSearch}
-                      placeholder="Search bank name"
-                      placeholderTextColor={palette.muted}
-                      style={styles.input}
-                      value={paystackBankSearch}
-                    />
-                  </View>
-
-                  {paystackBanksQuery.isLoading ? (
-                    <Text style={styles.copy}>Loading Paystack bank list…</Text>
-                  ) : null}
-
-                  {filteredPaystackBanks.length ? (
-                    <View style={styles.bankList}>
-                      {filteredPaystackBanks.map((bank: PaystackBankSummary) => {
-                        const isSelected = paystackBankCode === bank.code;
-
-                        return (
-                          <Pressable
-                            disabled={paystackAccountLocked}
-                            key={bank.code}
-                            onPress={() => {
-                              setPaystackBankCode(bank.code);
-                              setPaystackBankSearch(bank.name);
-                            }}
-                            style={[
-                              styles.bankOption,
-                              isSelected ? styles.bankOptionSelected : null,
-                            ]}
-                          >
-                            <Text
-                              style={[
-                                styles.bankOptionTitle,
-                                isSelected ? styles.bankOptionTitleSelected : null,
-                              ]}
-                            >
-                              {bank.name}
-                            </Text>
-                            <Text style={styles.bankOptionMeta}>{bank.code}</Text>
-                          </Pressable>
-                        );
-                      })}
+                  <View style={styles.metricRow}>
+                    <View style={styles.metricCard}>
+                      <Text style={styles.metricLabel}>Account</Text>
+                      <Text style={styles.metricValueSmall}>
+                        {paystackAccountQuery.data?.maskedAccountNumber ?? "Not connected"}
+                      </Text>
                     </View>
-                  ) : null}
-
-                  <View style={styles.fieldGroup}>
-                    <Text style={styles.label}>Bank code</Text>
-                    <TextInput
-                      autoCapitalize="characters"
-                      editable={!paystackAccountLocked}
-                      onChangeText={setPaystackBankCode}
-                      placeholder="058"
-                      placeholderTextColor={palette.muted}
-                      style={styles.input}
-                      value={paystackBankCode}
-                    />
+                    <View style={styles.metricCard}>
+                      <Text style={styles.metricLabel}>Verification</Text>
+                      <Text style={styles.metricValueSmall}>
+                        {paystackAccountQuery.data?.verificationStatus ?? "Pending"}
+                      </Text>
+                    </View>
                   </View>
 
-                  <View style={styles.fieldGroup}>
-                    <Text style={styles.label}>Account number</Text>
-                    <TextInput
-                      editable={!paystackAccountLocked}
-                      keyboardType="number-pad"
-                      onChangeText={setPaystackAccountNumber}
-                      placeholder={
-                        paystackAccountQuery.data?.maskedAccountNumber ?? "0123456789"
-                      }
-                      placeholderTextColor={palette.muted}
-                      style={styles.input}
-                      value={paystackAccountNumber}
-                    />
-                  </View>
+                  <Text style={styles.copy}>
+                    {paystackAccountQuery.data?.detailsSubmitted
+                      ? "Saved details are ready to review or update."
+                      : "Add your payout details, resolve the account name, then save."}
+                  </Text>
 
-                  {paystackAccountQuery.data?.requirementsSummary ? (
-                    <Text style={styles.copy}>{paystackAccountQuery.data.requirementsSummary}</Text>
-                  ) : null}
+                  <Card tone="accent">
+                    <View style={styles.formSection}>
+                      <View style={styles.inlineTitleRow}>
+                        <Ionicons color={palette.accentDeep} name="business-outline" size={16} />
+                        <Text style={styles.metricLabel}>Payout account details</Text>
+                      </View>
 
-                  {paystackAccountLocked ? (
-                    <Card tone="warning">
-                      <Text style={styles.metricLabel}>Connected payout account</Text>
+                      <View style={styles.fieldGroup}>
+                        <Text style={styles.label}>Business name</Text>
+                        <TextInput
+                          autoCapitalize="words"
+                          onChangeText={setPaystackBusinessName}
+                          placeholder="Campus Night Limited"
+                          placeholderTextColor={palette.muted}
+                          style={styles.input}
+                          value={paystackBusinessName}
+                        />
+                      </View>
+
+                      <View style={styles.fieldGroup}>
+                        <Text style={styles.label}>Account holder name</Text>
+                        <TextInput
+                          autoCapitalize="words"
+                          onChangeText={setPaystackAccountHolderName}
+                          placeholder="Campus Night Limited"
+                          placeholderTextColor={palette.muted}
+                          style={styles.input}
+                          value={paystackAccountHolderName}
+                        />
+                      </View>
+
+                      <View style={styles.fieldGroup}>
+                        <Text style={styles.label}>Find your bank</Text>
+                        <TextInput
+                          autoCapitalize="words"
+                          onChangeText={setPaystackBankSearch}
+                          placeholder="Search bank name"
+                          placeholderTextColor={palette.muted}
+                          style={styles.input}
+                          value={paystackBankSearch}
+                        />
+                      </View>
+
+                      {paystackBanksQuery.isLoading ? (
+                        <Text style={styles.copy}>Loading Paystack bank list…</Text>
+                      ) : null}
+
+                      {filteredPaystackBanks.length ? (
+                        <View style={styles.bankList}>
+                          {filteredPaystackBanks.map((bank: PaystackBankSummary) => {
+                            const isSelected = paystackBankCode === bank.code;
+
+                            return (
+                              <Pressable
+                                key={bank.code}
+                                onPress={() => {
+                                  setPaystackBankCode(bank.code);
+                                  setPaystackBankSearch(bank.name);
+                                }}
+                                style={[
+                                  styles.bankOption,
+                                  isSelected ? styles.bankOptionSelected : null,
+                                ]}
+                              >
+                                <Text
+                                  style={[
+                                    styles.bankOptionTitle,
+                                    isSelected ? styles.bankOptionTitleSelected : null,
+                                  ]}
+                                >
+                                  {bank.name}
+                                </Text>
+                                <Text style={styles.bankOptionMeta}>{bank.code}</Text>
+                              </Pressable>
+                            );
+                          })}
+                        </View>
+                      ) : null}
+
+                      <View style={styles.fieldGroup}>
+                        <Text style={styles.label}>Bank code</Text>
+                        <TextInput
+                          autoCapitalize="characters"
+                          onChangeText={setPaystackBankCode}
+                          placeholder="058"
+                          placeholderTextColor={palette.muted}
+                          style={styles.input}
+                          value={paystackBankCode}
+                        />
+                      </View>
+
+                      <View style={styles.fieldGroup}>
+                        <Text style={styles.label}>Account number</Text>
+                        <TextInput
+                          keyboardType="number-pad"
+                          onChangeText={setPaystackAccountNumber}
+                          placeholder={
+                            paystackAccountQuery.data?.maskedAccountNumber ?? "0123456789"
+                          }
+                          placeholderTextColor={palette.muted}
+                          style={styles.input}
+                          value={paystackAccountNumber}
+                        />
+                      </View>
+
+                      {paystackAccountQuery.data?.requirementsSummary ? (
+                        <Text style={styles.copy}>{paystackAccountQuery.data.requirementsSummary}</Text>
+                      ) : null}
+                    </View>
+                  </Card>
+
+                  {paystackAccountQuery.data?.payoutAccountCode ? (
+                    <Card tone="accent">
+                      <View style={styles.inlineTitleRow}>
+                        <Ionicons color={palette.accentDeep} name="checkmark-circle-outline" size={16} />
+                        <Text style={styles.metricLabel}>Connected payout account</Text>
+                      </View>
                       <Text style={styles.copy}>
-                        This payout account is already connected. Editing live details will come in
-                        a follow-up wave.
+                        Already connected. Update details below anytime to resync Paystack.
                       </Text>
                     </Card>
                   ) : null}
 
                   {resolvedPaystackAccount ? (
                     <Card tone="accent">
-                      <Text style={styles.metricLabel}>Resolved account owner</Text>
+                      <View style={styles.inlineTitleRow}>
+                        <Ionicons color={palette.accentDeep} name="shield-checkmark-outline" size={16} />
+                        <Text style={styles.metricLabel}>Resolved account owner</Text>
+                      </View>
                       <Text style={styles.value}>{resolvedPaystackAccount.accountName}</Text>
                       <Text style={styles.providerMeta}>
                         {resolvedPaystackAccount.accountNumber} • {resolvedPaystackAccount.bankCode}
@@ -1132,7 +1299,6 @@ export function OrganizerSetupScreen() {
                   ) : null}
 
                   <ActionButton
-                    disabled={paystackAccountLocked}
                     loading={isResolvingPaystackAccount}
                     onPress={() => void handleResolvePaystackAccount()}
                     title="Resolve account name"
@@ -1140,17 +1306,24 @@ export function OrganizerSetupScreen() {
                   />
 
                   <ActionButton
-                    disabled={paystackAccountLocked}
                     loading={isSavingPaystackAccount}
                     onPress={() => void handlePaystackAccountSubmit()}
                     title={
-                      paystackAccountLocked
-                        ? "Paystack account connected"
-                        : paystackAccountQuery.data?.detailsSubmitted
+                      paystackAccountQuery.data?.detailsSubmitted
                         ? "Update Paystack payout details"
                         : "Save Paystack payout details"
                     }
                   />
+                  {paystackAccountQuery.data?.detailsSubmitted &&
+                  !paystackAccountQuery.data?.isReadyForPaidEvents ? (
+                    <ActionButton
+                      onPress={() => {
+                        setCurrentStep("verification");
+                      }}
+                      title="Review verification checklist"
+                      variant="secondary"
+                    />
+                  ) : null}
                 </>
               ) : (
                 <ActionButton
@@ -1168,12 +1341,46 @@ export function OrganizerSetupScreen() {
         {!stripeAccountQuery.isLoading && !paystackAccountQuery.isLoading && step === "verification" ? (
           <Card padded={false}>
             <View style={styles.sectionShell}>
-              <Text style={styles.sectionTitle}>Verification</Text>
+              <View style={styles.sectionTitleRow}>
+                <Ionicons color={palette.accentDeep} name="shield-checkmark-outline" size={18} />
+                <Text style={styles.sectionTitle}>Verification</Text>
+              </View>
               <Text style={styles.copy}>
                 {organizerProfileQuery.data?.selectedPaymentProvider === "STRIPE"
-                  ? "We’re checking whether Stripe has everything needed for paid event publishing and payouts."
-                  : "We’ve created the Paystack payout profile. Maya is now checking whether the subaccount is active and verified for paid events."}
+                  ? "We’re checking Stripe readiness for paid events."
+                  : "We’re checking whether your Paystack payout account is active."}
               </Text>
+              <Card tone={organizerProfileQuery.data?.emailVerifiedAt ? "success" : "warning"}>
+                <View style={styles.inlineTitleRow}>
+                  <Ionicons
+                    color={organizerProfileQuery.data?.emailVerifiedAt ? palette.successDeep : palette.warning}
+                    name={organizerProfileQuery.data?.emailVerifiedAt ? "mail-open-outline" : "mail-outline"}
+                    size={16}
+                  />
+                  <Text style={styles.metricLabel}>Email verification</Text>
+                </View>
+                <Text style={styles.copy}>
+                  {organizerProfileQuery.data?.emailVerifiedAt
+                    ? `Verified on ${new Date(organizerProfileQuery.data.emailVerifiedAt).toLocaleString()}.`
+                    : "Verify your email before paid events can go live."}
+                </Text>
+                {!organizerProfileQuery.data?.emailVerifiedAt ? (
+                  <>
+                    <ActionButton
+                      onPress={() => void handleRequestEmailVerification()}
+                      title="Send verification email"
+                    />
+                    <ActionButton
+                      loading={isRefreshingAfterReturn}
+                      onPress={() => {
+                        void refreshAfterStripeReturn("Verification status refreshed.");
+                      }}
+                      title="I already verified"
+                      variant="secondary"
+                    />
+                  </>
+                ) : null}
+              </Card>
               {organizerProfileQuery.data?.selectedPaymentProvider === "STRIPE" &&
               stripeAccountQuery.data ? (
                 <>
@@ -1285,9 +1492,9 @@ export function OrganizerSetupScreen() {
                   </View>
                   <View style={styles.metricRow}>
                     <View style={styles.metricCard}>
-                      <Text style={styles.metricLabel}>Subaccount</Text>
+                      <Text style={styles.metricLabel}>Payout account</Text>
                       <Text style={styles.metricValueSmall}>
-                        {paystackAccountQuery.data.subaccountCode ?? "Pending"}
+                        {paystackAccountQuery.data.payoutAccountCode ?? "Pending"}
                       </Text>
                     </View>
                     <View style={styles.metricCard}>
@@ -1318,10 +1525,12 @@ export function OrganizerSetupScreen() {
         {!stripeAccountQuery.isLoading && step === "complete" ? (
           <Card tone="success" padded={false}>
             <View style={styles.sectionShell}>
-              <Text style={styles.sectionTitle}>Organizer setup complete</Text>
+              <View style={styles.sectionTitleRow}>
+                <Ionicons color={palette.successDeep} name="checkmark-circle-outline" size={18} />
+                <Text style={styles.sectionTitle}>Organizer setup complete</Text>
+              </View>
               <Text style={styles.copy}>
-                Your organizer profile and payout setup are in place. You’re ready to work with paid
-                events from the organizer area.
+                Your profile and payouts are ready for paid events.
               </Text>
               <ActionButton
                 onPress={() => {
@@ -1343,6 +1552,102 @@ const styles = StyleSheet.create({
     gap: 16,
     paddingBottom: 48,
     paddingHorizontal: 20,
+  },
+  inlineTitleRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 8,
+  },
+  dropdownChevron: {
+    color: palette.muted,
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  dropdownMenu: {
+    backgroundColor: "#ffffff",
+    borderColor: palette.divider,
+    borderRadius: 14,
+    borderWidth: 1,
+    gap: 2,
+    overflow: "hidden",
+  },
+  dropdownOption: {
+    backgroundColor: "#ffffff",
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  dropdownEmptyState: {
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  dropdownEmptyStateText: {
+    color: palette.muted,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  dropdownOptionCopy: {
+    gap: 4,
+  },
+  dropdownOptionMeta: {
+    color: palette.muted,
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  dropdownOptionSelected: {
+    backgroundColor: "#eef6ff",
+  },
+  dropdownOptionTitle: {
+    color: palette.ink,
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  dropdownOptionTitleSelected: {
+    color: palette.accentDeep,
+  },
+  dropdownPlaceholder: {
+    color: palette.muted,
+  },
+  dropdownSearchInput: {
+    backgroundColor: palette.backgroundMuted,
+    borderBottomColor: palette.divider,
+    borderBottomWidth: 1,
+    color: palette.ink,
+    fontSize: 15,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  dropdownTrigger: {
+    alignItems: "center",
+    backgroundColor: "#ffffff",
+    borderColor: palette.divider,
+    borderRadius: 14,
+    borderWidth: 1,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    minHeight: 56,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  dropdownTriggerCopy: {
+    flex: 1,
+    gap: 4,
+    paddingRight: 12,
+  },
+  dropdownTriggerMeta: {
+    color: palette.muted,
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  dropdownTriggerOpen: {
+    borderColor: palette.accent,
+  },
+  dropdownTriggerTitle: {
+    color: palette.ink,
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  dropdownWrap: {
+    gap: 8,
   },
   bankList: {
     gap: 8,
@@ -1386,6 +1691,9 @@ const styles = StyleSheet.create({
   fieldGroup: {
     gap: 8,
   },
+  formSection: {
+    gap: 14,
+  },
   flex: {
     flex: 1,
   },
@@ -1422,10 +1730,41 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 12,
   },
+  inputDisabled: {
+    backgroundColor: palette.backgroundMuted,
+    color: palette.muted,
+  },
   label: {
     color: palette.ink,
     fontSize: 13,
     fontWeight: "700",
+  },
+  sectionTitleRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 8,
+  },
+  setupLeadIconWrap: {
+    alignItems: "center",
+    backgroundColor: "#eef6ff",
+    borderRadius: 999,
+    height: 28,
+    justifyContent: "center",
+    width: 28,
+  },
+  setupLeadList: {
+    gap: 10,
+  },
+  setupLeadRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 10,
+  },
+  setupLeadText: {
+    color: palette.ink,
+    flex: 1,
+    fontSize: 14,
+    lineHeight: 20,
   },
   metricCard: {
     backgroundColor: "rgba(255,255,255,0.75)",

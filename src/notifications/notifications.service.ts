@@ -24,6 +24,11 @@ type TransferRecipientEmailInput = Readonly<{
   ticketTypeName: string;
 }>;
 
+type OrganizerPayoutReadyEmailInput = Readonly<{
+  email: string;
+  provider: "STRIPE" | "PAYSTACK";
+}>;
+
 type CreateUserNotificationInput = Readonly<{
   actionUrl?: string;
   body: string;
@@ -372,6 +377,31 @@ export class NotificationsService {
     });
   }
 
+  async notifyOrganizerPayoutReady(input: {
+    organizerEmail: string;
+    provider: "STRIPE" | "PAYSTACK";
+    userId: string;
+  }) {
+    const providerLabel = input.provider === "PAYSTACK" ? "Paystack" : "Stripe";
+
+    await this.createUserNotification({
+      actionUrl: "/organizer/setup",
+      body: `${providerLabel} payouts are now verified and ready for paid events.`,
+      metadata: {
+        provider: input.provider,
+      },
+      sendPush: true,
+      title: `${providerLabel} payouts ready`,
+      type: "ORGANIZER_PAYOUT_READY" as NotificationType,
+      userId: input.userId,
+    });
+
+    await this.sendOrganizerPayoutReadyEmail({
+      email: input.organizerEmail,
+      provider: input.provider,
+    });
+  }
+
   async notifyTransferReminder(input: {
     eventTitle: string;
     recipientUserId: string;
@@ -675,6 +705,59 @@ export class NotificationsService {
       const body = await response.text();
       this.logger.error(
         `Transfer recipient email failed: status=${response.status} body=${body}`,
+      );
+      return { delivered: false, provider: "resend" as const };
+    }
+
+    return { delivered: true, provider: "resend" as const };
+  }
+
+  async sendOrganizerPayoutReadyEmail(input: OrganizerPayoutReadyEmailInput) {
+    const resendApiKey = process.env.RESEND_API_KEY;
+    const fromEmail =
+      process.env.NOTIFICATIONS_FROM_EMAIL ?? "Ticket System <no-reply@ticketsystem.local>";
+    const providerLabel = input.provider === "PAYSTACK" ? "Paystack" : "Stripe";
+    const subject = `${providerLabel} payouts are ready`;
+    const setupUrl =
+      process.env.PUBLIC_APP_URL?.trim() ||
+      process.env.FRONTEND_APP_URL?.trim() ||
+      "http://localhost:3001";
+    const normalizedSetupUrl = `${setupUrl.replace(/\/$/, "")}/organizer/setup`;
+    const text = [
+      `${providerLabel} payouts are now verified and ready for paid events in Maya.`,
+      `Review organizer setup: ${normalizedSetupUrl}`,
+    ].join("\n");
+    const html = [
+      `<p><strong>${providerLabel} payouts are now verified</strong> and ready for paid events in Maya.</p>`,
+      `<p><a href="${normalizedSetupUrl}">Review organizer setup</a></p>`,
+    ].join("");
+
+    if (!resendApiKey) {
+      this.logger.log(
+        `Organizer payout ready email preview -> to=${input.email} subject="${subject}" provider=${input.provider}`,
+      );
+      return { delivered: false, provider: "log-only" as const };
+    }
+
+    const response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${resendApiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from: fromEmail,
+        to: [input.email],
+        subject,
+        text,
+        html,
+      }),
+    });
+
+    if (!response.ok) {
+      const body = await response.text();
+      this.logger.error(
+        `Organizer payout ready email failed: status=${response.status} body=${body}`,
       );
       return { delivered: false, provider: "resend" as const };
     }

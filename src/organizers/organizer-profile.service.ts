@@ -6,6 +6,7 @@ import {
 import { AuthenticatedUser } from "../auth/types/authenticated-user.type";
 import { PrismaService } from "../prisma/prisma.service";
 import { UpsertOrganizerProfileDto } from "./dto/upsert-organizer-profile.dto";
+import { deriveOrganizerPayoutRegion, normalizeOrganizerCountry } from "./organizer-payout-region";
 
 const ORGANIZER_ONBOARDING_STATUS = {
   NOT_STARTED: "NOT_STARTED",
@@ -31,7 +32,10 @@ export class OrganizerProfileService {
         null,
     });
 
-    return this.reconcileOnboardingStatus(profile);
+    return this.attachEmailVerification(
+      await this.reconcileOnboardingStatus(profile, user.emailVerifiedAt ?? null),
+      user.emailVerifiedAt ?? null,
+    );
   }
 
   async upsertProfile(user: AuthenticatedUser, payload: UpsertOrganizerProfileDto) {
@@ -43,19 +47,28 @@ export class OrganizerProfileService {
         null,
     });
 
+    const normalizedCountry =
+      payload.country !== undefined
+        ? normalizeOrganizerCountry(payload.country)
+        : existingProfile.country;
+    const paystackOrganizerEnabled =
+      process.env.ENABLE_PAYSTACK_ORGANIZER_ONBOARDING === "true";
+    const derivedRegion = deriveOrganizerPayoutRegion({
+      country: normalizedCountry,
+      paystackOrganizerEnabled,
+    });
     const nextProfile = {
       businessName:
         payload.businessName !== undefined
           ? payload.businessName.trim() || null
           : existingProfile.businessName,
-      country:
-        payload.country !== undefined
-          ? payload.country.trim().toUpperCase() || null
-          : existingProfile.country,
+      country: normalizedCountry,
       defaultPayoutCurrency:
-        payload.defaultPayoutCurrency !== undefined
-          ? payload.defaultPayoutCurrency.trim().toUpperCase() || null
-          : existingProfile.defaultPayoutCurrency,
+        payload.country !== undefined
+          ? derivedRegion.defaultPayoutCurrency
+          : payload.defaultPayoutCurrency !== undefined
+            ? payload.defaultPayoutCurrency.trim().toUpperCase() || null
+            : existingProfile.defaultPayoutCurrency,
       displayName:
         payload.displayName !== undefined
           ? payload.displayName.trim() || null
@@ -66,11 +79,26 @@ export class OrganizerProfileService {
       where: { id: existingProfile.id },
       data: {
         ...nextProfile,
+        providerSelectedAt: derivedRegion.recommendedProvider ? new Date() : existingProfile.providerSelectedAt,
+        providerSelectionSource: derivedRegion.recommendedProvider
+          ? "AUTO_RECOMMENDED"
+          : existingProfile.providerSelectionSource,
         onboardingStatus: this.resolveBaseProfileStatus(nextProfile),
+        recommendedProvider:
+          payload.country !== undefined
+            ? derivedRegion.recommendedProvider
+            : existingProfile.recommendedProvider,
+        selectedPaymentProvider:
+          payload.country !== undefined
+            ? derivedRegion.recommendedProvider
+            : existingProfile.selectedPaymentProvider,
       },
     });
 
-    return this.reconcileOnboardingStatus(profile);
+    return this.attachEmailVerification(
+      await this.reconcileOnboardingStatus(profile, user.emailVerifiedAt ?? null),
+      user.emailVerifiedAt ?? null,
+    );
   }
 
   async ensureProfileForUser(userId: string, seed?: { displayName?: string | null }) {
@@ -138,7 +166,7 @@ export class OrganizerProfileService {
     providerSelectionSource?: string | null;
     recommendedProvider?: string | null;
     selectedPaymentProvider?: string | null;
-  }) {
+  }, emailVerifiedAt: Date | null) {
     const baseProfileStatus = this.resolveBaseProfileStatus({
       businessName: profile.businessName,
       country: profile.country,
@@ -154,7 +182,7 @@ export class OrganizerProfileService {
         select: { isReadyForPaidEvents: true },
       });
 
-      nextStatus = paymentProfile?.isReadyForPaidEvents
+      nextStatus = paymentProfile?.isReadyForPaidEvents && emailVerifiedAt
         ? ORGANIZER_ONBOARDING_STATUS.READY_FOR_PAID_EVENTS
         : ORGANIZER_ONBOARDING_STATUS.PAYMENT_SETUP_PENDING;
     }
@@ -169,6 +197,13 @@ export class OrganizerProfileService {
         onboardingStatus: nextStatus,
       },
     });
+  }
+
+  private attachEmailVerification<T extends object>(profile: T, emailVerifiedAt: Date | null) {
+    return {
+      ...profile,
+      emailVerifiedAt,
+    };
   }
 
   private assertOrganizer(user: AuthenticatedUser) {

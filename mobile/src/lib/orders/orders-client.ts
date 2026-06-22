@@ -46,6 +46,7 @@ export type CheckoutQuoteResponse = {
 
 export type CheckoutOrderResponse = {
   cancelledAt?: string | null;
+  checkoutFlow: "NONE" | "REDIRECT" | "STRIPE_PAYMENT_INTENT";
   checkoutSessionId: string | null;
   checkoutStatus: string | null;
   checkoutUrl: string | null;
@@ -131,4 +132,32 @@ export async function getOrderById(orderId: string, accessToken: string) {
       Authorization: `Bearer ${accessToken}`,
     },
   });
+}
+
+export async function getOrderByCheckoutSessionId(
+  checkoutSessionId: string,
+  accessToken: string,
+) {
+  return apiFetch<CheckoutOrderResponse>(
+    `/api/orders/lookup/checkout-session/${encodeURIComponent(checkoutSessionId)}`,
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    },
+  );
+}
+
+export async function getOrderByPaymentIntentId(
+  paymentIntentId: string,
+  accessToken: string,
+) {
+  return apiFetch<CheckoutOrderResponse>(
+    `/api/orders/lookup/payment-intent/${encodeURIComponent(paymentIntentId)}`,
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    },
+  );
 }

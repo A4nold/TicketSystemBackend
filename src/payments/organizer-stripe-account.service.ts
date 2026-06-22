@@ -12,6 +12,7 @@ import { AuthenticatedUser } from "../auth/types/authenticated-user.type";
 import { isStripeConnectOnboardingEnabled } from "../common/feature-flags";
 import { PrismaService } from "../prisma/prisma.service";
 import { OrganizerPaymentsQueryService } from "./organizer-payments-query.service";
+import { NotificationsService } from "../notifications/notifications.service";
 import { PaymentAccountRepository } from "./repositories/payment-account.repository";
 import { StripeConnectLinkDto } from "./dto/stripe-connect-link.dto";
 
@@ -23,6 +24,7 @@ export class OrganizerStripeAccountService {
     private readonly prisma: PrismaService,
     private readonly organizerPaymentsQueryService: OrganizerPaymentsQueryService,
     private readonly paymentAccountRepository: PaymentAccountRepository,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async getAccountStatus(user: AuthenticatedUser) {
@@ -144,6 +146,13 @@ export class OrganizerStripeAccountService {
       currentlyDue.length === 0 &&
       pastDue.length === 0 &&
       !disabledReason;
+    const previousPaymentProfile = await this.prisma.organizerPaymentProfile.findUnique({
+      where: { organizerId },
+      select: {
+        firstReadyAt: true,
+        isReadyForPaidEvents: true,
+      },
+    });
 
     const syncedAccount = await this.prisma.paymentAccount.upsert({
       where: {
@@ -249,6 +258,25 @@ export class OrganizerStripeAccountService {
           : {}),
       },
     });
+
+    if (
+      isReadyForPaidEvents &&
+      !previousPaymentProfile?.isReadyForPaidEvents &&
+      !previousPaymentProfile?.firstReadyAt
+    ) {
+      const organizer = await this.prisma.user.findUnique({
+        where: { id: organizerId },
+        select: { email: true },
+      });
+
+      if (organizer?.email) {
+        await this.notificationsService.notifyOrganizerPayoutReady({
+          organizerEmail: organizer.email,
+          provider: "STRIPE",
+          userId: organizerId,
+        });
+      }
+    }
 
     this.logger.log(
       `payments.stripe.account_synced organizerId=${organizerId} accountId=${account.id} chargesEnabled=${chargesEnabled} payoutsEnabled=${payoutsEnabled} ready=${isReadyForPaidEvents}`,

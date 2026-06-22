@@ -78,6 +78,30 @@ function getSelectedProviderLabel(provider: "STRIPE" | "PAYSTACK" | "MANUAL" | n
   return "Stripe";
 }
 
+function getEventReadinessTone(input: {
+  hasPaidTicketTypes: boolean;
+  canPublishPaidEvent: boolean;
+}) {
+  if (!input.hasPaidTicketTypes) {
+    return {
+      label: "Free-ready",
+      message: "No paid ticket types yet. Free publishing is clear.",
+    };
+  }
+
+  if (input.canPublishPaidEvent) {
+    return {
+      label: "Paid-ready",
+      message: "Paid ticket setup is clear for publishing.",
+    };
+  }
+
+  return {
+    label: "Blocked",
+    message: "Paid publishing is blocked until payout readiness is complete.",
+  };
+}
+
 export function OrganizerHomeScreen() {
   const router = useRouter();
   const { session } = useAuth();
@@ -118,6 +142,11 @@ export function OrganizerHomeScreen() {
   const manageableEvents = (eventsQuery.data ?? []).filter((event) =>
     manageableEventIds.includes(event.id),
   );
+  const blockedPaidEventsCount = manageableEvents.filter(
+    (event) =>
+      event.paymentReadiness.hasPaidTicketTypes &&
+      !event.paymentReadiness.canPublishPaidEvent,
+  ).length;
   const setupStep = deriveOrganizerSetupStep({
     paystackAccount: paystackAccountQuery.data,
     profile: organizerProfileQuery.data,
@@ -194,6 +223,10 @@ export function OrganizerHomeScreen() {
                 <Text style={styles.metricValue}>
                   {canManageOrganizerEvents(session?.user) ? "Ready" : "Limited"}
                 </Text>
+              </View>
+              <View style={styles.metricCard}>
+                <Text style={styles.metricLabel}>Blocked paid events</Text>
+                <Text style={styles.metricValue}>{blockedPaidEventsCount}</Text>
               </View>
             </View>
           </View>
@@ -326,9 +359,9 @@ export function OrganizerHomeScreen() {
                           </Text>
                         </View>
                         <View style={styles.metricCardInline}>
-                          <Text style={styles.metricLabelInline}>Subaccount</Text>
+                          <Text style={styles.metricLabelInline}>Payout account</Text>
                           <Text style={styles.metricValueInline}>
-                            {paystackAccountQuery.data.subaccountCode ?? "Pending"}
+                            {paystackAccountQuery.data.payoutAccountCode ?? "Pending"}
                           </Text>
                         </View>
                       </View>
@@ -353,7 +386,7 @@ export function OrganizerHomeScreen() {
                         }}
                         title={getPaymentActionLabel({
                           provider: "PAYSTACK",
-                          connectedAccountId: paystackAccountQuery.data.subaccountCode,
+                          connectedAccountId: paystackAccountQuery.data.payoutAccountCode,
                           isReadyForPaidEvents: paystackAccountQuery.data.isReadyForPaidEvents,
                           onboardingStatus: paystackAccountQuery.data.onboardingStatus,
                           requirements: { currentlyDue: [], pastDue: [] },
@@ -470,8 +503,35 @@ export function OrganizerHomeScreen() {
                 <View key={event.id} style={styles.eventCard}>
                   <View style={styles.eventHeader}>
                     <Text style={styles.eventTitle}>{event.title}</Text>
-                    <View style={styles.statusPill}>
-                      <Text style={styles.statusPillText}>{event.status}</Text>
+                    <View style={styles.eventPills}>
+                      <View style={styles.statusPill}>
+                        <Text style={styles.statusPillText}>{event.status}</Text>
+                      </View>
+                      <View
+                        style={[
+                          styles.readinessPill,
+                          event.paymentReadiness.hasPaidTicketTypes &&
+                          !event.paymentReadiness.canPublishPaidEvent
+                            ? styles.readinessPillWarning
+                            : event.paymentReadiness.canPublishPaidEvent
+                              ? styles.readinessPillSuccess
+                              : styles.readinessPillNeutral,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.readinessPillText,
+                            event.paymentReadiness.hasPaidTicketTypes &&
+                            !event.paymentReadiness.canPublishPaidEvent
+                              ? styles.readinessPillTextWarning
+                              : event.paymentReadiness.canPublishPaidEvent
+                                ? styles.readinessPillTextSuccess
+                                : null,
+                          ]}
+                        >
+                          {getEventReadinessTone(event.paymentReadiness).label}
+                        </Text>
+                      </View>
                     </View>
                   </View>
                   <Text style={styles.eventMeta} numberOfLines={1}>🗓 {formatDateTime(event.startsAt)}</Text>
@@ -487,9 +547,25 @@ export function OrganizerHomeScreen() {
                       </View>
                     ) : null}
                   </View>
+                  <Text
+                    style={
+                      event.paymentReadiness.hasPaidTicketTypes &&
+                      !event.paymentReadiness.canPublishPaidEvent
+                        ? styles.warningText
+                        : styles.copy
+                    }
+                  >
+                    {event.paymentReadiness.blockingMessage ??
+                      getEventReadinessTone(event.paymentReadiness).message}
+                  </Text>
                   <ActionButton
                     onPress={() => router.push(`/organizer/${event.slug}` as never)}
-                    title="Manage event"
+                    title={
+                      event.paymentReadiness.hasPaidTicketTypes &&
+                      !event.paymentReadiness.canPublishPaidEvent
+                        ? "Resolve publish readiness"
+                        : "Manage event"
+                    }
                   />
                 </View>
               ))}
@@ -525,6 +601,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 12,
     justifyContent: "space-between",
+  },
+  eventPills: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 8,
   },
   eventMeta: {
     color: palette.ink,
@@ -606,6 +687,39 @@ const styles = StyleSheet.create({
     color: palette.ink,
     fontSize: 16,
     fontWeight: "700",
+  },
+  readinessPill: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  readinessPillNeutral: {
+    backgroundColor: palette.backgroundMuted,
+    borderColor: palette.divider,
+    borderWidth: 1,
+  },
+  readinessPillSuccess: {
+    backgroundColor: palette.successSoft,
+    borderColor: "#a8d7c1",
+    borderWidth: 1,
+  },
+  readinessPillText: {
+    color: palette.muted,
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+  },
+  readinessPillTextSuccess: {
+    color: palette.successDeep,
+  },
+  readinessPillTextWarning: {
+    color: palette.warning,
+  },
+  readinessPillWarning: {
+    backgroundColor: palette.warningSoft,
+    borderColor: "#ead39a",
+    borderWidth: 1,
   },
   metricValue: {
     color: palette.white,

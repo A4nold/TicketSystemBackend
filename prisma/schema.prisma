@@ -184,6 +184,7 @@ enum PayoutStatus {
 
 enum NotificationType {
   ORDER_PAID
+  ORGANIZER_PAYOUT_READY
   TRANSFER_CREATED
   TRANSFER_RECEIVED
   STAFF_INVITE_RECEIVED
@@ -252,6 +253,7 @@ model User {
   passwordHash                 String?                  @map("password_hash")
   accountType                  AccountType              @default(ATTENDEE) @map("account_type")
   status                       UserStatus               @default(ACTIVE)
+  emailVerifiedAt              DateTime?                @map("email_verified_at")
   lastLoginAt                  DateTime?                @map("last_login_at")
   createdAt                    DateTime                 @default(now()) @map("created_at")
   updatedAt                    DateTime                 @updatedAt @map("updated_at")
@@ -270,6 +272,7 @@ model User {
   scanAttempts                 ScanAttempt[]            @relation("scan_attempt_staff")
   notifications                UserNotification[]
   passwordResetTokens          PasswordResetToken[]
+  emailVerificationTokens      EmailVerificationToken[]
   pushDevices                  PushDevice[]
   ticketOfferRequests          TicketOfferRequest[]     @relation("offer_attendee")
   reviewedTicketOffers         TicketOfferRequest[]     @relation("offer_reviewer")
@@ -281,6 +284,21 @@ model User {
   organizerPaymentTransactions PaymentTransaction[]     @relation("payment_transaction_organizer")
 
   @@map("users")
+}
+
+model EmailVerificationToken {
+  id        String    @id @default(cuid())
+  userId    String    @map("user_id")
+  tokenHash String    @unique @map("token_hash")
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+  @@index([expiresAt, usedAt])
+  @@map("email_verification_tokens")
 }
 
 model PasswordResetToken {
